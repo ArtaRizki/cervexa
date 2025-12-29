@@ -153,8 +153,18 @@
     </style>
 
     <style name="MyCustomDatePicker" parent="ThemeOverlay.MaterialComponents.MaterialCalendar">
-        <item name="colorPrimary">@color/colorWhite</item>
-        <!-- Customize other attributes like colorAccent, button styles, etc. -->
+        <item name="colorPrimary">@color/colorButton</item>
+
+        <item name="colorOnPrimary">@color/colorWhite</item>
+
+        <item name="colorAccent">@color/colorButton</item>
+
+        <item name="buttonBarPositiveButtonStyle">@style/DatePickerButtonStyle</item>
+        <item name="buttonBarNegativeButtonStyle">@style/DatePickerButtonStyle</item>
+    </style>
+
+    <style name="DatePickerButtonStyle" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/colorButton</item>
     </style>
 
 </resources>

@@ -31,7 +31,7 @@ object StorageUtils {
     }
 
     /** Simpan bitmap JPEG ke sessionDir dengan nama result_<ts>.jpg (WIB). */
-    fun saveJpeg(sessionDir: File, bitmap: Bitmap, quality: Int = 92): File {
+    fun saveJpeg(sessionDir: File, bitmap: Bitmap, quality: Int = 100): File {
         val out = File(sessionDir, "result_${timestampWIB()}.jpg")
         FileOutputStream(out).use { fos ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, quality, fos)
@@ -54,7 +54,7 @@ object StorageUtils {
     fun ensureChildDir(parent: File, name: String): File =
         File(parent, name).apply { if (!exists()) mkdirs() }
 
-    fun saveJpegWithPrefix(targetDir: File, bitmap: Bitmap, prefix: String = "img", quality: Int = 92): File {
+    fun saveJpegWithPrefix(targetDir: File, bitmap: Bitmap, prefix: String = "img", quality: Int = 100): File {
         val out = File(targetDir, "${prefix}_${timestampWIB()}.jpg")
         FileOutputStream(out).use { fos ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, quality, fos)

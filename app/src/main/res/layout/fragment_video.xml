@@ -9,7 +9,6 @@
     android:background="@color/colorWhite"
     tools:context="live.VideoFragment">
 
-    <!-- Toolbar -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/topAppBar"
         android:layout_width="match_parent"
@@ -18,15 +17,13 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:navigationIcon="@drawable/baseline_arrow_back_24"
-        app:title="Cervexa Colposcope"
-        app:popupTheme="@style/ToolbarPopupTheme"
-        app:titleTextAppearance="@style/CustomToolbarTitle"
-        app:titleCentered="false"
         app:menu="@menu/menu_video_fragment"
-        />
+        app:navigationIcon="@drawable/baseline_arrow_back_24"
+        app:popupTheme="@style/ToolbarPopupTheme"
+        app:title="Cervexa Colposcope"
+        app:titleCentered="false"
+        app:titleTextAppearance="@style/CustomToolbarTitle" />
 
-    <!-- Garis pemisah -->
     <View
         android:id="@+id/toolbarDivider"
         android:layout_width="match_parent"
@@ -36,7 +33,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/topAppBar" />
 
-    <!-- Shutter HANYA nempel ke area video -->
     <View
         android:id="@+id/vShutterImage"
         android:layout_width="0dp"
@@ -60,7 +56,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/topAppBar" />
 
-    <!-- Progress HANYA di tengah area video -->
     <ProgressBar
         android:id="@+id/pbLoadingImage"
         android:layout_width="wrap_content"
@@ -89,8 +84,8 @@
         android:layout_height="64dp"
         android:layout_gravity="center"
         android:layout_marginBottom="76dp"
-        android:visibility="gone"
         android:text="Start"
+        android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.944"
@@ -112,20 +107,18 @@
         android:layout_width="0dp"
         android:layout_height="90dp"
         android:background="@drawable/border_bottom_rounded"
+        android:baselineAligned="false"
         android:gravity="center"
         android:orientation="horizontal"
-        app:flow_horizontalAlign="end"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/ivVideoImage">
-
 
         <ImageButton
             android:id="@+id/btnSnapshot"
             android:layout_width="38dp"
             android:layout_height="38dp"
-            android:layout_marginStart="60dp"
-            android:layout_marginEnd="60dp"
+            android:layout_marginHorizontal="20dp"
             android:adjustViewBounds="true"
             android:background="@null"
             android:backgroundTint="@android:color/transparent"
@@ -137,7 +130,7 @@
             android:id="@+id/btnRecordVideo"
             android:layout_width="38dp"
             android:layout_height="38dp"
-            android:layout_marginEnd="60dp"
+            android:layout_marginHorizontal="20dp"
             android:adjustViewBounds="true"
             android:background="@null"
             android:backgroundTint="@android:color/transparent"
@@ -147,22 +140,22 @@
 
         <ImageButton
             android:id="@+id/imageButton3"
-            android:visibility="gone"
             android:layout_width="38dp"
             android:layout_height="38dp"
-            android:layout_marginEnd="60dp"
+            android:layout_marginHorizontal="20dp"
             android:adjustViewBounds="true"
             android:background="@null"
             android:backgroundTint="@android:color/transparent"
             android:contentDescription="Resolution"
             android:scaleType="centerCrop"
+            android:visibility="gone"
             android:src="@drawable/frame_592" />
 
         <ImageButton
             android:id="@+id/btnEnterLandscape"
             android:layout_width="38dp"
             android:layout_height="38dp"
-            android:layout_marginEnd="60dp"
+            android:layout_marginHorizontal="20dp"
             android:adjustViewBounds="true"
             android:background="@null"
             android:backgroundTint="@android:color/transparent"
@@ -188,7 +181,6 @@
         app:layout_constraintTop_toBottomOf="@+id/bottomControls"
         app:layout_constraintVertical_bias="0.107" />
 
-    <!-- HUD Rekaman (overlay di atas video) -->
     <LinearLayout
         android:id="@+id/recordHud"
         android:layout_width="wrap_content"
@@ -203,13 +195,6 @@
         app:layout_constraintStart_toStartOf="@id/ivVideoImage"
         app:layout_constraintTop_toTopOf="@id/ivVideoImage">
 
-        <!--        &lt;!&ndash; Titik merah kedip &ndash;&gt;-->
-        <!--        <View-->
-        <!--            android:id="@+id/dotRec"-->
-        <!--            android:layout_width="10dp"-->
-        <!--            android:layout_height="10dp"-->
-        <!--            android:background="@drawable/dot_red"-->
-        <!--            android:layout_marginEnd="8dp" />-->
         <TextView
             android:id="@+id/tvRecordTimer"
             android:layout_width="wrap_content"
@@ -233,7 +218,6 @@
         android:visibility="visible"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.51"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/bottomControls"
         app:layout_constraintVertical_bias="0.11" />
@@ -270,8 +254,8 @@
         android:layout_width="0dp"
         android:layout_height="52sp"
         android:layout_marginBottom="24dp"
-        android:layout_marginRight="32dp"
         android:layout_marginLeft="32dp"
+        android:layout_marginRight="32dp"
         android:text="Simpan"
         android:textColor="@color/colorWhite"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -294,9 +278,9 @@
         android:id="@+id/tvMediaTgl"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="17/06/2025"
         android:layout_marginStart="12dp"
         android:layout_marginTop="5dp"
+        android:text="17/06/2025"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/tvMedia" />

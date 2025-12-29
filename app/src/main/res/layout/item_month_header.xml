@@ -1,0 +1,11 @@
+<!-- res/layout/item_month_header.xml -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tvMonth"
+    android:textColor="#555555"
+    android:layout_width="match_parent"
+    android:layout_height="40dp"
+    android:gravity="center_vertical"
+    android:paddingStart="16dp"
+    android:text="Juli 2025"
+    android:textStyle="bold"
+    android:textSize="14sp"/>

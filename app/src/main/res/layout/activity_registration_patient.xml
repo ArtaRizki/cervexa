@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@android:color/white">
+
+    <!-- Toolbar -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topAppBar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/colorWhite"
+        app:title="Verifikasi Identitas"
+        app:titleCentered="false"
+        app:titleTextAppearance="@style/CustomToolbarTitle"
+        app:navigationIcon="@drawable/baseline_arrow_back_24" />
+
+    <!-- Garis pemisah -->
+    <View
+        android:id="@+id/toolbarDivider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#D9D9D9"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topAppBar" />
+
+    <!-- Scrollable form -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:theme="@style/globalTextTheme">
+
+            <!-- Title halaman -->
+            <!--            <TextView-->
+            <!--                android:id="@+id/tvTitle"-->
+            <!--                android:layout_width="0dp"-->
+            <!--                android:layout_height="wrap_content"-->
+            <!--                android:text="Registrasi Pasien"-->
+            <!--                android:textStyle="bold"-->
+            <!--                android:textSize="20sp"-->
+            <!--                app:layout_constraintTop_toTopOf="parent"-->
+            <!--                app:layout_constraintStart_toStartOf="parent"-->
+            <!--                app:layout_constraintEnd_toEndOf="parent" />-->
+
+            <!-- Label Nama -->
+
+            <!-- Input Nama -->
+
+            <TextView
+                android:id="@+id/lblNama"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:text="Nama"
+                android:textStyle="bold"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="1.0"
+                app:layout_constraintStart_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/imageView3" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilNama"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:counterEnabled="true"
+                app:counterMaxLength="30"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:hintEnabled="false"
+                app:layout_constraintTop_toBottomOf="@id/lblNama">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etNama"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Nama Anda"
+                    android:maxLength="30"
+                    android:textColor="@color/colorBlack" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Label NIK -->
+            <TextView
+                android:id="@+id/lblNik"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="NIK"
+                android:textStyle="bold"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/tilNama" />
+
+            <!-- Input NIK -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilNik"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:counterEnabled="true"
+                app:counterMaxLength="16"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:hintEnabled="false"
+                app:layout_constraintTop_toBottomOf="@id/lblNik">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etNik"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Masukkan NIK (16 digit)"
+                    android:inputType="number"
+                    android:maxLength="16"
+                    android:textColor="@color/colorBlack"/>
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Label Tanggal Lahir -->
+            <TextView
+                android:id="@+id/lblDob"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Tanggal Lahir"
+                android:textStyle="bold"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/tilNik" />
+
+            <!-- Input Tanggal Lahir (DatePicker) -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilDob"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:endIconDrawable="@drawable/calender_24"
+                app:endIconMode="custom"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:hintEnabled="false"
+                app:layout_constraintTop_toBottomOf="@id/lblDob">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etDob"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="false"
+                    android:hint="DD/MM/YYYY"
+                    android:textColor="@color/colorBlack"/>
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Label Nama Rumah Sakit  -->
+            <TextView
+                android:id="@+id/lblRS"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Nama Rumah Sakit"
+                android:textStyle="bold"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/tilDob" />
+
+            <!-- Input Nama Rumah Sakit -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilRS"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:hintEnabled="false"
+                app:layout_constraintTop_toBottomOf="@id/lblRS">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etRS"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Nama Rumah Sakit"
+                    android:textColor="@color/colorBlack"/>
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Label NRM (opsional) -->
+            <TextView
+                android:id="@+id/lblNrm"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Nomor Rekam Medis (Opsional)"
+                android:textStyle="bold"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/tilRS" />
+
+            <!-- Input NRM (opsional) -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/tilNrm"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:hintEnabled="false"
+                app:layout_constraintTop_toBottomOf="@id/lblNrm">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etNrm"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Masukan Nomor Rekam Medis"
+                    android:textColor="@color/colorBlack"/>
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Tombol Lanjut -->
+            <Button
+                android:id="@+id/btnNext"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginTop="24dp"
+                android:text="Lanjutkan"
+                android:textAppearance="@style/AppMaterialButton"
+                android:textColor="@color/colorWhite"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/tilNrm" />
+
+            <TextView
+                android:id="@+id/textView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:text="Semua data disimpan secara lokal di perangkat Anda\nuntuk menjaga kendali dan privasi sepenuhnya."
+                android:textColor="#999999"
+                android:inputType="textMultiLine"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/btnNext" />
+
+            <ImageView
+                android:id="@+id/imageView3"
+                android:layout_width="190dp"
+                android:layout_height="190dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0.501"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/verifyid_ilustration" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </ScrollView>
+</LinearLayout>

@@ -1,0 +1,7 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <!-- warna biru transparan -->
+    <solid android:color="#803296FF"/> <!-- 80 = alpha 50% -->
+    <!-- rounded corner -->
+    <corners android:radius="16dp"/>
+</shape>

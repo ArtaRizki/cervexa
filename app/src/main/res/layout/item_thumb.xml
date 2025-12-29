@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp">
+
+    <!-- overlay play untuk video -->
+
+    <ImageView
+        android:id="@+id/ivThumb"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/rounded_image"
+        android:clipToOutline="true"
+        android:scaleType="centerCrop"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintDimensionRatio="1:1"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.0"
+        tools:targetApi="31" />
+
+    <!-- Overlay seleksi -->
+    <View
+        android:id="@+id/selOverlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/bg_sel_overlay"
+        android:visibility="visible"
+        app:layout_constraintTop_toTopOf="@id/ivThumb"
+        app:layout_constraintBottom_toBottomOf="@id/ivThumb"
+        app:layout_constraintStart_toStartOf="@id/ivThumb"
+        app:layout_constraintEnd_toEndOf="@id/ivThumb"/>
+
+    <!-- Centang di pojok -->
+    <ImageView
+        android:id="@+id/selCheck"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_margin="6dp"
+        android:src="@drawable/round_check_circle_24"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="@id/ivThumb"
+        app:layout_constraintEnd_toEndOf="@id/ivThumb"
+        app:tint="@android:color/white" />
+
+    <!-- Bar overlay bawah -->
+    <View
+        android:id="@+id/bgVideoTitle"
+        android:layout_width="0dp"
+        android:layout_height="30dp"
+        android:background="@drawable/bg_overlay_bottom_rounded"
+        app:layout_constraintBottom_toBottomOf="@id/ivThumb"
+        app:layout_constraintEnd_toEndOf="@id/ivThumb"
+        app:layout_constraintStart_toStartOf="@id/ivThumb" />
+
+    <ImageView
+        android:id="@+id/ivPlay"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginBottom="10dp"
+        android:src="@drawable/icon_video_thumb"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/ivThumb"
+        app:layout_constraintStart_toStartOf="@+id/bgVideoTitle" />
+
+    <ImageView
+        android:id="@+id/ivImg"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginBottom="10dp"
+        android:src="@drawable/icon_image_thumb"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <TextView
+        android:id="@+id/tvTimeVideo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="00:00:00"
+        android:textColor="@color/colorWhite"
+        android:textSize="10sp"
+        android:visibility="gone"
+        android:layout_marginStart="35dp"
+        android:layout_marginBottom="12dp"
+        app:layout_constraintBottom_toBottomOf="@+id/bgVideoTitle"
+        app:layout_constraintStart_toStartOf="@+id/bgVideoTitle"
+        tools:ignore="SmallSp" />
+</androidx.constraintlayout.widget.ConstraintLayout>

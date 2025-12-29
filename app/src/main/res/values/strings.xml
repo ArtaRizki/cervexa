@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Cervexa</string>
+    <string name="no_device_connected">No device connected</string>
+    <string name="detail_no_device_connection">To access full features from the apps and device, start connecting your phone to the device</string>
+    <string name="start_connecting">Mulai sambungkan</string>
+    <string name="on_connecting">Sambungkan</string>
+    <string name="pref_application">prefs_apps</string>
+    <string name="title_activity_confirm_patient">ConfirmPatientActivity</string>
+</resources>

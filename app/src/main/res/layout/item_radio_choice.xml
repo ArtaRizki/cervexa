@@ -1,0 +1,8 @@
+<com.google.android.material.radiobutton.MaterialRadioButton
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textColor="@color/colorBlack"
+    android:buttonTint="@color/colorButton"
+    android:layout_margin="32dp"
+    android:padding="12dp"/>

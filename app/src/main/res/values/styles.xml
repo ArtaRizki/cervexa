@@ -1,0 +1,160 @@
+<resources>
+    <!-- Splashscreen theme. -->
+    <style name="AppTheme.Splash" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your theme here. -->
+        <!-- Hilangkan title bar -->
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+
+        <!-- Background splash -->
+        <item name="android:windowBackground">@color/colorWhite</item>
+        <item name="android:fontFamily">@font/manrope_medium</item>
+    </style>
+
+    <style name="AppTheme.CustomeActionBar" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Customize your theme here. -->
+        <item name="android:windowNoTitle">true</item>
+        <item name="colorPrimary">@color/colorButton</item>
+        <!-- Background splash -->
+        <item name="android:windowBackground">@color/colorWhite</item>
+        <item name="android:fontFamily">@font/manrope_medium</item>
+    </style>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.Material3.DayNight">
+        <item name="android:fontFamily">@font/manrope_medium</item>
+        <!-- Customize your theme here. -->
+        <!-- <item name="colorPrimary">@color/colorPrimaryDark</item>  -->
+        <item name="colorPrimary">@color/colorButton</item>
+        <item name="colorPrimaryDark">@color/colorButton</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:fontFamily">@font/manrope_medium</item>
+        <!-- Customize your theme here. -->
+        <!-- <item name="colorPrimary">@color/colorPrimaryDark</item>  -->
+        <item name="colorPrimary">@color/colorButton</item>
+        <item name="colorPrimaryDark">@color/colorButton</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:popupMenuStyle">@style/CustomPopupMenu</item>
+        <item name="android:navigationBarColor">@color/colorBlack</item>
+    </style>
+
+    <!-- Base application theme Landscape. -->
+    <style name="AppTheme.Land.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:fontFamily">@font/manrope_medium</item>
+        <!-- Customize your theme here. -->
+        <!-- <item name="colorPrimary">@color/colorPrimaryDark</item>  -->
+        <item name="colorPrimary">@color/colorBlack</item>
+        <item name="colorPrimaryDark">@color/colorBlack</item>
+        <item name="colorAccent">@color/colorBlack</item>
+        <item name="android:statusBarColor">@color/colorBlack</item>
+        <item name="android:popupMenuStyle">@style/CustomPopupMenu</item>
+        <item name="android:navigationBarColor">@color/colorBlack</item>
+    </style>
+
+    <style name="CustomToolbarTitle" parent="TextAppearance.AppCompat.Large">
+        <item name="fontFamily">@font/manrope_medium</item>
+        <item name="android:textColor">@color/colorBlack</item>
+        <item name="android:textSize">18sp</item>
+        <item name="fontWeight">500</item>
+        <item name="android:letterSpacing">0.06</item>
+    </style>
+
+    <style name="CustomToolbarTitleHome" parent="TextAppearance.AppCompat.Large">
+        <item name="fontFamily">@font/manrope_medium</item>
+        <item name="android:textColor">@color/colorBlack</item>
+        <item name="android:textSize">22sp</item>
+        <item name="fontWeight">500</item>
+        <item name="android:letterSpacing">0.06</item>
+    </style>
+
+    <style name="ToolbarPopupTheme" parent="ThemeOverlay.MaterialComponents.Light">
+        <item name="android:textColorPrimary">@android:color/black</item>
+        <item name="android:textColorSecondary">@color/colorWhite</item>
+        <item name="android:colorControlNormal">@color/colorWhite</item> <!-- ini untuk ikon tiga titik -->
+        <item name="android:background">@color/colorWhite</item>
+        <item name="android:backgroundTint">@color/colorWhite</item>
+<!--        <item name="android:itemBackground">@color/colorWhite</item>-->
+<!--        <item name="popupMenuStyle">@style/MyPopupMenuStyle</item>-->
+<!--        <item name="actionOverflowMenuStyle">@style/OverflowMenuStyle</item>-->
+    </style>
+
+    <style name="OverflowMenuStyle" parent="Widget.MaterialComponents.PopupMenu.Overflow">
+        <item name="android:popupBackground">@null</item>
+    </style>
+
+    <style name="MyPopupMenuStyle" parent="Widget.MaterialComponents.PopupMenu">
+        <item name="android:popupBackground">@color/colorWhite</item>
+        <item name="android:elevation">8dp</item>
+    </style>
+
+    <style name="CustomMenuText" parent="TextAppearance.Material3.BodyLarge">>
+        <item name="fontFamily">@font/manrope_medium</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="CustomPopupMenu" parent="@style/Widget.Material3.PopupMenu">
+        <item name="android:textAppearance">@style/CustomMenuText</item>
+        <item name="android:popupBackground">@color/colorWhite</item>
+        <item name="android:itemBackground">@color/colorWhite</item>
+    </style>
+
+    <style name="Theme_App_Splash" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/colorButton</item>
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
+
+    <style name="globalTextTheme" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="fontFamily">@font/manrope_medium</item>
+        <item name="android:textColor">@color/colorBlack</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:inputType">textCapWords</item>
+        <item name="fontWeight">500</item>
+        <item name="android:letterSpacing">0.06</item>
+        <item name="colorPrimary">@color/colorButton</item>
+        <item name="colorSecondary">@color/colorWhite</item>
+    </style>
+
+    <style name="AppMaterialButton" parent="Widget.Material3.Button">
+        <item name="android:textAppearance">@style/ButtonTextAppearance</item>
+    </style>
+
+    <style name="ButtonTextAppearance" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textColor">@color/colorWhite</item>
+        <item name="fontFamily">@font/manrope_medium</item>
+    </style>
+
+    <style name="MyAlertDialogTheme" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <!-- Customize button and radio button color -->
+        <item name="colorAccent">@color/colorButton</item>
+        <!-- Customize title and message text color -->
+        <item name="android:textColorPrimary">@color/colorBlack</item>
+        <item name="android:textColorSecondary">@color/colorBlack</item>
+
+        <!-- Customize dialog background -->
+<!--        <item name="android:windowBackground">@drawable/my_custom_dialog_background</item>-->
+        <item name="materialAlertDialogBodyTextStyle">@style/MyDialogBodyText</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/MyDialogTitleText</item>
+
+    </style>
+
+    <style name="MyDialogBodyText" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/colorBlack</item>
+    </style>
+
+    <style name="MyDialogTitleText" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textColor">@color/colorBlack</item>
+    </style>
+
+    <style name="MyCustomDatePicker" parent="ThemeOverlay.MaterialComponents.MaterialCalendar">
+        <item name="colorPrimary">@color/colorWhite</item>
+        <!-- Customize other attributes like colorAccent, button styles, etc. -->
+    </style>
+
+</resources>

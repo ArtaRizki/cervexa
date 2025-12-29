@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- === Tambahan untuk STB/TV === -->
+    <!-- Jangan paksa ada layar sentuh -->
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <uses-feature
+        android:name="android.hardware.faketouch"
+        android:required="false" />
+
+    <!-- Deklarasi bahwa app boleh dipakai dengan D-pad/remote -->
+    <uses-feature
+        android:name="android.hardware.dpad"
+        android:required="false" />
+
+    <!-- Wi-Fi & status -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" /> <!-- Lokasi (dibutuhkan untuk operasi Wi-Fi di Android < 13) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /> <!-- Android 13+ butuh izin khusus Wi-Fi -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+
+    <queries>
+
+        <!-- App target spesifik -->
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="com.google.android.gm" />
+
+        <!-- Intent umum untuk share (biar visible ke pemindai intent) -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+
+            <data android:mimeType="video/*" />
+        </intent>
+    </queries>
+
+    <uses-sdk
+        android:minSdkVersion="21"
+        android:targetSdkVersion="34"
+        tools:overrideLibrary="com.alexvas.rtsp"/>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme.NoActionBar">
+        <activity
+            android:name=".ConfirmPatientActivity"
+            android:exported="false"
+            android:label="@string/title_activity_confirm_patient"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity
+            android:name=".SelectExistingPatientActivity"
+            android:exported="false" /> <!-- Provider untuk share file -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true"
+            tools:replace="android:authorities">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"
+                tools:replace="android:resource" />
+        </provider> <!-- SplashScreen -->
+        <activity
+            android:name=".SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme_App_Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity> <!-- Activity utama -->
+        <activity
+            android:name=".HomeActivity"
+            android:exported="true"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity android:name=".OnboardingActivity" />
+        <activity android:name=".VideoActivity" />
+        <activity android:name=".RegistrationPatientActivity" />
+        <activity android:name=".gallery.PreviewActivity" />
+        <activity android:name=".gallery.MediaPagerActivity" />
+        <activity
+            android:name=".gallery.MediaPagerActivityLand"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            tools:ignore="DiscouragedApi" />
+        <activity android:name=".gallery.SessionMediaActivity" />
+        <activity android:name=".SystemInfoActivity" />
+        <activity android:name=".SettingsActivity" />
+
+        <meta-data
+            android:name="preloaded_fonts"
+            android:resource="@array/preloaded_fonts" />
+    </application>
+
+</manifest>

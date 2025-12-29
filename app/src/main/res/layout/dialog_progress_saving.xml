@@ -1,0 +1,16 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:padding="20dp"
+    android:gravity="center_horizontal" android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@color/colorWhite">
+
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/progress"
+        style="@style/Widget.MaterialComponents.LinearProgressIndicator"
+        android:layout_width="220dp" android:layout_height="6dp"
+        android:indeterminate="true"/>
+    <TextView
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="14dp" android:text="Menyimpan…"
+        android:textSize="16sp" android:textColor="@color/colorBlack"/>
+</LinearLayout>

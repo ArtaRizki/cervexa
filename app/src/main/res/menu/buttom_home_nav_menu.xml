@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/navigation_home"
+        android:icon="@drawable/majesticons_home"
+        android:title="Beranda" />
+
+    <item
+        android:id="@+id/navigation_media"
+        android:icon="@drawable/ooui_image_gallery"
+        android:title="Media" />
+
+</menu>

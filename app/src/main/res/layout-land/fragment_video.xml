@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/csVideoImage"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:animateLayoutChanges="true"
+    android:background="@android:color/black"
+    android:theme="@style/AppTheme.Land.NoActionBar">
+
+    <!-- (Opsional) sembunyikan AppBar di landscape, tetap ada agar kode compile -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topAppBar"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Tombol back ringan di kiri atas -->
+    <ImageButton
+        android:id="@+id/btnBackLite"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_margin="12dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Kembali"
+        android:src="@drawable/baseline_arrow_back_24"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@android:color/white" />
+
+    <!-- Area video center dengan rasio asli (letterbox kiri/kanan hitam) -->
+
+    <!-- Shutter hanya pada area video -->
+    <com.alexvas.rtsp.widget.RtspImageView
+        android:id="@+id/ivVideoImage"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:scaleType="fitXY"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintDimensionRatio="16:9"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.0" />
+
+    <View
+        android:id="@+id/vShutterImage"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@android:color/black"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/ivVideoImage"
+        app:layout_constraintEnd_toEndOf="@id/ivVideoImage"
+        app:layout_constraintStart_toStartOf="@id/ivVideoImage"
+        app:layout_constraintTop_toTopOf="@id/ivVideoImage" />
+
+    <ProgressBar
+        android:id="@+id/pbLoadingImage"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/ivVideoImage"
+        app:layout_constraintEnd_toEndOf="@id/ivVideoImage"
+        app:layout_constraintStart_toStartOf="@id/ivVideoImage"
+        app:layout_constraintTop_toTopOf="@id/ivVideoImage" />
+
+    <!-- HUD durasi rekam (red pill) -->
+    <LinearLayout
+        android:id="@+id/recordHud"
+        android:layout_width="wrap_content"
+        android:layout_height="28dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_record_hud"
+        android:gravity="center"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="@id/ivVideoImage"
+        app:layout_constraintStart_toStartOf="@id/ivVideoImage"
+        app:layout_constraintTop_toTopOf="@id/ivVideoImage">
+
+        <TextView
+            android:id="@+id/tvRecordTimer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="00:00:00"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Stack tombol vertikal di kanan -->
+
+    <!-- (Opsional) timestamp kanan bawah -->
+
+    <LinearLayout
+        android:id="@+id/sideControls"
+        android:layout_width="56dp"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="0dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/ivVideoImage"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- toggle record -->
+
+        <!-- snapshot -->
+        <ImageButton
+            android:id="@+id/btnRecordVideo"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_overlay_icon"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/majesticons_video"
+            app:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/btnSnapshot"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_overlay_icon"
+            android:src="@drawable/mage_camera_fill"
+            app:tint="@android:color/white" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvStamp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:background="@drawable/bg_overlay_chip"
+        android:paddingStart="10dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="6dp"
+        android:text="17/06/2025 10:12:49"
+        android:textColor="@android:color/white"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/ivVideoImage"
+        app:layout_constraintEnd_toEndOf="@id/ivVideoImage" />
+
+    <!-- elemen yang tak dipakai di landscape tetap ada tapi GONE -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvThumbs"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        tools:ignore="MissingConstraints" />
+
+    <Button
+        android:id="@+id/btnSimpanCase"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        tools:ignore="MissingConstraints" />
+
+    <ImageView
+        android:id="@+id/imageView4"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_marginTop="52dp"
+        android:layout_marginEnd="32dp"
+        android:background="@android:color/transparent"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:srcCompat="@drawable/frame_592" />
+</androidx.constraintlayout.widget.ConstraintLayout>

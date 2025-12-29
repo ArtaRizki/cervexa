@@ -1,0 +1,7 @@
+<!-- res/menu/menu_session_media_overflow.xml -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_more"
+        android:title="Lainnya"/>
+</menu>

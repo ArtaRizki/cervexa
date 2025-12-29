@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@android:color/white"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="8dp">
+
+    <!-- Nama (mirip Media: bold, hitam) -->
+    <TextView
+        android:id="@+id/tvName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Nama Pasien"
+        android:textColor="@android:color/black"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <!-- NIK (abu-abu, kecil) -->
+    <TextView
+        android:id="@+id/tvNik"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="NIK: 1234567890"
+        android:textColor="#757575"
+        android:textSize="12sp" />
+
+    <!-- NRM -->
+    <TextView
+        android:id="@+id/tvNrm"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="NRM: -"
+        android:textColor="#757575"
+        android:textSize="12sp" />
+
+    <!-- RS (opsional, boleh kosong) -->
+    <TextView
+        android:id="@+id/tvRs"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text=""
+        android:textColor="#757575"
+        android:textSize="12sp" />
+
+    <!-- Divider tipis di bawah tiap item (biar berasa seperti Media) -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.5dp"
+        android:layout_marginTop="8dp"
+        android:background="#E0E0E0" />
+
+</LinearLayout>

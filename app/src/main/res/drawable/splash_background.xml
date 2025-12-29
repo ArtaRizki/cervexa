@@ -1,0 +1,9 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- background -->
+    <item android:drawable="@android:color/white"/>
+
+    <!-- logo vektor di tengah -->
+    <item
+        android:gravity="center"
+        android:drawable="@drawable/cervexa_logo"/>
+</layer-list>

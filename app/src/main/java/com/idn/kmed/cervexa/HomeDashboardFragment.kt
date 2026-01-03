@@ -14,7 +14,6 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.fragment.app.Fragment
@@ -48,7 +47,6 @@ class HomeDashboardFragment : Fragment() {
         }
     }
 
-    // Satu pintu untuk tombol & FAB
     private fun handleStartClickHome() {
         val isD3m0: Boolean = false
         val camNet = findCameraWifiNetwork()
@@ -71,8 +69,6 @@ class HomeDashboardFragment : Fragment() {
             }
 
             runCatching { cm.bindProcessToNetwork(camNet) }
-
-            // ➜ Splash konfirmasi pasien
             startActivity(Intent(requireContext(), ConfirmPatientActivity::class.java))
         } else {
             Toast.makeText(requireContext(), "Belum terhubung ke Wi-Fi kamera", Toast.LENGTH_SHORT).show()
@@ -80,7 +76,6 @@ class HomeDashboardFragment : Fragment() {
         }
     }
 
-    // ====== LIFECYCLE ======
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -96,10 +91,12 @@ class HomeDashboardFragment : Fragment() {
         btnConnect = v.findViewById(R.id.btn_connect)
         imgIndicator = v.findViewById(R.id.imgIndicator)
 
-        // Tombol & FAB pakai handler yang sama
         btnConnect.setOnClickListener { handleStartClickHome() }
 
-        // Monitor SSID → ViewModel
+        // [TV OPTIMIZATION] Pastikan tombol utama focusable
+        btnConnect.isFocusable = true
+        btnConnect.isFocusableInTouchMode = true
+
         WifiMonitor.init(requireContext()) { ssid ->
             wifiViewModel.updateSsid(ssid)
         }
@@ -113,6 +110,15 @@ class HomeDashboardFragment : Fragment() {
         }
 
         return v
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // [TV OPTIMIZATION] Paksa fokus ke tombol connect saat fragment muncul
+        // agar user tidak perlu tekan tab/panah berkali-kali
+        btnConnect.postDelayed({
+            if (isAdded) btnConnect.requestFocus()
+        }, 300)
     }
 
     override fun onStart() {
@@ -135,7 +141,6 @@ class HomeDashboardFragment : Fragment() {
         }
     }
 
-    // ====== UI ======
     private fun refreshUiWithCurrentStatus() {
         if (isOnCameraWifi()) {
             imgIndicator.setImageResource(R.drawable.device_active)
@@ -150,7 +155,6 @@ class HomeDashboardFragment : Fragment() {
         }
     }
 
-    // ====== NET HELPERS ======
     private fun getSsidFromCaps(caps: NetworkCapabilities): String? =
         if (Build.VERSION.SDK_INT >= 31) (caps.transportInfo as? WifiInfo)?.ssid?.removeSurrounding(
             "\""

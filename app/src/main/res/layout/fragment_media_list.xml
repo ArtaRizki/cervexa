@@ -9,15 +9,57 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- 🔍 Search bar untuk cari sesi pasien -->
-        <androidx.appcompat.widget.SearchView
-            android:id="@+id/searchView"
+        <androidx.cardview.widget.CardView
+            android:id="@+id/searchContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:iconifiedByDefault="false"
-            android:queryHint="Cari pasien (nama / NIK / RS / tanggal)"
-            android:focusable="true"
-            android:visibility="visible" />
+            android:layout_margin="16dp"
+            app:cardBackgroundColor="#F5F6F8"
+            app:cardCornerRadius="30dp"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="4dp">
+
+                <EditText
+                    android:id="@+id/searchView"
+                    android:layout_width="0dp"
+                    android:layout_height="50dp"
+                    android:layout_weight="1"
+                    android:background="@null"
+                    android:hint="Cari pasien (nama / NIK / RS / tanggal)"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="10dp"
+                    android:textColor="#333333"
+                    android:textColorHint="#9E9E9E"
+                    android:textSize="14sp"
+                    android:inputType="text"
+                    android:maxLines="1" />
+
+                <FrameLayout
+                    android:id="@+id/btnSearch"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_search_button"
+                    android:layout_marginEnd="8dp"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_search_new"
+                        app:tint="@android:color/white" />
+                </FrameLayout>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
 <!--            android:focusableInTouchMode="true"-->
 
         <!-- Optional: judul lokal, disembunyikan karena pakai Toolbar di Activity -->
@@ -39,6 +81,7 @@
                 android:id="@+id/emptyStateContainer"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:layout_marginHorizontal="8dp"
                 android:gravity="center"
                 android:orientation="vertical"
                 android:visibility="gone">
@@ -57,14 +100,17 @@
 
                 <TextView
                     android:id="@+id/tvEmptySubtitle"
+                    android:gravity="center"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
                     android:text="Mulai rekam atau ambil snapshot untuk menambahkan media" />
 
                 <Button
                     android:id="@+id/btnStart"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:textColor="@color/colorWhite"
                     android:text="Mulai" />
             </LinearLayout>
 

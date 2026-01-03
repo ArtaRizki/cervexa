@@ -56,7 +56,8 @@ class MediaListFragment : Fragment() {
     private var btnStart: Button? = null   // optional, kalau kamu punya empty view
 
     // 🔍 state search
-    private lateinit var searchView: SearchView
+    private lateinit var etSearch: android.widget.EditText
+    private lateinit var btnSearch: android.view.View // Container tombol pink
     private var emptyStateContainer: View? = null
     private var currentQuery: String = ""
 
@@ -87,25 +88,33 @@ class MediaListFragment : Fragment() {
         tvEmpty = v.findViewById(R.id.tvEmpty) // boleh null kalau layout-mu belum ada
         tvEmptySubtitle = v.findViewById(R.id.tvEmptySubtitle)
         btnStart = v.findViewById(R.id.btnStart)
-        searchView = v.findViewById(R.id.searchView)
+        etSearch = v.findViewById(R.id.searchView)
+        btnSearch = v.findViewById(R.id.btnSearch)
 
         // Keep text kalau fragment direcreate
         if (currentQuery.isNotBlank()) {
-            searchView.setQuery(currentQuery, false)
+            etSearch.setText(currentQuery)
         }
 
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                applyFilter(query.orEmpty())
-                return true
+        etSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                // Live filter saat user mengetik
+                applyFilter(s.toString())
             }
 
-            override fun onQueryTextChange(newText: String?): Boolean {
-                // live filter saat user ngetik
-                applyFilter(newText.orEmpty())
-                return true
-            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
         })
+
+        // 3. Listener Tombol Search Pink (pengganti onQueryTextSubmit)
+        // Opsional: jika ingin filter ulang saat tombol ditekan
+        btnSearch.setOnClickListener {
+            applyFilter(etSearch.text.toString())
+            // Sembunyikan keyboard jika perlu
+            val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            imm?.hideSoftInputFromWindow(etSearch.windowToken, 0)
+        }
 
 
         requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)?.title =

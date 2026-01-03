@@ -3,12 +3,12 @@
 
     <item
         android:id="@+id/navigation_home"
-        android:icon="@drawable/majesticons_home"
+        android:icon="@drawable/ic_home"
         android:title="Beranda" />
 
     <item
         android:id="@+id/navigation_media"
-        android:icon="@drawable/ooui_image_gallery"
+        android:icon="@drawable/ic_gallery"
         android:title="Media" />
 
 </menu>

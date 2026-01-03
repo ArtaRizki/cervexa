@@ -1,5 +1,6 @@
 package com.idn.kmed.cervexa.gallery
 
+import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -60,28 +61,40 @@ class MediaPageFragment : Fragment() {
                 .format(java.util.Date(file.lastModified()))
         } else {
             imageMode.visibility = View.GONE
-            videoMode.visibility = View.VISIBLE   // <-- perbaikan utamanya
+            videoMode.visibility = View.VISIBLE
 
-            // Coba pakai file://
-            var setOk = false
+            // --- REVISI LOGIKA URI ---
+            // Kita tentukan URI yang valid dulu, baru dipakai untuk VideoView DAN Metadata
+            var finalUri: Uri = Uri.fromFile(file)
+            var useFileProvider = false
+
+            // Cek sederhana apakah bisa dibaca langsung
+            if (!file.exists() || !file.canRead()) {
+                useFileProvider = true
+            }
+
+            // Jika perlu FileProvider (atau jika akses file langsung gagal nanti)
+            // Disini kita siapkan try-catch untuk setVideoURI
             try {
-                video.setVideoURI(Uri.fromFile(file))
-                setOk = true
-            } catch (_: Exception) { }
+                video.setVideoURI(finalUri)
+            } catch (e: Exception) {
+                useFileProvider = true
+            }
 
-            // Fallback ke content:// via FileProvider bila perlu
-            if (!setOk) {
+            if (useFileProvider) {
                 try {
-                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                    finalUri = androidx.core.content.FileProvider.getUriForFile(
                         requireContext(), "${requireContext().packageName}.fileprovider", file
                     )
-                    video.setVideoURI(uri)
+                    // Beri izin baca sementara
                     requireContext().grantUriPermission(
-                        requireContext().packageName, uri,
-                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        requireContext().packageName, finalUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
                     )
-                    setOk = true
-                } catch (_: Exception) { }
+                    video.setVideoURI(finalUri)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
 
             // MediaController
@@ -89,10 +102,11 @@ class MediaPageFragment : Fragment() {
             video.setMediaController(mc)
 
             video.setOnPreparedListener { mp ->
-                val w = mp.videoWidth; val h = mp.videoHeight
+                val w = mp.videoWidth
+                val h = mp.videoHeight
                 if (w > 0 && h > 0) {
                     val lp = video.layoutParams as ConstraintLayout.LayoutParams
-                    lp.dimensionRatio = "$w:$h"   // menjaga rasio asli
+                    lp.dimensionRatio = "$w:$h"
                     video.layoutParams = lp
                 }
                 video.start()
@@ -100,7 +114,9 @@ class MediaPageFragment : Fragment() {
 
             overlayImg.visibility = View.GONE
             overlayVid.visibility = View.GONE
-            tvVidRight.text = formatDuration(file)
+
+            // --- PANGGIL FUNGSI DENGAN URI ---
+            tvVidRight.text = formatDuration(requireContext(), finalUri)
         }
 
         return root
@@ -116,15 +132,32 @@ class MediaPageFragment : Fragment() {
         try { view?.findViewById<VideoView>(R.id.vvPreview)?.stopPlayback() } catch (_: Exception) {}
     }
 
-    private fun formatDuration(f: File): String {
+    // --- FUNGSI DIPERBAIKI ---
+    // Menerima Context dan Uri agar aman dari masalah permission/scoped storage
+    private fun formatDuration(context: Context, uri: Uri): String {
         val mmr = MediaMetadataRetriever()
         return try {
-            mmr.setDataSource(f.absolutePath)
-            val ms = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            // Gunakan setDataSource(Context, Uri)
+            mmr.setDataSource(context, uri)
+
+            val durationStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val ms = durationStr?.toLongOrNull() ?: 0L
+
             val h = TimeUnit.MILLISECONDS.toHours(ms)
             val m = TimeUnit.MILLISECONDS.toMinutes(ms) % 60
             val s = TimeUnit.MILLISECONDS.toSeconds(ms) % 60
-            String.format("%02d:%02d:%02d", h, m, s)
-        } finally { try { mmr.release() } catch (_: Exception) {} }
+
+            if (h > 0) {
+                String.format("%02d:%02d:%02d", h, m, s)
+            } else {
+                String.format("%02d:%02d", m, s)
+            }
+        } catch (e: Exception) {
+            // Log error tapi jangan crash
+            e.printStackTrace()
+            "00:00"
+        } finally {
+            try { mmr.release() } catch (_: Exception) {}
+        }
     }
 }

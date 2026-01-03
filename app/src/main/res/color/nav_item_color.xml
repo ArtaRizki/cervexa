@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-    <selector xmlns:android="http://schemas.android.com/apk/res/android">
-        <!-- Warna untuk item yang aktif / terpilih -->
-        <item android:color="@color/colorButton" android:state_checked="true" />
-        <!-- Warna untuk item yang tidak aktif -->
-        <item android:color="@android:color/darker_gray" android:state_checked="false" />
-    </selector>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Warna untuk item yang aktif / terpilih -->
+    <item android:color="@color/colorButton" android:state_checked="true" />
+    <!-- Warna untuk item yang tidak aktif -->
+    <item android:color="@android:color/darker_gray" android:state_checked="false" />
+    <item android:color="#1E63E4" android:state_checked="true" />
+
+    <item android:color="#1E63E4" android:state_focused="true" />
+
+    <item android:color="#757575" />
+</selector>

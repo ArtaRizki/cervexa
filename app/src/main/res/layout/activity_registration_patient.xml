@@ -7,7 +7,6 @@
     android:orientation="vertical"
     android:background="@android:color/white">
 
-    <!-- Toolbar -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/topAppBar"
         android:layout_width="match_parent"
@@ -16,19 +15,14 @@
         app:title="Verifikasi Identitas"
         app:titleCentered="false"
         app:titleTextAppearance="@style/CustomToolbarTitle"
-        app:navigationIcon="@drawable/baseline_arrow_back_24" />
-
-    <!-- Garis pemisah -->
+        app:navigationIcon="@drawable/baseline_arrow_back_24"
+        android:focusable="true" />
     <View
         android:id="@+id/toolbarDivider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#D9D9D9"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/topAppBar" />
+        android:background="#D9D9D9" />
 
-    <!-- Scrollable form -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -39,23 +33,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="16dp"
+            android:focusable="false"
+            android:descendantFocusability="afterDescendants"
             android:theme="@style/globalTextTheme">
-
-            <!-- Title halaman -->
-            <!--            <TextView-->
-            <!--                android:id="@+id/tvTitle"-->
-            <!--                android:layout_width="0dp"-->
-            <!--                android:layout_height="wrap_content"-->
-            <!--                android:text="Registrasi Pasien"-->
-            <!--                android:textStyle="bold"-->
-            <!--                android:textSize="20sp"-->
-            <!--                app:layout_constraintTop_toTopOf="parent"-->
-            <!--                app:layout_constraintStart_toStartOf="parent"-->
-            <!--                app:layout_constraintEnd_toEndOf="parent" />-->
-
-            <!-- Label Nama -->
-
-            <!-- Input Nama -->
 
             <TextView
                 android:id="@+id/lblNama"
@@ -64,8 +44,6 @@
                 android:text="Nama"
                 android:textStyle="bold"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintHorizontal_bias="1.0"
-                app:layout_constraintStart_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/imageView3" />
 
@@ -85,16 +63,18 @@
                     android:id="@+id/etNama"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:focusable="true"
-                    android:inputType="textPersonName"
-                    android:imeOptions="actionNext"
-                    android:maxLines="1"
                     android:hint="Nama Anda"
+                    android:maxLines="1"
                     android:maxLength="30"
-                    android:textColor="@color/colorBlack" />
+                    android:inputType="textPersonName|textCapWords"
+                    android:textColor="@color/colorBlack"
+
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:imeOptions="actionNext"
+                    android:nextFocusDown="@id/etNik" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Label NIK -->
             <TextView
                 android:id="@+id/lblNik"
                 android:layout_width="0dp"
@@ -106,7 +86,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/tilNama" />
 
-            <!-- Input NIK -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/tilNik"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
@@ -124,13 +103,16 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="Masukkan NIK (16 digit)"
-                    android:inputType="number"
-                    android:imeOptions="actionNext"
                     android:maxLength="16"
-                    android:textColor="@color/colorBlack"/>
+                    android:inputType="number"
+                    android:textColor="@color/colorBlack"
+
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:imeOptions="actionNext"
+                    android:nextFocusDown="@id/etDob" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Label Tanggal Lahir -->
             <TextView
                 android:id="@+id/lblDob"
                 android:layout_width="0dp"
@@ -142,7 +124,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/tilNik" />
 
-            <!-- Input Tanggal Lahir (DatePicker) -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/tilDob"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
@@ -159,13 +140,16 @@
                     android:id="@+id/etDob"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="false"
                     android:hint="DD/MM/YYYY"
-                    android:textColor="@color/colorBlack"/>
+                    android:textColor="@color/colorBlack"
+
+                    android:cursorVisible="false"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:inputType="none"
+                    android:nextFocusDown="@id/etRS" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Label Nama Rumah Sakit  -->
             <TextView
                 android:id="@+id/lblRS"
                 android:layout_width="0dp"
@@ -177,7 +161,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/tilDob" />
 
-            <!-- Input Nama Rumah Sakit -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/tilRS"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
@@ -193,10 +176,15 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="Nama Rumah Sakit"
-                    android:textColor="@color/colorBlack"/>
+                    android:inputType="textCapWords"
+                    android:textColor="@color/colorBlack"
+
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:imeOptions="actionNext"
+                    android:nextFocusDown="@id/etNrm" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Label NRM (opsional) -->
             <TextView
                 android:id="@+id/lblNrm"
                 android:layout_width="0dp"
@@ -208,7 +196,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/tilRS" />
 
-            <!-- Input NRM (opsional) -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/tilNrm"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
@@ -224,19 +211,27 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="Masukan Nomor Rekam Medis"
-                    android:textColor="@color/colorBlack"/>
+                    android:inputType="textCapCharacters"
+                    android:textColor="@color/colorBlack"
+
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:imeOptions="actionDone"
+                    android:nextFocusDown="@id/btnNext" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- Tombol Lanjut -->
             <Button
                 android:id="@+id/btnNext"
                 android:layout_width="0dp"
                 android:layout_height="52dp"
                 android:layout_marginTop="24dp"
-                android:focusable="true"
-                android:stateListAnimator="@null"
                 android:text="Lanjutkan"
                 android:textColor="@color/colorWhite"
+
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:stateListAnimator="@null"
+
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/tilNrm" />

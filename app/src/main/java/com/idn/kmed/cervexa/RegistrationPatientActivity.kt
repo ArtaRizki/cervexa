@@ -1,21 +1,18 @@
 package com.idn.kmed.cervexa
 
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.View
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.datepicker.CalendarConstraints
-import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import com.google.android.material.datepicker.CompositeDateValidator
-import com.google.android.material.datepicker.DateValidatorPointBackward
-import com.google.android.material.datepicker.DateValidatorPointForward
 import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
@@ -41,8 +38,13 @@ class RegistrationPatientActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_registration_patient)
 
-        // Toolbar
-        findViewById<MaterialToolbar>(R.id.topAppBar).setNavigationOnClickListener { finish() }
+        // Toolbar Navigasi
+        val toolbar = findViewById<MaterialToolbar>(R.id.topAppBar)
+        toolbar.setNavigationOnClickListener { finish() }
+
+        // Agar toolbar bisa difokus remote (opsional, untuk tombol back)
+        toolbar.isFocusable = true
+        toolbar.isFocusableInTouchMode = true
 
         // Views
         tilNama = findViewById(R.id.tilNama)
@@ -56,62 +58,105 @@ class RegistrationPatientActivity : AppCompatActivity() {
         etNrm   = findViewById(R.id.etNrm)
         btnNext = findViewById(R.id.btnNext)
 
-        etDob.setOnClickListener { showDobPicker() }
-        tilDob.setEndIconOnClickListener { showDobPicker() }
+        // [TV OPTIMIZATION] Setup Input Tanggal
+        setupTvDateInput()
 
         btnNext.setOnClickListener {
-            if (!validate()) return@setOnClickListener
-
-            val nama = etNama.text?.toString()?.trim().orEmpty()
-            val nik  = etNik.text?.toString()?.trim().orEmpty()
-            val rs   = etRS.text?.toString()?.trim().orEmpty()
-            val nrm  = etNrm.text?.toString()?.trim().orEmpty()
-            val dob  = selectedDobUtcMs ?: -1L
-
-            // Kirim ke VideoActivity
-            startActivity(Intent(this, VideoActivity::class.java).apply {
-                putExtra("patient_nama", nama)
-                putExtra("patient_nik",  nik)
-                putExtra("patient_rs",   rs)
-                putExtra("patient_nrm",  nrm)           // opsional
-                putExtra("patient_dob_utc", dob)
-            })
+            handleRegistration()
         }
     }
 
-    private fun showDobPicker() {
-        val nowUtc = MaterialDatePicker.todayInUtcMilliseconds()
-
-        // Minimal 130 tahun lalu (UTC)
-        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-        cal.timeInMillis = nowUtc
-        cal.add(Calendar.YEAR, -130)
-        val minUtc = cal.timeInMillis
-
-        // ✅ Validator tanpa lambda
-        val validators = listOf<CalendarConstraints.DateValidator>(
-            DateValidatorPointForward.from(minUtc),     // tidak boleh sebelum minUtc
-            DateValidatorPointBackward.before(nowUtc)   // tidak boleh setelah hari ini
-        )
-        val constraints = CalendarConstraints.Builder()
-            .setStart(minUtc)            // batas navigasi kalender (opsional tapi bagus)
-            .setEnd(nowUtc)
-            .setValidator(CompositeDateValidator.allOf(validators))
-            .build()
-
-        val picker = MaterialDatePicker.Builder.datePicker()
-            .setTheme(R.style.MyCustomDatePicker)
-            .setTitleText("Pilih Tanggal Lahir")
-            .setSelection(selectedDobUtcMs ?: nowUtc)
-            .setCalendarConstraints(constraints)
-            .build()
-
-        picker.addOnPositiveButtonClickListener { utcMs ->
-            selectedDobUtcMs = utcMs
-            etDob.setText(dateFormat.format(java.util.Date(utcMs)))
-            tilDob.error = null
+    private fun setupTvDateInput() {
+        // Fungsi pembuka date picker
+        val openPicker = {
+            // [FIX PENTING] Gunakan .post {}
+            // Ini menjamin dialog baru muncul SETELAH event tombol Enter selesai sepenuhnya.
+            // Tanpa ini, fokus sering nyangkut di EditText belakang dialog.
+            etDob.post {
+                showTvDatePicker()
+            }
         }
-        picker.show(supportFragmentManager, "dob_picker")
+
+        // 1. Klik via Touch / Mouse
+        etDob.setOnClickListener { openPicker() }
+        tilDob.setEndIconOnClickListener { openPicker() }
+
+        // 2. Klik via Remote (Enter / D-Pad Center)
+        etDob.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                // Hanya eksekusi saat tombol DILEPAS (ACTION_UP)
+                if (event.action == KeyEvent.ACTION_UP) {
+                    openPicker()
+                }
+                // Wajib return true pada DOWN dan UP agar event tidak bocor
+                return@setOnKeyListener true
+            }
+            false
+        }
+
+        // Pastikan keyboard tidak muncul saat fokus (sudah aman karena inputType="none")
+        etDob.setOnFocusChangeListener { _, _ -> }
+    }
+    private fun showTvDatePicker() {
+        val calendar = Calendar.getInstance()
+        if (selectedDobUtcMs != null) {
+            calendar.timeInMillis = selectedDobUtcMs!!
+        }
+
+        val year = calendar.get(Calendar.YEAR)
+        val month = calendar.get(Calendar.MONTH)
+        val day = calendar.get(Calendar.DAY_OF_MONTH)
+
+        val datePicker = DatePickerDialog(
+            this,
+            R.style.BlueDatePickerDialog, // Pastikan style ini sesuai XML tadi
+            { _, selectedYear, selectedMonth, selectedDay ->
+                val selectedCal = Calendar.getInstance()
+                selectedCal.set(selectedYear, selectedMonth, selectedDay)
+
+                val utcMs = selectedCal.timeInMillis
+                selectedDobUtcMs = utcMs
+
+                etDob.setText(dateFormat.format(selectedCal.time))
+                tilDob.error = null
+
+                etRS.requestFocus()
+            },
+            year, month, day
+        )
+
+        // --- BAGIAN YANG DIHAPUS/DIKOMENTARI ---
+        // datePicker.datePicker.maxDate = System.currentTimeMillis() // <--- HAPUS INI agar masa depan bisa dipilih
+        // ---------------------------------------
+
+        // Tetap batasi masa lalu (misal 130 tahun) agar user tidak scroll terlalu jauh ke tahun 1900
+        val minCal = Calendar.getInstance()
+        minCal.add(Calendar.YEAR, -130)
+        datePicker.datePicker.minDate = minCal.timeInMillis
+
+        datePicker.show()
+
+        // [OPSIONAL] Memaksa warna tombol secara manual jika XML tidak tembus di beberapa TV
+        datePicker.getButton(DatePickerDialog.BUTTON_POSITIVE)?.setBackgroundColor(android.graphics.Color.parseColor("#1E63E4"))
+        datePicker.getButton(DatePickerDialog.BUTTON_POSITIVE)?.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
+        datePicker.getButton(DatePickerDialog.BUTTON_NEGATIVE)?.setBackgroundColor(android.graphics.Color.parseColor("#FFFFFF"))
+        datePicker.getButton(DatePickerDialog.BUTTON_NEGATIVE)?.setTextColor(android.graphics.Color.parseColor("#1E63E4"))
+    }    private fun handleRegistration() {
+        if (!validate()) return
+
+        val nama = etNama.text?.toString()?.trim().orEmpty()
+        val nik  = etNik.text?.toString()?.trim().orEmpty()
+        val rs   = etRS.text?.toString()?.trim().orEmpty()
+        val nrm  = etNrm.text?.toString()?.trim().orEmpty()
+        val dob  = selectedDobUtcMs ?: -1L
+
+        startActivity(Intent(this, VideoActivity::class.java).apply {
+            putExtra("patient_nama", nama)
+            putExtra("patient_nik",  nik)
+            putExtra("patient_rs",   rs)
+            putExtra("patient_nrm",  nrm)
+            putExtra("patient_dob_utc", dob)
+        })
     }
 
     private fun validate(): Boolean {

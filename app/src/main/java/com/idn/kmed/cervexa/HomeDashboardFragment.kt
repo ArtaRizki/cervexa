@@ -116,9 +116,9 @@ class HomeDashboardFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         // [TV OPTIMIZATION] Paksa fokus ke tombol connect saat fragment muncul
         // agar user tidak perlu tekan tab/panah berkali-kali
-        btnConnect.postDelayed({
-            if (isAdded) btnConnect.requestFocus()
-        }, 300)
+//        btnConnect.postDelayed({
+//            if (isAdded) btnConnect.requestFocus()
+//        }, 300)
     }
 
     override fun onStart() {

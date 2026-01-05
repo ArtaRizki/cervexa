@@ -18,7 +18,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.*
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.idn.kmed.cervexa.model.WifiViewModel
 import com.idn.kmed.cervexa.utils.WifiMonitor
 import kotlinx.coroutines.launch
@@ -114,11 +114,27 @@ class HomeDashboardFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        // [TV OPTIMIZATION] Paksa fokus ke tombol connect saat fragment muncul
-        // agar user tidak perlu tekan tab/panah berkali-kali
-//        btnConnect.postDelayed({
-//            if (isAdded) btnConnect.requestFocus()
-//        }, 300)
+
+        // [TV OPTIMIZATION - FIX NAVIGATION]
+        // Paksa tombol BAWAH dari btnConnect agar lari ke Icon Beranda (Index 0)
+        // Bukan lari ke Media
+        btnConnect.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                // 1. Cari Bottom Nav di Activity
+                val bottomNav = requireActivity().findViewById<BottomNavigationView>(R.id.nav_view)
+                // 2. Ambil Container Menu
+                val menuView = bottomNav.getChildAt(0) as? ViewGroup
+
+                // 3. Ambil Icon Pertama (Beranda / Index 0)
+                val homeIcon = menuView?.getChildAt(0)
+
+                if (homeIcon != null) {
+                    homeIcon.requestFocus()
+                    return@setOnKeyListener true // Event selesai, jangan biarkan sistem milih sendiri
+                }
+            }
+            false
+        }
     }
 
     override fun onStart() {
@@ -140,6 +156,8 @@ class HomeDashboardFragment : Fragment() {
             runCatching { requireContext().unregisterReceiver(postConnReceiver) }
         }
     }
+
+    // ... (Sisa fungsi helper seperti refreshUiWithCurrentStatus dll tetap sama, tidak berubah) ...
 
     private fun refreshUiWithCurrentStatus() {
         if (isOnCameraWifi()) {

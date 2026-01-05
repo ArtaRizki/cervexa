@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.children
+import androidx.recyclerview.widget.RecyclerView
 import com.idn.kmed.cervexa.media.MediaListFragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.idn.kmed.cervexa.utils.WifiMonitor
@@ -28,11 +29,18 @@ class HomeActivity : AppCompatActivity() {
         setContentView(R.layout.activity_home)
 
         // ... (Kode toolbar tetap sama) ...
-        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
+        val toolbar =
+            findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                R.id.action_system_info -> { startActivity(Intent(this, SystemInfoActivity::class.java)); true }
-                R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
+                R.id.action_system_info -> {
+                    startActivity(Intent(this, SystemInfoActivity::class.java)); true
+                }
+
+                R.id.action_settings -> {
+                    startActivity(Intent(this, SettingsActivity::class.java)); true
+                }
+
                 else -> false
             }
         }
@@ -62,10 +70,12 @@ class HomeActivity : AppCompatActivity() {
                     showFragment(HomeDashboardFragment())
                     true
                 }
+
                 R.id.navigation_media -> {
                     showFragment(MediaListFragment())
                     true
                 }
+
                 else -> false
             }
         }
@@ -111,53 +121,62 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
 
-            // 2. LOGIKA BARU: TOMBOL ATAS (Manual Navigation)
+            // 2. LOGIKA BARU: TOMBOL ATAS (Manual Navigation - Global Search)
             child.setOnKeyListener { v, keyCode, event ->
                 if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
 
-                    // Cek kita sedang ada di Fragment mana
-                    val currentFrag = supportFragmentManager.findFragmentById(R.id.navHost)
+                    // STRATEGI: Cari view berdasarkan ID unik di Activity ini.
+                    // Karena kita pakai .replace(), hanya view dari fragment aktif yang akan ditemukan/visible.
 
-                    when (currentFrag) {
-                        is HomeDashboardFragment -> {
-                            // Jika di Home -> Lempar fokus ke tombol "Mulai"
-                            currentFrag.view?.findViewById<View>(R.id.btn_connect)?.requestFocus()
-                            return@setOnKeyListener true // Event selesai, jangan diproses sistem lagi
+                    val btnConnect = findViewById<View>(R.id.btn_connect) // ID unik di Home
+                    val rvMedia = findViewById<RecyclerView>(R.id.rv)     // ID unik di Media
+
+                    // KASUS 1: Sedang di HOME (btn_connect ditemukan dan visible)
+                    if (btnConnect != null && btnConnect.isShown) {
+                        if (btnConnect.requestFocus()) {
+                            return@setOnKeyListener true // Berhasil pindah fokus
+                        }
+                    }
+
+                    // KASUS 2: Sedang di MEDIA (RecyclerView ditemukan dan visible)
+                    if (rvMedia != null && rvMedia.isShown) {
+                        // Cek apakah list ada isinya?
+                        if (rvMedia.adapter != null && rvMedia.adapter!!.itemCount > 0) {
+                            rvMedia.requestFocus()
+                            return@setOnKeyListener true
+                        } else {
+                            // Jika list kosong, cari tombol "Mulai" di empty state
+                            val btnStart = findViewById<View>(R.id.btnStart)
+                            if (btnStart != null && btnStart.isShown) {
+                                btnStart.requestFocus()
+                                return@setOnKeyListener true
+                            }
                         }
 
-                        is MediaListFragment -> {
-                            // Jika di Media -> Coba lempar ke List (RecyclerView) dulu
-                            val rv = currentFrag.view?.findViewById<View>(R.id.rv)
-                            val btnStart = currentFrag.view?.findViewById<View>(R.id.btnStart)
-                            val searchView = currentFrag.view?.findViewById<View>(R.id.searchView)
-
-                            // Logika Prioritas:
-                            // 1. Jika List ada isinya -> Fokus ke List
-                            // 2. Jika List kosong (Empty State) -> Fokus ke tombol "Mulai" di empty state
-                            // 3. Terakhir -> Fokus ke Search View
-
-                            if (rv != null && rv.visibility == View.VISIBLE && (rv as? androidx.recyclerview.widget.RecyclerView)?.adapter?.itemCount ?: 0 > 0) {
-                                rv.requestFocus()
-                            } else if (btnStart != null && btnStart.visibility == View.VISIBLE) {
-                                btnStart.requestFocus()
-                            } else {
-                                searchView?.requestFocus()
-                            }
+                        // Fallback terakhir di Media: Fokus ke Search Bar
+                        val searchView = findViewById<View>(R.id.searchView)
+                        if (searchView != null && searchView.isShown) {
+                            searchView.requestFocus()
                             return@setOnKeyListener true
                         }
                     }
                 }
-                false // Tombol lain (Bawah/Kiri/Kanan) biarkan sistem yang atur
+                false // Biarkan tombol lain (Kiri/Kanan/Bawah) diproses sistem
             }
         }
     }
+
     private fun showFragment(f: androidx.fragment.app.Fragment) {
         supportFragmentManager.beginTransaction()
             .replace(R.id.navHost, f)
             .commit()
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         WifiMonitor.handlePermissionResult(requestCode, grantResults, this)
     }

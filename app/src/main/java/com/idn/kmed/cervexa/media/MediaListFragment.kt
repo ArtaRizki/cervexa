@@ -273,45 +273,45 @@ class MediaListFragment : Fragment() {
 
 
     private fun showSessionMoreSheet(item: SessionItem) {
-        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(
+        val dialog = BottomSheetDialog(
             requireContext(),
             com.google.android.material.R.style.Theme_Material3_Light_BottomSheetDialog
         )
         val v = layoutInflater.inflate(R.layout.bs_session_more, null)
         dialog.setContentView(v)
 
-        // Rounded top
         dialog.setOnShowListener {
-            val sheet = dialog.findViewById<android.widget.FrameLayout>(
-                com.google.android.material.R.id.design_bottom_sheet
-            )
-            sheet?.background = com.google.android.material.shape.MaterialShapeDrawable(
-                com.google.android.material.shape.ShapeAppearanceModel.Builder()
-                    .setTopLeftCorner(
-                        com.google.android.material.shape.CornerFamily.ROUNDED,
-                        resources.getDimension(R.dimen.bs_top_radius)
-                    )
-                    .setTopRightCorner(
-                        com.google.android.material.shape.CornerFamily.ROUNDED,
-                        resources.getDimension(R.dimen.bs_top_radius)
-                    )
-                    .build()
-            ).apply {
-                this?.fillColor =
-                    android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
-                this?.elevation = sheet?.elevation ?: 0f
+            val bottomSheetInternal = dialog.findViewById<FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
+            if (bottomSheetInternal != null) {
+                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheetInternal)
+
+                // 1. Paksa langsung terbuka penuh (Penting untuk Landscape)
+                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+
+                // 2. Pastikan tidak ada limit tinggi yang aneh
+                behavior.skipCollapsed = true
+
+                // Atur Background (Kode Anda yang sudah ada)
+                bottomSheetInternal.background = MaterialShapeDrawable(
+                    ShapeAppearanceModel.Builder()
+                        .setTopLeftCorner(CornerFamily.ROUNDED, resources.getDimension(R.dimen.bs_top_radius))
+                        .setTopRightCorner(CornerFamily.ROUNDED, resources.getDimension(R.dimen.bs_top_radius))
+                        .build()
+                ).apply {
+                    fillColor = ColorStateList.valueOf(Color.WHITE)
+                    elevation = bottomSheetInternal.elevation
+                }
             }
         }
 
+        // Listener tombol tetap sama
         v.findViewById<View>(R.id.btnClose)?.setOnClickListener { dialog.dismiss() }
         v.findViewById<View>(R.id.rowInfo)?.setOnClickListener {
             dialog.dismiss()
-            // panggil sheet informasi pasien yang sudah kamu punya
-            showPatientInfoSheetFor(item)   // implement ke fungsi kamu
+            showPatientInfoSheetFor(item)
         }
         v.findViewById<View>(R.id.rowDelete)?.setOnClickListener {
             dialog.dismiss()
-            // konfirmasi hapus sesi ini (atau media di dalamnya)
             confirmDeleteSession(item)
         }
 

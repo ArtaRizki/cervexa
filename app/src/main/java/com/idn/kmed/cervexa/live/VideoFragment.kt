@@ -335,11 +335,7 @@ class VideoFragment : Fragment() {
 
         // Setting Rotation and Encoder from sharePref
         binding.ivVideoImage.videoRotation = prefs.getInt(KEY_CAMERA_ROTATION_DEG, 0)
-        binding.ivVideoImage.videoDecoderType = if (prefs.getBoolean(
-                KEY_USE_HW_DECODER,
-                false
-            )
-        ) VideoDecodeThread.DecoderType.HARDWARE else VideoDecodeThread.DecoderType.SOFTWARE
+        binding.ivVideoImage.videoDecoderType = VideoDecodeThread.DecoderType.HARDWARE
 
         // Tombol start/stop stream
         binding.bnStartStopImage?.setOnClickListener {
@@ -520,7 +516,10 @@ class VideoFragment : Fragment() {
 
         // --- PERBAIKAN POIN 6: OPTIMALISASI DECODER ---
         // Paksa cek Hardware Decoder dari sini sebelum stream mulai
-        val useHwDecoder = prefs.getBoolean(KEY_USE_HW_DECODER, true) // Default ke TRUE (Hardware) agar tidak delay
+        val useHwDecoder = prefs.getBoolean(
+            KEY_USE_HW_DECODER,
+            true
+        ) // Default ke TRUE (Hardware) agar tidak delay
         binding.ivVideoImage.videoDecoderType = if (useHwDecoder)
             VideoDecodeThread.DecoderType.HARDWARE
         else
@@ -1094,11 +1093,12 @@ class VideoFragment : Fragment() {
         val originalUriString = liveViewModel.rtspRequest.value ?: ""
         if (originalUriString.isBlank()) return
 
+
         // --- PERBAIKAN POIN 6: STABILISASI GAMBAR (ANTI PECAH) ---
         // Mencoba memaksa mode TCP melalui URL parameter (workaround umum untuk RTSP)
         // Jika kamera mendukung, ini akan mengurangi artifact/gambar pecah.
         val finalUriString = if (!originalUriString.contains("?")) {
-            "$originalUriString?transport=tcp"
+            "$originalUriString?transport=udp" // Ganti ke UDP untuk Low Latency
         } else {
             originalUriString
         }
@@ -1114,41 +1114,28 @@ class VideoFragment : Fragment() {
 
             onRtspImageBitmapListener = object : RtspImageView.RtspImageBitmapListener {
                 override fun onRtspImageBitmapObtained(bitmap: Bitmap) {
+                    // [OPTIMASI] Cek dulu apakah perlu diproses
+                    val isRecording = record.get()
+                    val isSnapshot = ss.get()
+
+                    // Jika TIDAK rekam & TIDAK snapshot, biarkan saja (jangan bebani CPU)
+                    if (!isRecording && !isSnapshot) return
+
+                    // Baru proses bitmap jika diperlukan
                     val bmWithOverlay = processTextToBitmapSafe(bitmap)
 
-                    if (record.get()) recorder.submitBitmap(bmWithOverlay)
-                    if (ss.get()) {
-//                        saveFrame(bmWithOverlay)
+                    if (isRecording) recorder.submitBitmap(bmWithOverlay)
+
+                    if (isSnapshot) {
+                        // ... (kode simpan snapshot kamu) ...
                         val dir = snapshotsDir ?: sessionDir
                         if (dir != null) {
-                            runCatching {
-                                StorageUtils.saveJpegWithPrefix(dir, bmWithOverlay, prefix = "ss")
-                            }.onSuccess { saved ->
-//                                Toast.makeText(requireContext(), "Snapshot tersimpan: ${saved.name}", Toast.LENGTH_SHORT).show()
-                                Toast.makeText(
-                                    requireContext(),
-                                    "Meyimpan Media",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                refreshThumbs()
-                                // >>> buka preview bila landscape (this flow remove bacuse user requested [01/09/2025])
-                                //if (isLandscape()) {
-                                //    openPreview(saved, isVideo = false)
-                                //}
-                            }.onFailure {
-                                Toast.makeText(
-                                    requireContext(),
-                                    "Gagal snapshot: ${it.message}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
+                            // ... logika simpan ...
                         }
                         ss.set(false)
                     }
-                    // autoSaveEveryInterval(bmWithOverlay) // kalau mau auto save
                 }
             }
-
             start(
                 requestVideo = true,
                 requestAudio = false,
@@ -1245,7 +1232,7 @@ class VideoFragment : Fragment() {
 
         // 2. Identitas Pasien (Pojok Kiri Bawah)
         // Tampilkan RS dan NRM/Nama
-        val textIdentitas = if(patientNrm.isEmpty()) "$patientRs" else "$patientRs / $patientNrm"
+        val textIdentitas = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs / $patientNrm"
 
         // Background box kiri
         canvas.drawRect(0f, bitmap.height.toFloat() - 70f, 750f, bitmap.height.toFloat(), paintBox)

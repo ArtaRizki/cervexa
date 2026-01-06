@@ -7,73 +7,85 @@
     android:background="@color/colorWhite"
     android:padding="24dp">
 
-    <!-- Title -->
+    <ImageView
+        android:id="@+id/imgHeader"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_marginTop="32dp"
+        android:src="@drawable/device_active"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <TextView
         android:id="@+id/tvTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Konfirmasi Pasien"
-        android:textSize="20sp"
+        android:layout_marginTop="16dp"
         android:fontFamily="@font/manrope_medium"
+        android:text="Konfirmasi Pasien"
         android:textColor="@color/colorBlack"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
+        android:textSize="24sp"
+        android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="32dp" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/imgHeader" />
 
-    <!-- Subtitle -->
     <TextView
         android:id="@+id/tvSubtitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Silakan pilih jenis pasien"
-        android:textSize="14sp"
-        android:fontFamily="@font/manrope_medium"
-        android:textColor="#666666"
         android:layout_marginTop="8dp"
-        app:layout_constraintTop_toBottomOf="@id/tvTitle"
+        android:fontFamily="@font/manrope_medium"
+        android:text="Apakah ini pasien baru atau pasien yang sudah terdaftar?"
+        android:textColor="#666666"
+        android:textSize="16sp"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/tvTitle" />
 
-
-    <!-- PASIEN BARU -->
-    <Button
+    <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/btnNewPatient"
         android:layout_width="0dp"
-        android:layout_height="56dp"
-        android:layout_marginTop="40dp"
-        android:layout_marginStart="32dp"
-        android:layout_marginEnd="32dp"
-        android:background="@drawable/bg_primary_button"
-        android:text="PASIEN BARU"
-        android:textAllCaps="true"
-        android:textColor="@color/colorWhite"
-        android:fontFamily="@font/manrope_medium"
-        android:textSize="16sp"
-        android:focusable="true"
-        app:layout_constraintTop_toBottomOf="@id/tvSubtitle"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
-<!--        android:focusableInTouchMode="true"-->
+        android:layout_height="64dp"
+        android:layout_marginTop="48dp"
 
-    <!-- PASIEN LAMA -->
-    <Button
+        android:text="PASIEN BARU"
+        android:textSize="16sp"
+        android:fontFamily="@font/manrope_medium"
+        android:textColor="@color/colorWhite"
+        android:textStyle="bold"
+
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+
+        android:background="@drawable/bg_btn_tv_focus"
+
+        app:layout_constraintWidth_max="450dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvSubtitle" />
+
+    <androidx.appcompat.widget.AppCompatButton
         android:id="@+id/btnExistingPatient"
         android:layout_width="0dp"
-        android:layout_height="56dp"
+        android:layout_height="64dp"
         android:layout_marginTop="16dp"
-        android:layout_marginStart="32dp"
-        android:layout_marginEnd="32dp"
-        android:background="@drawable/bg_primary_button"
+
         android:text="PASIEN LAMA"
-        android:textAllCaps="true"
-        android:textColor="@color/colorWhite"
-        android:fontFamily="@font/manrope_medium"
         android:textSize="16sp"
+        android:fontFamily="@font/manrope_medium"
+        android:textColor="@color/colorWhite"
+        android:textStyle="bold"
+
         android:focusable="true"
-        app:layout_constraintTop_toBottomOf="@id/btnNewPatient"
+        android:focusableInTouchMode="true"
+
+        android:background="@drawable/bg_btn_tv_focus"
+
+        app:layout_constraintWidth_max="450dp"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
-<!--        android:focusableInTouchMode="true"-->
+        app:layout_constraintTop_toBottomOf="@id/btnNewPatient" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

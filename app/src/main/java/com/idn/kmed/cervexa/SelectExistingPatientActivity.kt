@@ -91,7 +91,7 @@ class SelectExistingPatientActivity : AppCompatActivity() {
 
         val filtered = fullList.filter { p ->
             p.nama.lowercase().contains(query) ||
-                    p.nik.lowercase().contains(query)||
+                    p.nik.lowercase().contains(query) ||
                     p.nrm?.lowercase()?.contains(query) == true ||
                     p.rs?.lowercase()?.contains(query) == true
         }

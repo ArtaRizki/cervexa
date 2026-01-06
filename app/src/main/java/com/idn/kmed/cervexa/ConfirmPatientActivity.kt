@@ -3,6 +3,7 @@ package com.idn.kmed.cervexa
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.AppCompatButton
 import com.google.android.material.button.MaterialButton
 
 class ConfirmPatientActivity : AppCompatActivity() {
@@ -11,19 +12,30 @@ class ConfirmPatientActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_confirm_patient)
 
-        // Tombol Pasien Baru
-        findViewById<MaterialButton>(R.id.btnNewPatient).setOnClickListener {
+        // UBAH casting dari <MaterialButton> menjadi <AppCompatButton>
+        val btnNew = findViewById<AppCompatButton>(R.id.btnNewPatient)
+        val btnExist = findViewById<AppCompatButton>(R.id.btnExistingPatient)
+
+        // Logic Klik
+        btnNew.setOnClickListener {
             startActivity(Intent(this, RegistrationPatientActivity::class.java))
-            finish() // tutup layer konfirmasi biar nggak numpuk di back stack
+            finish()
         }
 
-        // Tombol Pasien Lama
-        findViewById<MaterialButton>(R.id.btnExistingPatient).setOnClickListener {
+        btnExist.setOnClickListener {
             startActivity(Intent(this, SelectExistingPatientActivity::class.java))
             finish()
         }
 
-        // OPTIONAL: jika mau klik di luar / tombol back langsung balik ke Home
-        // tidak perlu diapa-apakan, default back sudah ke HomeActivity
+        // [TV OPTIMIZATION] Paksa fokus ke tombol pertama
+        btnNew.post {
+            btnNew.requestFocus()
+        }
+
+        // 2. [TV OPTIMIZATION] Paksa fokus ke tombol pertama saat layar muncul
+        // Gunakan post agar layout selesai dirender dulu baru minta fokus
+        btnNew.post {
+            btnNew.requestFocus()
+        }
     }
 }

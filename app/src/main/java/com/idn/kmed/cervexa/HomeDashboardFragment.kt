@@ -1,11 +1,13 @@
 package com.idn.kmed.cervexa
 
+import android.annotation.SuppressLint
 import android.content.*
 import android.content.Context.MODE_PRIVATE
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -14,13 +16,11 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.*
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.idn.kmed.cervexa.model.WifiViewModel
-import com.idn.kmed.cervexa.utils.WifiMonitor
 import kotlinx.coroutines.launch
 
 class HomeDashboardFragment : Fragment() {
@@ -47,35 +47,9 @@ class HomeDashboardFragment : Fragment() {
         }
     }
 
-    private fun handleStartClickHome() {
-        val isD3m0: Boolean = false
-        val camNet = findCameraWifiNetwork()
-
-        if (camNet != null) {
-            val cm = requireContext().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-            if (isD3m0) {
-                val valCntRecord = prefs.getInt("D3M0_K3Y_M4X_C0UN7", 0)
-                if (valCntRecord == 5) {
-                    Toast.makeText(
-                        requireContext(),
-                        "Anda sudah melakukan 5x Percobaan, silahkan menggunakan versi Release!",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return
-                } else {
-                    prefs.edit { putInt("D3M0_K3Y_M4X_C0UN7", valCntRecord + 1) }
-                }
-            }
-
-            runCatching { cm.bindProcessToNetwork(camNet) }
-            startActivity(Intent(requireContext(), ConfirmPatientActivity::class.java))
-        } else {
-            Toast.makeText(requireContext(), "Belum terhubung ke Wi-Fi kamera", Toast.LENGTH_SHORT).show()
-            startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-        }
-    }
-
+    // =========================
+    // Lifecycle
+    // =========================
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -83,7 +57,8 @@ class HomeDashboardFragment : Fragment() {
     ): View {
         val v = inflater.inflate(R.layout.fragment_home_dashboard, container, false)
 
-        requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
+        requireActivity()
+            .findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
             ?.title = "Cervexa"
 
         wifiViewModel = ViewModelProvider(requireActivity())[WifiViewModel::class.java]
@@ -97,13 +72,9 @@ class HomeDashboardFragment : Fragment() {
         btnConnect.isFocusable = true
         btnConnect.isFocusableInTouchMode = true
 
-        WifiMonitor.init(requireContext()) { ssid ->
-            wifiViewModel.updateSsid(ssid)
-        }
-
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                wifiViewModel.ssidFlow.collect {
+                wifiViewModel.statusFlow.collect {
                     refreshUiWithCurrentStatus()
                 }
             }
@@ -116,21 +87,15 @@ class HomeDashboardFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         // [TV OPTIMIZATION - FIX NAVIGATION]
-        // Paksa tombol BAWAH dari btnConnect agar lari ke Icon Beranda (Index 0)
-        // Bukan lari ke Media
         btnConnect.setOnKeyListener { _, keyCode, event ->
             if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                // 1. Cari Bottom Nav di Activity
                 val bottomNav = requireActivity().findViewById<BottomNavigationView>(R.id.nav_view)
-                // 2. Ambil Container Menu
                 val menuView = bottomNav.getChildAt(0) as? ViewGroup
-
-                // 3. Ambil Icon Pertama (Beranda / Index 0)
                 val homeIcon = menuView?.getChildAt(0)
 
                 if (homeIcon != null) {
                     homeIcon.requestFocus()
-                    return@setOnKeyListener true // Event selesai, jangan biarkan sistem milih sendiri
+                    return@setOnKeyListener true
                 }
             }
             false
@@ -151,79 +116,174 @@ class HomeDashboardFragment : Fragment() {
 
     override fun onStop() {
         super.onStop()
-        WifiMonitor.stopMonitoring()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching { requireContext().unregisterReceiver(postConnReceiver) }
         }
     }
 
-    // ... (Sisa fungsi helper seperti refreshUiWithCurrentStatus dll tetap sama, tidak berubah) ...
-
+    // =========================
+    // UI
+    // =========================
     private fun refreshUiWithCurrentStatus() {
-        if (isOnCameraWifi()) {
+        val status = wifiViewModel.statusFlow.value
+        if (status.isCamera) {
             imgIndicator.setImageResource(R.drawable.device_active)
             tvStatus.text = "Terhubung"
             btnConnect.text = "Mulai"
         } else {
             imgIndicator.setImageResource(R.drawable.device_inactive)
-            val status = wifiViewModel.ssidFlow.value
             tvStatus.text =
-                if (status.isNullOrBlank()) "Koneksi Terputus" else "Terhubung ke Wi-Fi lain"
+                if (status.ssid.isNullOrBlank()) "Koneksi Terputus" else "Terhubung ke Wi-Fi lain"
             btnConnect.text = "Hubungkan Kembali"
         }
     }
 
-    private fun getSsidFromCaps(caps: NetworkCapabilities): String? =
-        if (Build.VERSION.SDK_INT >= 31) (caps.transportInfo as? WifiInfo)?.ssid?.removeSurrounding(
-            "\""
-        ) else null
+    // =========================
+    // Actions
+    // =========================
+    private fun handleStartClickHome() {
+        val isD3m0: Boolean = false
 
-    private fun findCameraWifiNetwork(): Network? {
-        val prefs = requireContext().getSharedPreferences(
-            getString(R.string.pref_application),
-            AppCompatActivity.MODE_PRIVATE
-        )
+        // ---- demo limiter (tetap) ----
+        if (isD3m0) {
+            val valCntRecord = prefs.getInt("D3M0_K3Y_M4X_C0UN7", 0)
+            if (valCntRecord >= 5) {
+                Toast.makeText(
+                    requireContext(),
+                    "Anda sudah melakukan 5x Percobaan, silahkan menggunakan versi Release!",
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            } else {
+                prefs.edit { putInt("D3M0_K3Y_M4X_C0UN7", valCntRecord + 1) }
+            }
+        }
+
+        val ctx = requireContext()
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        // 1) Cek SSID saat ini (untuk pesan UI yang lebih akurat) — cross-version
+        val currentSsid: String? = if (Build.VERSION.SDK_INT >= 31) {
+            val active = cm.activeNetwork
+            val caps = active?.let { cm.getNetworkCapabilities(it) }
+            if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                (caps.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
+            } else null
+        } else {
+            getCurrentSsidLegacy(ctx)
+        }
+
+        // 2) Apakah SSID match kamera? (strict by exact/prefix)
+        val exact = prefs.getString("camera_ssid_exact", null)
+        val prefix = prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_")
+        val isSsidMatchCamera =
+            !currentSsid.isNullOrBlank() && (
+                    (!exact.isNullOrBlank() && currentSsid == exact) ||
+                            (!prefix.isNullOrBlank() && currentSsid.startsWith(prefix))
+                    )
+
+        // 3) Cari network kamera untuk bind (strict)
+        val camNet: Network? = findCameraWifiNetworkStrict()
+
+        when {
+            camNet != null -> {
+                runCatching { cm.bindProcessToNetwork(camNet) }
+                startActivity(Intent(requireContext(), ConfirmPatientActivity::class.java))
+            }
+
+            isSsidMatchCamera && camNet == null -> {
+                Toast.makeText(
+                    requireContext(),
+                    "Wi-Fi kamera terdeteksi (${currentSsid}), tapi belum siap digunakan. Coba nyalakan izin lokasi/nearby & tunggu beberapa detik, lalu coba lagi.",
+                    Toast.LENGTH_LONG
+                ).show()
+                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+            }
+
+            else -> {
+                Toast.makeText(
+                    requireContext(),
+                    "Belum terhubung ke Wi-Fi kamera",
+                    Toast.LENGTH_SHORT
+                ).show()
+                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+            }
+        }
+    }
+
+    // =========================
+    // Network Helpers (Strict + Cross-version)
+    // =========================
+    private fun getSsidFromCaps(caps: NetworkCapabilities): String? {
+        return if (Build.VERSION.SDK_INT >= 31) {
+            (caps.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
+        } else null
+    }
+
+    @SuppressLint("MissingPermission")
+    @Suppress("DEPRECATION")
+    private fun getCurrentSsidLegacy(ctx: Context): String? {
+        val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val ssid = wm.connectionInfo?.ssid ?: return null
+        return ssid.replace("\"", "").takeIf { it.isNotBlank() && it != "<unknown ssid>" }
+    }
+
+    /**
+     * Strict = hanya dianggap kamera kalau SSID match exact/prefix.
+     * Return Network Wi-Fi kamera untuk dipakai bindProcessToNetwork.
+     */
+    private fun findCameraWifiNetworkStrict(): Network? {
+        val ctx = requireContext()
         val exact = prefs.getString("camera_ssid_exact", null)
         val prefix = prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_")
 
-        val cm =
-            requireContext().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val all = cm.allNetworks ?: return null
 
-        if (Build.VERSION.SDK_INT >= 31 && !exact.isNullOrBlank()) {
+        // ========= API 31+ =========
+        if (Build.VERSION.SDK_INT >= 31) {
             for (n in all) {
                 val caps = cm.getNetworkCapabilities(n) ?: continue
                 if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
-                if (getSsidFromCaps(caps) == exact) return n
-            }
-        }
-        if (Build.VERSION.SDK_INT >= 31 && !prefix.isNullOrBlank()) {
-            for (n in all) {
-                val caps = cm.getNetworkCapabilities(n) ?: continue
-                if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+
                 val ssid = getSsidFromCaps(caps) ?: continue
-                if (ssid.startsWith(prefix, ignoreCase = false)) return n
+                if (!exact.isNullOrBlank() && ssid == exact) return n
+                if (!prefix.isNullOrBlank() && ssid.startsWith(prefix)) return n
+            }
+            return null
+        }
+
+        // ========= API < 31 =========
+        val currentSsid = getCurrentSsidLegacy(ctx) ?: return null
+
+        val match =
+            (!exact.isNullOrBlank() && currentSsid == exact) ||
+                    (!prefix.isNullOrBlank() && currentSsid.startsWith(prefix))
+
+        if (!match) return null
+
+        // Prefer active wifi network
+        val active = cm.activeNetwork
+        if (active != null) {
+            val caps = cm.getNetworkCapabilities(active)
+            if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                return active
             }
         }
 
-        var fallbackWifi: Network? = null
+        // Fallback: first WIFI network in allNetworks
         for (n in all) {
             val caps = cm.getNetworkCapabilities(n) ?: continue
-            if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
-            val hasInternet = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            val validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-            if (!validated || !hasInternet) return n
-            if (fallbackWifi == null) fallbackWifi = n
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return n
         }
-        return fallbackWifi
-    }
 
-    private fun isOnCameraWifi(): Boolean = findCameraWifiNetwork() != null
+        return null
+    }
 
     private fun bindProcessToCameraIfMatch() {
         val cm =
             requireContext().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val camNet = findCameraWifiNetwork() ?: return
+        val camNet = findCameraWifiNetworkStrict() ?: return
         runCatching { cm.bindProcessToNetwork(camNet) }
     }
 }

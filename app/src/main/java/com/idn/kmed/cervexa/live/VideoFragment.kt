@@ -1095,7 +1095,7 @@ class VideoFragment : Fragment() {
 
 
         // --- PERBAIKAN POIN 6: STABILISASI GAMBAR (ANTI PECAH) ---
-        // Mencoba memaksa mode TCP melalui URL parameter (workaround umum untuk RTSP)
+        // Mencoba memaksa mode UDP melalui URL parameter (workaround umum untuk RTSP)
         // Jika kamera mendukung, ini akan mengurangi artifact/gambar pecah.
         val finalUriString = if (!originalUriString.contains("?")) {
             "$originalUriString?transport=udp" // Ganti ke UDP untuk Low Latency

@@ -10,12 +10,16 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.children
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.RecyclerView
-import com.idn.kmed.cervexa.media.MediaListFragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.idn.kmed.cervexa.media.MediaListFragment
+import com.idn.kmed.cervexa.model.WifiViewModel
 import com.idn.kmed.cervexa.utils.WifiMonitor
 
 class HomeActivity : AppCompatActivity() {
+
+    private lateinit var wifiViewModel: WifiViewModel
 
     // Helper untuk mendeteksi apakah ini TV
     private val isTvDevice: Boolean
@@ -28,19 +32,24 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_home)
 
+        wifiViewModel = ViewModelProvider(this)[WifiViewModel::class.java]
+
+        // ✅ START WifiMonitor sekali di Activity
+        WifiMonitor.init(this) { /* callback SSID lama tidak dipakai */ }
+        WifiMonitor.setOnStatusChanged { status ->
+            wifiViewModel.updateStatus(status)
+        }
+
         // ... (Kode toolbar tetap sama) ...
-        val toolbar =
-            findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
+        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_system_info -> {
                     startActivity(Intent(this, SystemInfoActivity::class.java)); true
                 }
-
                 R.id.action_settings -> {
                     startActivity(Intent(this, SettingsActivity::class.java)); true
                 }
-
                 else -> false
             }
         }
@@ -57,25 +66,21 @@ class HomeActivity : AppCompatActivity() {
         val bottom = findViewById<BottomNavigationView>(R.id.nav_view)
 
         // --- [TV OPTIMIZATION START] ---
-        // HANYA jalankan setup remote jika device adalah TV
         if (isTvDevice) {
             setupBottomNavForRemote(bottom)
         }
         // --- [TV OPTIMIZATION END] ---
 
-        // Setup listener navigasi
         bottom.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.navigation_home -> {
                     showFragment(HomeDashboardFragment())
                     true
                 }
-
                 R.id.navigation_media -> {
                     showFragment(MediaListFragment())
                     true
                 }
-
                 else -> false
             }
         }
@@ -90,6 +95,12 @@ class HomeActivity : AppCompatActivity() {
                 bottom.selectedItemId = R.id.navigation_home
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // ✅ STOP WifiMonitor sekali di Activity (bukan di fragment)
+        WifiMonitor.stopMonitoring()
     }
 
     // FUNGSI KHUSUS REMOTE TV
@@ -113,7 +124,6 @@ class HomeActivity : AppCompatActivity() {
 
                         navRunnable = Runnable {
                             bottomNav.selectedItemId = destinationId
-                            // Kunci fokus agar tetap di icon ini setelah fragment berubah
                             view.requestFocus()
                         }
                         navHandler.postDelayed(navRunnable!!, 150)
@@ -122,30 +132,20 @@ class HomeActivity : AppCompatActivity() {
             }
 
             // 2. LOGIKA BARU: TOMBOL ATAS (Manual Navigation - Global Search)
-            child.setOnKeyListener { v, keyCode, event ->
+            child.setOnKeyListener { _, keyCode, event ->
                 if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    val btnConnect = findViewById<View>(R.id.btn_connect)
+                    val rvMedia = findViewById<RecyclerView>(R.id.rv)
 
-                    // STRATEGI: Cari view berdasarkan ID unik di Activity ini.
-                    // Karena kita pakai .replace(), hanya view dari fragment aktif yang akan ditemukan/visible.
-
-                    val btnConnect = findViewById<View>(R.id.btn_connect) // ID unik di Home
-                    val rvMedia = findViewById<RecyclerView>(R.id.rv)     // ID unik di Media
-
-                    // KASUS 1: Sedang di HOME (btn_connect ditemukan dan visible)
                     if (btnConnect != null && btnConnect.isShown) {
-                        if (btnConnect.requestFocus()) {
-                            return@setOnKeyListener true // Berhasil pindah fokus
-                        }
+                        if (btnConnect.requestFocus()) return@setOnKeyListener true
                     }
 
-                    // KASUS 2: Sedang di MEDIA (RecyclerView ditemukan dan visible)
                     if (rvMedia != null && rvMedia.isShown) {
-                        // Cek apakah list ada isinya?
                         if (rvMedia.adapter != null && rvMedia.adapter!!.itemCount > 0) {
                             rvMedia.requestFocus()
                             return@setOnKeyListener true
                         } else {
-                            // Jika list kosong, cari tombol "Mulai" di empty state
                             val btnStart = findViewById<View>(R.id.btnStart)
                             if (btnStart != null && btnStart.isShown) {
                                 btnStart.requestFocus()
@@ -153,7 +153,6 @@ class HomeActivity : AppCompatActivity() {
                             }
                         }
 
-                        // Fallback terakhir di Media: Fokus ke Search Bar
                         val searchView = findViewById<View>(R.id.searchView)
                         if (searchView != null && searchView.isShown) {
                             searchView.requestFocus()
@@ -161,7 +160,7 @@ class HomeActivity : AppCompatActivity() {
                         }
                     }
                 }
-                false // Biarkan tombol lain (Kiri/Kanan/Bawah) diproses sistem
+                false
             }
         }
     }

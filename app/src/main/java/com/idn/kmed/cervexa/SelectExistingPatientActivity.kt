@@ -73,7 +73,8 @@ class SelectExistingPatientActivity : AppCompatActivity() {
                     nik = nik,
                     rs = s.rs,
                     nrm = s.nrm,
-                    dobUtcMs = s.lastTs ?: 0L
+//                    dobUtcMs = s.lastTs ?: 0L
+                    dobUtcMs = s.dobUtc ?: 0L
                 )
             }
         }

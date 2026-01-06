@@ -225,6 +225,7 @@
                 android:layout_width="0dp"
                 android:layout_height="52dp"
                 android:layout_marginTop="24dp"
+                android:backgroundTint="@color/colorButton"
                 android:text="Lanjutkan"
                 android:textColor="@color/colorWhite"
 

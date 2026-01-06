@@ -30,24 +30,37 @@
                     android:layout_width="0dp"
                     android:layout_height="50dp"
                     android:layout_weight="1"
-                    android:background="@null"
+                    android:background="@drawable/bg_search_focus"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
                     android:hint="Cari pasien (nama / NIK / RS / tanggal)"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:nextFocusRight="@id/btnSearch"
+
+                    android:nextFocusDown="@id/rv"
                     android:paddingStart="20dp"
                     android:paddingEnd="10dp"
+                    android:singleLine="true"
                     android:textColor="#333333"
+
                     android:textColorHint="#9E9E9E"
-                    android:textSize="14sp"
-                    android:inputType="text"
-                    android:maxLines="1" />
+                    android:textSize="14sp" />
+
 
                 <FrameLayout
                     android:id="@+id/btnSearch"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
-                    android:background="@drawable/bg_search_button"
                     android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_search_button"
                     android:clickable="true"
-                    android:focusable="true">
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:nextFocusLeft="@id/searchView"
+                    android:nextFocusDown="@id/rv">
 
                     <ImageView
                         android:layout_width="24dp"
@@ -60,7 +73,7 @@
             </LinearLayout>
 
         </androidx.cardview.widget.CardView>
-<!--            android:focusableInTouchMode="true"-->
+        <!--            android:focusableInTouchMode="true"-->
 
         <!-- Optional: judul lokal, disembunyikan karena pakai Toolbar di Activity -->
         <com.google.android.material.appbar.MaterialToolbar
@@ -100,18 +113,18 @@
 
                 <TextView
                     android:id="@+id/tvEmptySubtitle"
-                    android:gravity="center"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="8dp"
+                    android:gravity="center"
                     android:text="Mulai rekam atau ambil snapshot untuk menambahkan media" />
 
                 <Button
                     android:id="@+id/btnStart"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/colorWhite"
-                    android:text="Mulai" />
+                    android:text="Mulai"
+                    android:textColor="@color/colorWhite" />
             </LinearLayout>
 
             <!-- List sesi -->

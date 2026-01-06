@@ -106,14 +106,34 @@ class MediaListFragment : Fragment() {
 
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
+        etSearch.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                applyFilter(etSearch.text.toString())
+                true
+            } else false
+        }
+
 
         // 3. Listener Tombol Search Pink (pengganti onQueryTextSubmit)
         // Opsional: jika ingin filter ulang saat tombol ditekan
         btnSearch.setOnClickListener {
             applyFilter(etSearch.text.toString())
             // Sembunyikan keyboard jika perlu
-            val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            val imm =
+                requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
             imm?.hideSoftInputFromWindow(etSearch.windowToken, 0)
+        }
+        etSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+            v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f)
+                .setDuration(80).start()
+        }
+
+        btnSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+            v.animate()
+                .scaleX(if (hasFocus) 1.08f else 1f)
+                .scaleY(if (hasFocus) 1.08f else 1f)
+                .setDuration(80)
+                .start()
         }
 
 
@@ -281,12 +301,16 @@ class MediaListFragment : Fragment() {
         dialog.setContentView(v)
 
         dialog.setOnShowListener {
-            val bottomSheetInternal = dialog.findViewById<FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
+            val bottomSheetInternal =
+                dialog.findViewById<FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
             if (bottomSheetInternal != null) {
-                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(bottomSheetInternal)
+                val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(
+                    bottomSheetInternal
+                )
 
                 // 1. Paksa langsung terbuka penuh (Penting untuk Landscape)
-                behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+                behavior.state =
+                    com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
 
                 // 2. Pastikan tidak ada limit tinggi yang aneh
                 behavior.skipCollapsed = true
@@ -294,8 +318,14 @@ class MediaListFragment : Fragment() {
                 // Atur Background (Kode Anda yang sudah ada)
                 bottomSheetInternal.background = MaterialShapeDrawable(
                     ShapeAppearanceModel.Builder()
-                        .setTopLeftCorner(CornerFamily.ROUNDED, resources.getDimension(R.dimen.bs_top_radius))
-                        .setTopRightCorner(CornerFamily.ROUNDED, resources.getDimension(R.dimen.bs_top_radius))
+                        .setTopLeftCorner(
+                            CornerFamily.ROUNDED,
+                            resources.getDimension(R.dimen.bs_top_radius)
+                        )
+                        .setTopRightCorner(
+                            CornerFamily.ROUNDED,
+                            resources.getDimension(R.dimen.bs_top_radius)
+                        )
                         .build()
                 ).apply {
                     fillColor = ColorStateList.valueOf(Color.WHITE)

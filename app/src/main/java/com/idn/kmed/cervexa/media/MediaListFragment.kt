@@ -123,24 +123,25 @@ class MediaListFragment : Fragment() {
         repo = MediaRepository(requireContext())
         adapter = SessionListAdapter(
             onSessionClick = { session ->
-                val all = repo.listMediaInSession(session)
-                val paths = ArrayList(all.map { it.file.absolutePath })
-                val types = ArrayList(all.map { it.type.name })
-                val idx = all.indexOfFirst { it.file == session.thumb.file }.coerceAtLeast(0)
+                // 1. Ambil semua sesi (folder) milik pasien ini (misal: folder tanggal 1, tanggal 5, dst)
+                val relatedSessions = repo.getRelatedSessions(session)
 
-                /*startActivity(Intent(requireContext(), com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java).apply {
-                    putStringArrayListExtra("paths", paths)
-                    putStringArrayListExtra("types", types)
-                    putExtra("index", idx)
-                })*/
+                // 2. Kumpulkan path absolut dari folder-folder tersebut
+                // Kita gunakan ArrayList<String> agar bisa dikirim via Intent
+                val allPaths = ArrayList(relatedSessions.map { it.patientDir.absolutePath })
+
                 startActivity(Intent(requireContext(), SessionMediaActivity::class.java).apply {
-                    putExtra("sessionDirPath", session.patientDir.absolutePath)
+                    // Kirim data utama (untuk display nama/header)
+                    putExtra("sessionDirPath", session.patientDir.absolutePath) // Tetap kirim ini sebagai referensi utama
                     putExtra("patientName", session.nama ?: session.patientDir.name)
-                    putExtra("dateStr", session.dateDir.name) // "yyyy-MM-dd"
+                    putExtra("dateStr", session.dateDir.name)
+
+                    // --- TAMBAHAN PENTING ---
+                    // Kirim daftar semua folder milik pasien ini
+                    putStringArrayListExtra("allSessionPaths", allPaths)
                 })
             },
             onMoreClick = { session ->
-                // klik titik tiga → buka bottom sheet
                 showSessionMoreSheet(session)
             }
         )

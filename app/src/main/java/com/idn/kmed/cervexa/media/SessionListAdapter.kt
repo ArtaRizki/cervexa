@@ -56,42 +56,71 @@ class SessionListAdapter(
         if (batch.isEmpty()) return
         val old = rows.toList()
 
-        // group by monthKey, urutkan bulan dari lastTs terbaru
-        val grouped = batch.groupBy { it.monthKey }
+        // 1. Ambil item yang SUDAH ada di list saat ini (existing)
+        val currentItems = rows.filterIsInstance<SessRow.Item>().map { it.sess }
+
+        // 2. Gabung dengan batch baru yang didapat dari repo
+        val allRawItems = currentItems + batch
+
+        // 3. LOGIKA BARU: Grouping by Patient Identity
+        // Tujuannya: Jika NIK sama (atau Nama sama), jadikan satu item saja (ambil yang terbaru)
+        val distinctPatients = allRawItems
+            .groupBy { item ->
+                // Kunci unik: Prioritaskan NIK, jika kosong pakai Nama, jika kosong pakai nama folder
+                val uniqueKey = item.nik?.takeIf { it.isNotBlank() }
+                    ?: item.nama?.takeIf { it.isNotBlank() }
+                    ?: item.patientDir.name
+                uniqueKey
+            }
+            .map { (_, sessions) ->
+                // Dari beberapa sesi milik pasien yang sama, ambil yang 'lastTs' (timestamp) paling besar/baru
+                sessions.maxByOrNull { it.lastTs }!!
+            }
+
+        // 4. Lanjutkan logika grouping by Month (seperti kode asli) menggunakan list yang sudah disaring
+        val grouped = distinctPatients.groupBy { it.monthKey }
         val monthOrder = grouped.keys.sortedByDescending { k -> grouped[k]!!.maxOf { it.lastTs } }
 
-        val newRows = rows.toMutableList()
+        val newRows = mutableListOf<SessRow>() // Gunakan mutableList baru
         for (m in monthOrder) {
-            if (newRows.none { it is SessRow.Header && it.key == m }) {
-                newRows += SessRow.Header(m)
-            }
-            // tambahkan item sesi (hindari duplikat patientDir)
-            grouped[m]!!.forEach { item ->
-                if (newRows.none { it is SessRow.Item && it.sess.patientDir == item.patientDir }) {
-                    newRows += SessRow.Item(item)
-                }
+            // Tambahkan Header Bulan
+            newRows += SessRow.Header(m)
+
+            // Tambahkan Item Pasien (yang sudah unique)
+            // Urutkan per item descending (yang terbaru paling atas dalam grup bulannya)
+            val itemsInMonth = grouped[m]!!.sortedByDescending { it.lastTs }
+
+            itemsInMonth.forEach { item ->
+                newRows += SessRow.Item(item)
             }
         }
 
+        // 5. Hitung Diff dan update UI
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize() = old.size
             override fun getNewListSize() = newRows.size
+
             override fun areItemsTheSame(o: Int, n: Int): Boolean {
-                val a = old[o]; val b = newRows[n]
+                val a = old[o]
+                val b = newRows[n]
                 return when {
                     a is SessRow.Header && b is SessRow.Header -> a.key == b.key
-                    a is SessRow.Item && b is SessRow.Item     -> a.sess.patientDir == b.sess.patientDir
+                    // Cek kesamaan berdasarkan direktori file pasien (unique path)
+                    a is SessRow.Item && b is SessRow.Item -> a.sess.patientDir == b.sess.patientDir
                     else -> false
                 }
             }
+
             override fun areContentsTheSame(o: Int, n: Int): Boolean {
-                val a = old[o]; val b = newRows[n]
+                val a = old[o]
+                val b = newRows[n]
+                // Cek konten, terutama timestamp, kalau timestamp berubah berarti ada update data baru
                 return a == b || (a is SessRow.Item && b is SessRow.Item && a.sess.lastTs == b.sess.lastTs)
             }
         })
 
         rows.clear()
-        rows += newRows
+        rows.addAll(newRows)
         diff.dispatchUpdatesTo(this)
     }
 

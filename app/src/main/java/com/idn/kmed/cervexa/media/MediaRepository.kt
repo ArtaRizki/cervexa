@@ -194,6 +194,25 @@ class MediaRepository(private val context: Context) {
         return (imgs + vids).sortedByDescending { it.file.lastModified() }
     }
 
+    fun getRelatedSessions(anchor: SessionItem): List<SessionItem> {
+        // Pastikan cache sudah terisi
+        val allData = cached ?: collectAllSessions().also { cached = it }
+
+        // 1. Tentukan kunci identitas dari item yang diklik
+        val anchorKey = anchor.nik?.takeIf { it.isNotBlank() }
+            ?: anchor.nama?.takeIf { it.isNotBlank() }
+            ?: anchor.patientDir.name
+
+        // 2. Cari semua item lain yang punya kunci identitas sama
+        return allData.filter { item ->
+            val itemKey = item.nik?.takeIf { it.isNotBlank() }
+                ?: item.nama?.takeIf { it.isNotBlank() }
+                ?: item.patientDir.name
+
+            itemKey == anchorKey
+        }
+    }
+
     fun invalidate() {
         cached = null
     }

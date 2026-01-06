@@ -81,6 +81,7 @@ class SessionMediaActivity : AppCompatActivity() {
     private lateinit var tvBtnDelete: View
     private lateinit var btnShareBottom: View
     private lateinit var tvBtnShare: View
+    private var allSessionPaths: ArrayList<String>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,6 +113,8 @@ class SessionMediaActivity : AppCompatActivity() {
 
         // extras dari list sesi
         val p = intent.getStringExtra("sessionDirPath") ?: run { finish(); return }
+        allSessionPaths = intent.getStringArrayListExtra("allSessionPaths")
+        val targetPaths = allSessionPaths ?: arrayListOf(p)
         val patientName = intent.getStringExtra("patientName").orEmpty()
         val dateStr = intent.getStringExtra("dateStr").orEmpty()
         patientNameExtra = intent.getStringExtra("patientName")
@@ -174,7 +177,9 @@ class SessionMediaActivity : AppCompatActivity() {
             }
         }
 
-        items = loadSessionMedia(sessionDir)
+//        items = loadSessionMedia(sessionDir)
+        items = loadMultiSessionMedia(targetPaths) // <-- PAKAI INI
+
         adapter.setSelectionMode(false) // sama seperti list thumb di VideoFragment (non-pilih)
         adapter.submitList(items)
 
@@ -311,16 +316,34 @@ class SessionMediaActivity : AppCompatActivity() {
 
 
     private fun confirmAndDeleteSession() {
+        // Cek berapa banyak folder yang terlibat
+        val count = allSessionPaths?.size ?: 1
+        val msg = if (count > 1)
+            "Hapus semua histori medis ($count sesi) pasien ini?"
+        else
+            "Anda akan menghapus media sesi ini, konfirmasi?"
+
         showConfirmDeleteSheet(
-            message = "Anda akan menghapus media, konfirmasi?",
+            message = msg,
             onConfirm = {
-                if (deleteSessionDir(sessionDir)) finish()
-                else Toast.makeText(this, "Gagal menghapus media", Toast.LENGTH_SHORT).show()
+                // Hapus semua path yang ada di list
+                val targets = allSessionPaths ?: listOf(sessionDir.absolutePath)
+                var successCount = 0
+
+                targets.forEach { path ->
+                    val dir = File(path)
+                    if (deleteSessionDir(dir)) successCount++
+                }
+
+                if (successCount > 0) {
+                    Toast.makeText(this, "Berhasil menghapus data", Toast.LENGTH_SHORT).show()
+                    finish()
+                } else {
+                    Toast.makeText(this, "Gagal menghapus media", Toast.LENGTH_SHORT).show()
+                }
             }
-            // tidak perlu onCancel khusus di sini
         )
     }
-
     private fun deleteSessionDir(dir: File?): Boolean {
         if (dir == null || !dir.exists()) return false
         return runCatching {
@@ -724,5 +747,36 @@ class SessionMediaActivity : AppCompatActivity() {
         return (imgs + vids).sortedByDescending { it.file.lastModified() }
     }
 
+    /**
+     * Load media dari BANYAK folder sekaligus.
+     * Menggabungkan isi folder A (tgl 1), folder B (tgl 5), dst.
+     */
+    private fun loadMultiSessionMedia(paths: List<String>): List<MediaItem> {
+        val combinedList = mutableListOf<MediaItem>()
+
+        for (path in paths) {
+            val dir = File(path)
+            if (!dir.exists()) continue
+
+            // Logic sama seperti sebelumnya, tapi diulang per folder
+            val imgs = File(dir, "Snapshots")
+                .listFiles { f -> f.isFile && f.extension.equals("jpg", true) }
+                ?.map { MediaItem(it, MediaType.IMAGE) }
+                .orElseEmpty()
+
+            val vids = File(dir, "Video")
+                .listFiles { f -> f.isFile && f.extension.equals("mp4", true) }
+                ?.map { MediaItem(it, MediaType.VIDEO) }
+                .orElseEmpty()
+
+            combinedList.addAll(imgs)
+            combinedList.addAll(vids)
+        }
+
+        // Urutkan semua gabungan berdasarkan tanggal file (Terbaru di atas)
+        return combinedList.sortedByDescending { it.file.lastModified() }
+    }
+
+    // Helper extension tetap biarkan ada
     private fun <T> List<T>?.orElseEmpty(): List<T> = this ?: emptyList()
 }

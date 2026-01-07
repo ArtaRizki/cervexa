@@ -1,7 +1,14 @@
 package com.idn.kmed.cervexa
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
@@ -27,12 +34,45 @@ class SelectExistingPatientActivity : AppCompatActivity() {
         repo = MediaRepository(this)
 
         val rv = findViewById<RecyclerView>(R.id.rvPatients)
-        val searchView = findViewById<SearchView>(R.id.searchViewPatient)
+        val etSearch = findViewById<EditText>(R.id.searchViewPatient)
+        val btnSearch = findViewById<View>(R.id.btnSearch)
 
-        // 🔹 Di TV: langsung fokus ke search, user bisa tekan OK untuk buka keyboard
-        searchView.isFocusable = true
-        searchView.isFocusableInTouchMode = true
-        searchView.requestFocus()
+        etSearch.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(p0: Editable?) {}
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                filterPatients(s.toString())
+            }
+        })
+
+        btnSearch.setOnClickListener {
+            filterPatients(etSearch.text.toString())
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(etSearch.windowToken, 0)
+        }
+
+        etSearch.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                filterPatients(etSearch.text.toString())
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.hideSoftInputFromWindow(etSearch.windowToken, 0)
+                true
+            } else false
+        }
+
+        etSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+            v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f)
+                .setDuration(80).start()
+        }
+
+        btnSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+            v.animate()
+                .scaleX(if (hasFocus) 1.08f else 1f)
+                .scaleY(if (hasFocus) 1.08f else 1f)
+                .setDuration(80)
+                .start()
+        }
+
 
         adapter = PatientListAdapter { patient ->
             openVideoForPatient(patient)
@@ -43,18 +83,6 @@ class SelectExistingPatientActivity : AppCompatActivity() {
 
         // load data pasien dari session yang sudah ada
         loadPatients()
-
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                filterPatients(query.orEmpty())
-                return true
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                filterPatients(newText.orEmpty())
-                return true
-            }
-        })
     }
 
     private fun loadPatients() {

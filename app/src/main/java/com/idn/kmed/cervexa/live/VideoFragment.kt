@@ -1063,32 +1063,39 @@ class VideoFragment : Fragment() {
 
     private fun stopVideoRecording() {
         if (!record.get()) return
-        runCatching { recorder.stop() }
+
+        var isSuccess = false
+        try {
+            // Coba stop recorder
+            recorder.stop()
+            isSuccess = true
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal stop recording: ${e.message}")
+            // Jika gagal stop (misal durasi terlalu pendek), file biasanya korup
+        }
+
         record.set(false)
         hudHandler.removeCallbacks(hudTick)
         binding.recordHud.visibility = View.GONE
-        binding.btnRecordVideo.setImageResource(R.drawable.majesticons_video)
+        binding.btnRecordVideo.setImageResource(R.drawable.majesticons_video) // Ganti icon balik
+
         val file = videoOutputFile
         videoOutputFile = null
 
-        // Beri jeda sejenak agar file close & terlihat oleh retriever
-        binding.rvThumbs.postDelayed({ refreshThumbs() }, 150)
-
         if (file != null) {
-//            Toast.makeText(requireContext(), "Rekaman disimpan: ${file.name}", Toast.LENGTH_SHORT).show()
-            Toast.makeText(requireContext(), "Meyimpan Media", Toast.LENGTH_SHORT).show()
-            //  >>> buka preview bila landscape (this flow remove bacuse user requested [01/09/2025])
-            //if (isLandscape()) {
-            //    // kecilkan jeda sedikit supaya VideoView bisa langsung play
-            //    binding.rvThumbs.postDelayed({
-            //        openPreview(file, isVideo = true)
-            //    }, 200)
-            //}
-        } else {
-            Toast.makeText(requireContext(), "Rekaman dihentikan", Toast.LENGTH_SHORT).show()
+            if (isSuccess) {
+                // HANYA jika sukses stop, refresh galeri
+                Toast.makeText(requireContext(), "Media Tersimpan", Toast.LENGTH_SHORT).show()
+                // Beri jeda agar file benar-benar tertulis
+                binding.rvThumbs.postDelayed({ refreshThumbs() }, 500)
+            } else {
+                // Jika gagal (MediaMuxer error), HAPUS file sampah agar tidak bikin crash saat dibuka
+                file.delete()
+                Toast.makeText(requireContext(), "Gagal menyimpan video (Terlalu singkat?)", Toast.LENGTH_SHORT).show()
+                refreshThumbs()
+            }
         }
     }
-
     private fun startRtspStream() {
         val originalUriString = liveViewModel.rtspRequest.value ?: ""
         if (originalUriString.isBlank()) return

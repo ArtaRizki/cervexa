@@ -14,24 +14,26 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:background="@color/colorWhite"
+        android:focusable="true"
+        android:nextFocusDown="@id/btnRecordVideo"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:menu="@menu/menu_video_fragment"
-        app:navigationIcon="@drawable/baseline_arrow_back_24"
-        app:popupTheme="@style/ToolbarPopupTheme"
-        app:title="Cervexa Colposcope"
-        app:titleCentered="false"
-        app:titleTextAppearance="@style/CustomToolbarTitle" />
 
-    <View
-        android:id="@+id/toolbarDivider"
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#D9D9D9"
+        app:navigationIcon="@drawable/baseline_arrow_back_24"
+        app:title="Cervexa Colposcope" />
+
+    <com.alexvas.rtsp.widget.RtspImageView
+        android:id="@+id/ivVideoImage"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:focusable="false"
+        android:scaleType="fitXY"
+        app:layout_constraintDimensionRatio="16:9"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/topAppBar" />
+        app:layout_constraintTop_toBottomOf="@+id/topAppBar" />
 
     <View
         android:id="@+id/vShutterImage"
@@ -45,17 +47,6 @@
         app:layout_constraintStart_toStartOf="@id/ivVideoImage"
         app:layout_constraintTop_toTopOf="@id/ivVideoImage" />
 
-    <com.alexvas.rtsp.widget.RtspImageView
-        android:id="@+id/ivVideoImage"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:scaleType="fitXY"
-        app:layout_constraintDimensionRatio="16:9"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.0"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/topAppBar" />
-
     <ProgressBar
         android:id="@+id/pbLoadingImage"
         android:layout_width="wrap_content"
@@ -67,51 +58,14 @@
         app:layout_constraintStart_toStartOf="@id/ivVideoImage"
         app:layout_constraintTop_toTopOf="@id/ivVideoImage" />
 
-    <TextView
-        android:id="@+id/tvStatistics2"
-        android:layout_width="233dp"
-        android:layout_height="93dp"
-        android:layout_marginTop="396dp"
-        android:textSize="12sp"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/bottomControls" />
-
-    <Button
-        android:id="@+id/bnStartStopImage"
-        android:layout_width="125dp"
-        android:layout_height="64dp"
-        android:layout_gravity="center"
-        android:layout_marginBottom="76dp"
-        android:text="Start"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.944"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <TextView
-        android:id="@+id/tvStatusImage"
-        android:layout_width="309dp"
-        android:layout_height="101dp"
-        android:layout_marginTop="284dp"
-        android:gravity="end"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/bottomControls" />
-
     <LinearLayout
         android:id="@+id/bottomControls"
         android:layout_width="0dp"
         android:layout_height="90dp"
         android:background="@drawable/border_bottom_rounded"
-        android:baselineAligned="false"
         android:gravity="center"
         android:orientation="horizontal"
 
-        android:focusable="false"
         android:descendantFocusability="afterDescendants"
 
         app:layout_constraintEnd_toEndOf="parent"
@@ -120,93 +74,81 @@
 
         <ImageButton
             android:id="@+id/btnSnapshot"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginHorizontal="20dp"
-            android:padding="8dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginHorizontal="16dp"
+            android:padding="12dp"
+
+            android:background="@drawable/bg_btn_remote_selector"
+            android:src="@drawable/mage_camera_fill"
+            android:scaleType="centerInside"
 
             android:focusable="true"
+            android:focusableInTouchMode="true"
             android:clickable="true"
 
-            android:adjustViewBounds="true"
-            android:background="@drawable/bg_btn_remote_selector"
-            android:backgroundTint="@null"
-            android:contentDescription="ShutterImage"
-            android:scaleType="centerInside"
-            android:src="@drawable/mage_camera_fill"
-            android:nextFocusRight="@+id/btnRecordVideo"/>
+            android:nextFocusRight="@+id/btnRecordVideo"
+            android:nextFocusUp="@+id/topAppBar"
+            android:nextFocusDown="@+id/rvThumbs" />
 
         <ImageButton
             android:id="@+id/btnRecordVideo"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginHorizontal="20dp"
-            android:padding="8dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginHorizontal="16dp"
+            android:padding="12dp"
 
-            android:focusable="true"
-            android:clickable="true"
-
-            android:adjustViewBounds="true"
             android:background="@drawable/bg_btn_remote_selector"
-            android:backgroundTint="@null"
-            android:contentDescription="Record Video"
-            android:scaleType="centerInside"
             android:src="@drawable/majesticons_video"
-            android:nextFocusLeft="@+id/btnSnapshot"
-            android:nextFocusRight="@+id/btnEnterLandscape"/>
-
-        <ImageButton
-            android:id="@+id/imageButton3"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginHorizontal="20dp"
-            android:padding="8dp"
+            android:scaleType="centerInside"
 
             android:focusable="true"
+            android:focusableInTouchMode="true"
             android:clickable="true"
 
-            android:adjustViewBounds="true"
-            android:background="@drawable/bg_btn_remote_selector"
-            android:backgroundTint="@null"
-            android:contentDescription="Resolution"
-            android:scaleType="centerInside"
-            android:visibility="gone"
-            android:src="@drawable/frame_592" />
+            android:nextFocusLeft="@+id/btnSnapshot"
+            android:nextFocusRight="@+id/btnEnterLandscape"
+            android:nextFocusUp="@+id/topAppBar"
+            android:nextFocusDown="@+id/rvThumbs" />
 
         <ImageButton
             android:id="@+id/btnEnterLandscape"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginHorizontal="20dp"
-            android:padding="8dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginHorizontal="16dp"
+            android:padding="12dp"
+
+            android:background="@drawable/bg_btn_remote_selector"
+            android:src="@drawable/tdesign_fullscreen"
+            android:scaleType="centerInside"
 
             android:focusable="true"
+            android:focusableInTouchMode="true"
             android:clickable="true"
 
-            android:adjustViewBounds="true"
-            android:background="@drawable/bg_btn_remote_selector"
-            android:backgroundTint="@null"
-            android:contentDescription="Fullscreen"
-            android:scaleType="centerInside"
-            android:src="@drawable/tdesign_fullscreen" />
+            android:nextFocusLeft="@+id/btnRecordVideo"
+            android:nextFocusUp="@+id/topAppBar"
+            android:nextFocusDown="@+id/rvThumbs" />
 
     </LinearLayout>
-
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvThumbs"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="64dp"
-        android:layout_marginBottom="12dp"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
+        android:descendantFocusability="afterDescendants"
+        android:focusable="true"
+
+        android:nextFocusUp="@id/btnRecordVideo"
+        android:nextFocusDown="@id/btnSimpanCase"
+        android:paddingHorizontal="16dp"
         android:visibility="gone"
+
         app:layout_constraintBottom_toTopOf="@+id/btnSimpanCase"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/bottomControls"
-        app:layout_constraintVertical_bias="0.107" />
+        app:layout_constraintTop_toBottomOf="@+id/bottomControls" />
 
     <LinearLayout
         android:id="@+id/recordHud"
@@ -215,8 +157,7 @@
         android:layout_margin="12dp"
         android:background="@drawable/bg_record_hud"
         android:gravity="center_vertical"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
+        android:paddingHorizontal="12dp"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="@id/ivVideoImage"
@@ -234,8 +175,8 @@
 
     <TextView
         android:id="@+id/tvEmptyThumbs"
-        android:layout_width="355dp"
-        android:layout_height="44dp"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
         android:fontFamily="@font/manrope_medium"
         android:padding="8dp"
         android:text="Belum ada media"
@@ -247,45 +188,43 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/bottomControls"
-        app:layout_constraintVertical_bias="0.11" />
+        app:layout_constraintVertical_bias="0.3" />
 
     <ImageView
         android:id="@+id/tvImgNoMedia"
-        android:layout_width="124dp"
-        android:layout_height="112dp"
-        android:layout_marginTop="4dp"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
         android:src="@drawable/ic_ooui_image_gallery"
         android:visibility="visible"
+        app:layout_constraintBottom_toTopOf="@id/tvEmptyThumbs"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.498"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/tvEmptyThumbs" />
+        app:layout_constraintStart_toStartOf="parent" />
 
     <TextView
         android:id="@+id/tvImgSubtitleNoMedia"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
         android:fontFamily="@font/manrope_medium"
         android:text="Media yang Anda ambil akan tampil di sini"
         android:textColor="#999999"
         android:textSize="12sp"
         android:visibility="visible"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.496"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/tvImgNoMedia" />
+        app:layout_constraintTop_toBottomOf="@+id/tvEmptyThumbs" />
 
     <Button
         android:id="@+id/btnSimpanCase"
         android:layout_width="0dp"
-        android:layout_height="52sp"
-        android:layout_marginBottom="24dp"
-        android:layout_marginLeft="32dp"
-        android:layout_marginRight="32dp"
-        android:text="Simpan"
+        android:layout_height="56dp"
+        android:layout_margin="24dp"
         android:focusable="true"
+        android:focusableInTouchMode="true"
+
+        android:nextFocusUp="@id/rvThumbs"
+        android:text="Simpan"
         android:textColor="@color/colorWhite"
+
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
@@ -294,10 +233,11 @@
         android:id="@+id/tvMedia"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:layout_marginTop="12dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
         android:text="Media Terekam"
         android:textColor="@color/colorBlack"
+        android:textStyle="bold"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/bottomControls" />
@@ -306,11 +246,42 @@
         android:id="@+id/tvMediaTgl"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:layout_marginTop="5dp"
+        android:layout_marginStart="16dp"
         android:text="17/06/2025"
+        android:textColor="#666666"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/tvMedia" />
+
+    <Button
+        android:id="@+id/bnStartStopImage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/tvStatusImage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/tvStatistics2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ImageButton
+        android:id="@+id/imageButton3"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        tools:ignore="MissingConstraints" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,19 +1,25 @@
 package com.idn.kmed.cervexa.gallery
 
-import android.content.Context
-import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
-import android.view.*
+import android.util.Log
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.MediaController
 import android.widget.TextView
+import android.widget.Toast
 import android.widget.VideoView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.Fragment
-import com.idn.kmed.cervexa.R
 import com.github.chrisbanes.photoview.PhotoView
+import com.idn.kmed.cervexa.R
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class MediaPageFragment : Fragment() {
@@ -30,93 +36,94 @@ class MediaPageFragment : Fragment() {
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        // Pastikan nama layout sesuai dengan XML Anda (page_media)
         val root = inflater.inflate(R.layout.page_media, container, false)
-        val path = requireArguments().getString("path")!!
-        val type = requireArguments().getString("type")!!
+
+        val path = requireArguments().getString("path") ?: return root
+        val type = requireArguments().getString("type") ?: "IMAGE"
         val file = File(path)
 
+        // --- Bind Views ---
         val imageMode = root.findViewById<View>(R.id.imageMode)
         val videoMode = root.findViewById<View>(R.id.videoMode)
 
         val photo = root.findViewById<PhotoView>(R.id.photoView)
         val video = root.findViewById<VideoView>(R.id.vvPreview)
+
         val overlayImg = root.findViewById<LinearLayout>(R.id.overlayImage)
         val overlayVid = root.findViewById<LinearLayout>(R.id.overlayVideo)
-        val tvInfoRight = root.findViewById<TextView>(R.id.tvInfoRight)
-        val tvVidRight = root.findViewById<TextView>(R.id.tvVidRight)
 
-        if (type == "IMAGE") {
+        val tvInfoRight = root.findViewById<TextView>(R.id.tvInfoRight) // Tanggal Image
+        val tvVidRight = root.findViewById<TextView>(R.id.tvVidRight)   // Durasi Video
+
+        // --- Cek Validitas File ---
+        if (!file.exists() || file.length() == 0L) {
+            Toast.makeText(context, "File media rusak atau tidak ditemukan", Toast.LENGTH_SHORT).show()
+            return root
+        }
+
+        if (type.equals("IMAGE", ignoreCase = true)) {
+            // --- MODE GAMBAR ---
             imageMode.visibility = View.VISIBLE
             videoMode.visibility = View.GONE
+            overlayImg.visibility = View.VISIBLE // Tampilkan overlay info
+            overlayVid.visibility = View.GONE
 
+            // Setup PhotoView
             photo.minimumScale = 1f
             photo.mediumScale  = 2.5f
             photo.maximumScale = 5f
             photo.setImageURI(Uri.fromFile(file))
 
-            overlayImg.visibility = View.GONE
-            overlayVid.visibility = View.GONE
+            // Set Tanggal
+            val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("id", "ID"))
+            tvInfoRight.text = dateFormat.format(Date(file.lastModified()))
 
-            tvInfoRight.text = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", java.util.Locale("id","ID"))
-                .format(java.util.Date(file.lastModified()))
         } else {
+            // --- MODE VIDEO ---
             imageMode.visibility = View.GONE
             videoMode.visibility = View.VISIBLE
+            overlayImg.visibility = View.GONE
+            overlayVid.visibility = View.VISIBLE // Tampilkan overlay info
 
-            // --- REVISI LOGIKA URI ---
-            // Kita tentukan URI yang valid dulu, baru dipakai untuk VideoView DAN Metadata
-            var finalUri: Uri = Uri.fromFile(file)
-            var useFileProvider = false
+            // Setup VideoView
+            val uri = Uri.fromFile(file)
 
-            // Cek sederhana apakah bisa dibaca langsung
-            if (!file.exists() || !file.canRead()) {
-                useFileProvider = true
-            }
+            // 1. Ambil Durasi dengan Aman (Anti-Crash)
+            val durationStr = getSafeDuration(file)
+            tvVidRight.text = durationStr
 
-            // Jika perlu FileProvider (atau jika akses file langsung gagal nanti)
-            // Disini kita siapkan try-catch untuk setVideoURI
-            try {
-                video.setVideoURI(finalUri)
-            } catch (e: Exception) {
-                useFileProvider = true
-            }
-
-            if (useFileProvider) {
+            // Jika durasi 00:00 (file rusak header-nya), jangan paksa mainkan
+            if (durationStr == "00:00") {
+                Toast.makeText(context, "Video tidak dapat diputar", Toast.LENGTH_SHORT).show()
+            } else {
                 try {
-                    finalUri = androidx.core.content.FileProvider.getUriForFile(
-                        requireContext(), "${requireContext().packageName}.fileprovider", file
-                    )
-                    // Beri izin baca sementara
-                    requireContext().grantUriPermission(
-                        requireContext().packageName, finalUri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                    video.setVideoURI(finalUri)
+                    video.setVideoURI(uri)
+
+                    val mc = MediaController(requireContext())
+                    mc.setAnchorView(video)
+                    video.setMediaController(mc)
+
+                    video.setOnPreparedListener { mp ->
+                        val w = mp.videoWidth
+                        val h = mp.videoHeight
+                        // Sesuaikan rasio aspek
+                        if (w > 0 && h > 0) {
+                            val lp = video.layoutParams as ConstraintLayout.LayoutParams
+                            lp.dimensionRatio = "$w:$h"
+                            video.layoutParams = lp
+                        }
+                        video.start()
+                    }
+
+                    video.setOnErrorListener { _, _, _ ->
+                        // Cegah dialog error default Android muncul
+                        true
+                    }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
-
-            // MediaController
-            val mc = android.widget.MediaController(requireContext()).apply { setAnchorView(video) }
-            video.setMediaController(mc)
-
-            video.setOnPreparedListener { mp ->
-                val w = mp.videoWidth
-                val h = mp.videoHeight
-                if (w > 0 && h > 0) {
-                    val lp = video.layoutParams as ConstraintLayout.LayoutParams
-                    lp.dimensionRatio = "$w:$h"
-                    video.layoutParams = lp
-                }
-                video.start()
-            }
-
-            overlayImg.visibility = View.GONE
-            overlayVid.visibility = View.GONE
-
-            // --- PANGGIL FUNGSI DENGAN URI ---
-            tvVidRight.text = formatDuration(requireContext(), finalUri)
         }
 
         return root
@@ -132,32 +139,30 @@ class MediaPageFragment : Fragment() {
         try { view?.findViewById<VideoView>(R.id.vvPreview)?.stopPlayback() } catch (_: Exception) {}
     }
 
-    // --- FUNGSI DIPERBAIKI ---
-    // Menerima Context dan Uri agar aman dari masalah permission/scoped storage
-    private fun formatDuration(context: Context, uri: Uri): String {
-        val mmr = MediaMetadataRetriever()
+    /**
+     * Fungsi aman untuk mengambil durasi.
+     * Menggunakan try-catch agar aplikasi TIDAK CRASH jika file video korup.
+     */
+    private fun getSafeDuration(file: File): String {
+        val retriever = MediaMetadataRetriever()
         return try {
-            // Gunakan setDataSource(Context, Uri)
-            mmr.setDataSource(context, uri)
+            retriever.setDataSource(file.absolutePath)
+            val time = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val timeInMillis = time?.toLongOrNull() ?: 0L
 
-            val durationStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            val ms = durationStr?.toLongOrNull() ?: 0L
+            if (timeInMillis == 0L) return "00:00"
 
-            val h = TimeUnit.MILLISECONDS.toHours(ms)
-            val m = TimeUnit.MILLISECONDS.toMinutes(ms) % 60
-            val s = TimeUnit.MILLISECONDS.toSeconds(ms) % 60
-
-            if (h > 0) {
-                String.format("%02d:%02d:%02d", h, m, s)
-            } else {
-                String.format("%02d:%02d", m, s)
-            }
+            val minutes = TimeUnit.MILLISECONDS.toMinutes(timeInMillis)
+            val seconds = TimeUnit.MILLISECONDS.toSeconds(timeInMillis) % 60
+            String.format("%02d:%02d", minutes, seconds)
         } catch (e: Exception) {
             // Log error tapi jangan crash
-            e.printStackTrace()
+            Log.e("MediaPage", "Gagal membaca file video: ${file.name}")
             "00:00"
         } finally {
-            try { mmr.release() } catch (_: Exception) {}
+            try {
+                retriever.release()
+            } catch (e: Exception) { /* ignore */ }
         }
     }
 }

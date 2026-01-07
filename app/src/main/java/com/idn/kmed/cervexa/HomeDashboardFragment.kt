@@ -184,31 +184,33 @@ class HomeDashboardFragment : Fragment() {
 
         // 3) Cari network kamera untuk bind (strict)
         val camNet: Network? = findCameraWifiNetworkStrict()
+        // sementara
+        startActivity(Intent(requireContext(), ConfirmPatientActivity::class.java))
 
-        when {
-            camNet != null -> {
-                runCatching { cm.bindProcessToNetwork(camNet) }
-                startActivity(Intent(requireContext(), ConfirmPatientActivity::class.java))
-            }
-
-            isSsidMatchCamera && camNet == null -> {
-                Toast.makeText(
-                    requireContext(),
-                    "Wi-Fi kamera terdeteksi (${currentSsid}), tapi belum siap digunakan. Coba nyalakan izin lokasi/nearby & tunggu beberapa detik, lalu coba lagi.",
-                    Toast.LENGTH_LONG
-                ).show()
-                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-            }
-
-            else -> {
-                Toast.makeText(
-                    requireContext(),
-                    "Belum terhubung ke Wi-Fi kamera",
-                    Toast.LENGTH_SHORT
-                ).show()
-                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-            }
-        }
+//        when {
+//            camNet != null -> {
+//                runCatching { cm.bindProcessToNetwork(camNet) }
+//                startActivity(Intent(requireContext(), ConfirmPatientActivity::class.java))
+//            }
+//
+//            isSsidMatchCamera && camNet == null -> {
+//                Toast.makeText(
+//                    requireContext(),
+//                    "Wi-Fi kamera terdeteksi (${currentSsid}), tapi belum siap digunakan. Coba nyalakan izin lokasi/nearby & tunggu beberapa detik, lalu coba lagi.",
+//                    Toast.LENGTH_LONG
+//                ).show()
+//                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+//            }
+//
+//            else -> {
+//                Toast.makeText(
+//                    requireContext(),
+//                    "Belum terhubung ke Wi-Fi kamera",
+//                    Toast.LENGTH_SHORT
+//                ).show()
+//                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+//            }
+//        }
     }
 
     // =========================

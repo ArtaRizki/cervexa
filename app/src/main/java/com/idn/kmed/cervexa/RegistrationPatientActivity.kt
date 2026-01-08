@@ -3,6 +3,7 @@ package com.idn.kmed.cervexa
 import android.app.DatePickerDialog
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import android.widget.Button
@@ -34,6 +35,13 @@ class RegistrationPatientActivity : AppCompatActivity() {
     }
     private var selectedDobUtcMs: Long? = null
 
+    fun blockCenterKey(et: TextInputEditText) {
+        et.setOnKeyListener { _, keyCode, event ->
+            if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)
+                && event.action == KeyEvent.ACTION_DOWN
+            ) true else false
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_registration_patient)
@@ -48,25 +56,54 @@ class RegistrationPatientActivity : AppCompatActivity() {
 
         // Views
         tilNama = findViewById(R.id.tilNama)
-        tilNik  = findViewById(R.id.tilNik)
-        tilDob  = findViewById(R.id.tilDob)
-        tilRS   = findViewById(R.id.tilRS)
-        etNama  = findViewById(R.id.etNama)
-        etNik   = findViewById(R.id.etNik)
-        etDob   = findViewById(R.id.etDob)
-        etRS    = findViewById(R.id.etRS)
-        etNrm   = findViewById(R.id.etNrm)
+        tilNik = findViewById(R.id.tilNik)
+        tilDob = findViewById(R.id.tilDob)
+        tilRS = findViewById(R.id.tilRS)
+        etNama = findViewById(R.id.etNama)
+        etNik = findViewById(R.id.etNik)
+        etDob = findViewById(R.id.etDob)
+        etRS = findViewById(R.id.etRS)
+        etNrm = findViewById(R.id.etNrm)
         btnNext = findViewById(R.id.btnNext)
 
         // [TV OPTIMIZATION] Setup Input Tanggal
         setupTvDateInput()
 
+        btnNext.setOnKeyListener { _, keyCode, event ->
+            if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)
+                && event.action == KeyEvent.ACTION_DOWN
+            ) {
+                btnNext.performClick()
+                return@setOnKeyListener true
+            }
+            false
+        }
+
         btnNext.setOnClickListener {
+            currentFocus?.clearFocus()
+            blockCenterKey(etNama)
+            blockCenterKey(etNik)
+            blockCenterKey(etRS)
+            blockCenterKey(etNrm)
             handleRegistration()
         }
     }
 
     private fun setupTvDateInput() {
+        etDob.apply {
+            // benar-benar cegah keyboard & input manual
+            inputType = InputType.TYPE_NULL
+            keyListener = null
+            isCursorVisible = false
+
+            // cegah soft keyboard muncul saat fokus (API 21+)
+            showSoftInputOnFocus = false
+
+            // opsional: kalau masih ada IME/keyboard TV yang “maksa”
+            setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) post { showTvDatePicker() }
+            }
+        }
         // Fungsi pembuka date picker
         val openPicker = {
             // [FIX PENTING] Gunakan .post {}
@@ -97,6 +134,7 @@ class RegistrationPatientActivity : AppCompatActivity() {
         // Pastikan keyboard tidak muncul saat fokus (sudah aman karena inputType="none")
         etDob.setOnFocusChangeListener { _, _ -> }
     }
+
     private fun showTvDatePicker() {
         val calendar = Calendar.getInstance()
         if (selectedDobUtcMs != null) {
@@ -137,24 +175,30 @@ class RegistrationPatientActivity : AppCompatActivity() {
         datePicker.show()
 
         // [OPSIONAL] Memaksa warna tombol secara manual jika XML tidak tembus di beberapa TV
-        datePicker.getButton(DatePickerDialog.BUTTON_POSITIVE)?.setBackgroundColor(android.graphics.Color.parseColor("#1E63E4"))
-        datePicker.getButton(DatePickerDialog.BUTTON_POSITIVE)?.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
-        datePicker.getButton(DatePickerDialog.BUTTON_NEGATIVE)?.setBackgroundColor(android.graphics.Color.parseColor("#FFFFFF"))
-        datePicker.getButton(DatePickerDialog.BUTTON_NEGATIVE)?.setTextColor(android.graphics.Color.parseColor("#1E63E4"))
-    }    private fun handleRegistration() {
+        datePicker.getButton(DatePickerDialog.BUTTON_POSITIVE)
+            ?.setBackgroundColor(android.graphics.Color.parseColor("#1E63E4"))
+        datePicker.getButton(DatePickerDialog.BUTTON_POSITIVE)
+            ?.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
+        datePicker.getButton(DatePickerDialog.BUTTON_NEGATIVE)
+            ?.setBackgroundColor(android.graphics.Color.parseColor("#FFFFFF"))
+        datePicker.getButton(DatePickerDialog.BUTTON_NEGATIVE)
+            ?.setTextColor(android.graphics.Color.parseColor("#1E63E4"))
+    }
+
+    private fun handleRegistration() {
         if (!validate()) return
 
         val nama = etNama.text?.toString()?.trim().orEmpty()
-        val nik  = etNik.text?.toString()?.trim().orEmpty()
-        val rs   = etRS.text?.toString()?.trim().orEmpty()
-        val nrm  = etNrm.text?.toString()?.trim().orEmpty()
-        val dob  = selectedDobUtcMs ?: -1L
+        val nik = etNik.text?.toString()?.trim().orEmpty()
+        val rs = etRS.text?.toString()?.trim().orEmpty()
+        val nrm = etNrm.text?.toString()?.trim().orEmpty()
+        val dob = selectedDobUtcMs ?: -1L
 
         startActivity(Intent(this, VideoActivity::class.java).apply {
             putExtra("patient_nama", nama)
-            putExtra("patient_nik",  nik)
-            putExtra("patient_rs",   rs)
-            putExtra("patient_nrm",  nrm)
+            putExtra("patient_nik", nik)
+            putExtra("patient_rs", rs)
+            putExtra("patient_nrm", nrm)
             putExtra("patient_dob_utc", dob)
         })
     }
@@ -170,10 +214,14 @@ class RegistrationPatientActivity : AppCompatActivity() {
 
         val nik = etNik.text?.toString()?.trim().orEmpty()
         when {
-            nik.isEmpty() -> { tilNik.error = "NIK wajib diisi"; ok = false }
+            nik.isEmpty() -> {
+                tilNik.error = "NIK wajib diisi"; ok = false
+            }
+
             nik.length != 16 || !nik.all { it.isDigit() } -> {
                 tilNik.error = "NIK harus 16 digit angka"; ok = false
             }
+
             else -> tilNik.error = null
         }
 

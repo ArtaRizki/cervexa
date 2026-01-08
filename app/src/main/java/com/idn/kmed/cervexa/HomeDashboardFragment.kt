@@ -21,6 +21,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.*
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.idn.kmed.cervexa.model.WifiViewModel
+import com.idn.kmed.cervexa.utils.WifiMonitor
 import kotlinx.coroutines.launch
 
 class HomeDashboardFragment : Fragment() {
@@ -142,75 +143,21 @@ class HomeDashboardFragment : Fragment() {
     // Actions
     // =========================
     private fun handleStartClickHome() {
-        val isD3m0: Boolean = false
-
-        // ---- demo limiter (tetap) ----
-        if (isD3m0) {
-            val valCntRecord = prefs.getInt("D3M0_K3Y_M4X_C0UN7", 0)
-            if (valCntRecord >= 5) {
-                Toast.makeText(
-                    requireContext(),
-                    "Anda sudah melakukan 5x Percobaan, silahkan menggunakan versi Release!",
-                    Toast.LENGTH_LONG
-                ).show()
-                return
-            } else {
-                prefs.edit { putInt("D3M0_K3Y_M4X_C0UN7", valCntRecord + 1) }
-            }
+        val isCamera = (WifiMonitor.statusFlow.value?.isCamera == true) // atau simpan dari callback
+        if (!isCamera) {
+            Toast.makeText(requireContext(), "Belum terhubung ke Wi-Fi kamera", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+            return
         }
 
-        val ctx = requireContext()
-        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-        // 1) Cek SSID saat ini (untuk pesan UI yang lebih akurat) — cross-version
-        val currentSsid: String? = if (Build.VERSION.SDK_INT >= 31) {
-            val active = cm.activeNetwork
-            val caps = active?.let { cm.getNetworkCapabilities(it) }
-            if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                (caps.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
-            } else null
-        } else {
-            getCurrentSsidLegacy(ctx)
+        val camNet = findCameraWifiNetworkStrict() ?: run {
+            Toast.makeText(requireContext(), "Wi-Fi kamera terdeteksi, tapi network belum terbaca", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        // 2) Apakah SSID match kamera? (strict by exact/prefix)
-        val exact = prefs.getString("camera_ssid_exact", null)
-        val prefix = prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_")
-        val isSsidMatchCamera =
-            !currentSsid.isNullOrBlank() && (
-                    (!exact.isNullOrBlank() && currentSsid == exact) ||
-                            (!prefix.isNullOrBlank() && currentSsid.startsWith(prefix))
-                    )
-
-        // 3) Cari network kamera untuk bind (strict)
-        val camNet: Network? = findCameraWifiNetworkStrict()
-        // sementara
+        val cm = requireContext().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        runCatching { cm.bindProcessToNetwork(camNet) }
         startActivity(Intent(requireContext(), ConfirmPatientActivity::class.java))
-
-//        when {
-//            camNet != null -> {
-//                runCatching { cm.bindProcessToNetwork(camNet) }
-//                startActivity(Intent(requireContext(), ConfirmPatientActivity::class.java))
-//            }
-//
-//            isSsidMatchCamera && camNet == null -> {
-//                Toast.makeText(
-//                    requireContext(),
-//                    "Wi-Fi kamera terdeteksi (${currentSsid}), tapi belum siap digunakan. Coba nyalakan izin lokasi/nearby & tunggu beberapa detik, lalu coba lagi.",
-//                    Toast.LENGTH_LONG
-//                ).show()
-//                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-//            }
-//
-//            else -> {
-//                Toast.makeText(
-//                    requireContext(),
-//                    "Belum terhubung ke Wi-Fi kamera",
-//                    Toast.LENGTH_SHORT
-//                ).show()
-//                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-//            }
-//        }
     }
 
     // =========================

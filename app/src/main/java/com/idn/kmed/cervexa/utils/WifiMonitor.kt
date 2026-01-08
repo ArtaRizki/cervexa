@@ -2,15 +2,24 @@ package com.idn.kmed.cervexa.utils
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.*
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.net.*
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.idn.kmed.cervexa.R
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -18,13 +27,30 @@ import kotlinx.coroutines.flow.StateFlow
 object WifiMonitor {
 
     data class WifiStatus(
-        val ssid: String?,    // SSID saat ini (tanpa tanda kutip), null jika tidak di Wi-Fi
-        val isCamera: Boolean // true jika ssid == prefs.camera_ssid_exact
+        val ssid: String?,
+        val isCamera: Boolean
     )
 
-    // === Public API ===
+    private const val REQ_PERM_NEARBY_OR_LOCATION = 2201
+    private const val DEFAULT_PREFIX = "wifi_camera_MS2_"
+
     private var simpleCallback: ((String?) -> Unit)? = null
     private var statusCallback: ((WifiStatus) -> Unit)? = null
+
+    private var appCtx: Context? = null
+    private var cm: ConnectivityManager? = null
+    private var wm: WifiManager? = null
+
+    private var registered = false
+    private var connCallback: ConnectivityManager.NetworkCallback? = null
+    private var legacyReceiver: BroadcastReceiver? = null
+
+    private var scope: CoroutineScope? = null
+
+    private val statusFlowInternal = MutableStateFlow(WifiStatus(null, false))
+    val statusFlow: StateFlow<WifiStatus> get() = statusFlowInternal
+
+    private var lastStatus: WifiStatus? = null
 
     fun init(context: Context, onSsidChanged: (String?) -> Unit) {
         simpleCallback = onSsidChanged
@@ -37,44 +63,35 @@ object WifiMonitor {
     }
 
     fun stopMonitoring() {
+        simpleCallback = null
+        statusCallback = null
         stopInternal()
     }
 
     fun handlePermissionResult(requestCode: Int, grantResults: IntArray, context: Context) {
         if (requestCode == REQ_PERM_NEARBY_OR_LOCATION) {
-            val granted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+            val granted =
+                grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
             if (granted) start(context)
         }
     }
 
-    // === Internal state ===
-    private const val REQ_PERM_NEARBY_OR_LOCATION = 2201
-
-    private var appCtx: Context? = null
-    private var cm: ConnectivityManager? = null
-    private var wm: WifiManager? = null
-
-    private var registered = false
-    private var connCallback: ConnectivityManager.NetworkCallback? = null
-    private var legacyReceiver: BroadcastReceiver? = null
-
-    private var scope: CoroutineScope? = null
-    private var statusFlowInternal = MutableStateFlow(WifiStatus(null, false))
-    val statusFlow: StateFlow<WifiStatus> get() = statusFlowInternal
-
-    private var lastStatus: WifiStatus? = null
-
-    // === Start/Stop ===
     private fun start(context: Context) {
         appCtx = context.applicationContext
-        cm = appCtx!!.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        wm = appCtx!!.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val ctx = appCtx ?: return
 
-        if (!hasWifiPermission(appCtx!!)) {
+        cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        wm = ctx.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
+        if (!hasWifiPermission(ctx)) {
             requestWifiPermission(context)
             return
         }
-        if (registered) return
+
+        if (registered) {
+            publishCurrent()
+            return
+        }
 
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -82,7 +99,8 @@ object WifiMonitor {
             val callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) = publishCurrent()
                 override fun onLost(network: Network) = publishCurrent()
-                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) = publishCurrent()
+                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) =
+                    publishCurrent()
             }
             connCallback = callback
             cm?.registerDefaultNetworkCallback(callback)
@@ -90,15 +108,16 @@ object WifiMonitor {
             publishCurrent()
         } else {
             val receiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) = publishCurrent()
+                override fun onReceive(context: Context, intent: Intent) {
+                    publishCurrent()
+                }
             }
             legacyReceiver = receiver
             val filter = IntentFilter().apply {
                 addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
                 addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
-                addAction(ConnectivityManager.CONNECTIVITY_ACTION)
             }
-            appCtx!!.registerReceiver(receiver, filter)
+            ctx.registerReceiver(receiver, filter)
             registered = true
             publishCurrent()
         }
@@ -106,16 +125,19 @@ object WifiMonitor {
 
     private fun stopInternal() {
         if (!registered) return
+
         runCatching { connCallback?.let { cm?.unregisterNetworkCallback(it) } }
         connCallback = null
+
         runCatching { legacyReceiver?.let { appCtx?.unregisterReceiver(it) } }
         legacyReceiver = null
+
         registered = false
+
         scope?.cancel()
         scope = null
     }
 
-    // === Permission ===
     private fun hasWifiPermission(ctx: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= 33) {
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.NEARBY_WIFI_DEVICES) ==
@@ -129,52 +151,77 @@ object WifiMonitor {
     private fun requestWifiPermission(context: Context) {
         if (context is android.app.Activity) {
             if (Build.VERSION.SDK_INT >= 33) {
-                context.requestPermissions(arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES), REQ_PERM_NEARBY_OR_LOCATION)
+                context.requestPermissions(
+                    arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES),
+                    REQ_PERM_NEARBY_OR_LOCATION
+                )
             } else {
-                context.requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), REQ_PERM_NEARBY_OR_LOCATION)
+                context.requestPermissions(
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                    REQ_PERM_NEARBY_OR_LOCATION
+                )
             }
         }
     }
 
-    // === Publish SSID + camera-flag ===
     @SuppressLint("MissingPermission")
     private fun publishCurrent() {
         val ctx = appCtx ?: return
 
         val prefName = ctx.getString(R.string.pref_application)
-        val exactCameraSsid = ctx.getSharedPreferences(prefName, Context.MODE_PRIVATE)
-            .getString("camera_ssid_exact", null)
+        val pref = ctx.getSharedPreferences(prefName, Context.MODE_PRIVATE)
 
-        val (ssid, isWifi) = currentSsidAndIsWifi(ctx)
+        val exactCameraSsid = pref.getString("camera_ssid_exact", null)
+        val prefix = pref.getString("camera_ssid_prefix", DEFAULT_PREFIX)?.trim().orEmpty()
 
-        val status = WifiStatus(
-            ssid = ssid,
-            isCamera = isWifi && !ssid.isNullOrBlank() && ssid == exactCameraSsid
-        )
+        val (ssidRaw, isWifi) = currentSsidAndIsWifi(ctx)
+        val ssid = normalizeSsid(ssidRaw)
+
+        val isCameraNow =
+            isWifi && !ssid.isNullOrBlank() && (
+                    (!exactCameraSsid.isNullOrBlank() && ssid == exactCameraSsid) ||
+                            (prefix.isNotBlank() && ssid.startsWith(prefix))
+                    )
+
+        val status = WifiStatus(ssid = ssid, isCamera = isCameraNow)
         lastStatus = status
-        statusFlowInternal.value = status
 
-        simpleCallback?.invoke(ssid)
-        statusCallback?.invoke(status)
+        // pastikan callback aman untuk UI
+        scope?.launch {
+            statusFlowInternal.value = status
+            simpleCallback?.invoke(ssid)
+            statusCallback?.invoke(status)
+        } ?: run {
+            statusFlowInternal.value = status
+            simpleCallback?.invoke(ssid)
+            statusCallback?.invoke(status)
+        }
     }
 
-    /** @return Pair<ssid, isWifiTransport> */
+    private fun normalizeSsid(raw: String?): String? {
+        val s = raw?.removeSurrounding("\"")?.trim()
+        if (s.isNullOrEmpty()) return null
+        if (s.equals("<unknown ssid>", true)) return null
+        if (s.equals("unknown ssid", true)) return null
+        return s
+    }
+
     private fun currentSsidAndIsWifi(ctx: Context): Pair<String?, Boolean> {
         val cmLocal = cm ?: return null to false
         val active = cmLocal.activeNetwork ?: return null to false
         val caps = cmLocal.getNetworkCapabilities(active) ?: return null to false
+
         val isWifi = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
         if (!isWifi) return null to false
 
         return if (Build.VERSION.SDK_INT >= 31) {
             val info = caps.transportInfo as? WifiInfo
-            val ssid = info?.ssid?.removeSurrounding("\"")
-            ssid to true
+            info?.ssid to true
         } else {
-            val wmLocal = wm ?: (ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
+            val wmLocal =
+                wm ?: (ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
             @Suppress("DEPRECATION")
-            val ssid = wmLocal.connectionInfo?.ssid?.replace("\"", "")
-            ssid to true
+            wmLocal.connectionInfo?.ssid to true
         }
     }
 }

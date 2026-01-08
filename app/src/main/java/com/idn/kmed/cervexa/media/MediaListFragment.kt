@@ -123,18 +123,18 @@ class MediaListFragment : Fragment() {
                 requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
             imm?.hideSoftInputFromWindow(etSearch.windowToken, 0)
         }
-        etSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
-            v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f)
-                .setDuration(80).start()
-        }
-
-        btnSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
-            v.animate()
-                .scaleX(if (hasFocus) 1.08f else 1f)
-                .scaleY(if (hasFocus) 1.08f else 1f)
-                .setDuration(80)
-                .start()
-        }
+//        etSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+//            v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f)
+//                .setDuration(80).start()
+//        }
+//
+//        btnSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+//            v.animate()
+//                .scaleX(if (hasFocus) 1.08f else 1f)
+//                .scaleY(if (hasFocus) 1.08f else 1f)
+//                .setDuration(80)
+//                .start()
+//        }
 
 
         requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)?.title =

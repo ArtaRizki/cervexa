@@ -60,18 +60,18 @@ class SelectExistingPatientActivity : AppCompatActivity() {
             } else false
         }
 
-        etSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
-            v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f)
-                .setDuration(80).start()
-        }
-
-        btnSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
-            v.animate()
-                .scaleX(if (hasFocus) 1.08f else 1f)
-                .scaleY(if (hasFocus) 1.08f else 1f)
-                .setDuration(80)
-                .start()
-        }
+//        etSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+//            v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f)
+//                .setDuration(80).start()
+//        }
+//
+//        btnSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
+//            v.animate()
+//                .scaleX(if (hasFocus) 1.08f else 1f)
+//                .scaleY(if (hasFocus) 1.08f else 1f)
+//                .setDuration(80)
+//                .start()
+//        }
 
 
         adapter = PatientListAdapter { patient ->

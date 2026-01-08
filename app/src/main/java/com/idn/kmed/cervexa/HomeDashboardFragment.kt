@@ -143,20 +143,20 @@ class HomeDashboardFragment : Fragment() {
     // Actions
     // =========================
     private fun handleStartClickHome() {
-        val isCamera = (WifiMonitor.statusFlow.value?.isCamera == true) // atau simpan dari callback
-        if (!isCamera) {
-            Toast.makeText(requireContext(), "Belum terhubung ke Wi-Fi kamera", Toast.LENGTH_SHORT).show()
-            startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-            return
-        }
-
-        val camNet = findCameraWifiNetworkStrict() ?: run {
-            Toast.makeText(requireContext(), "Wi-Fi kamera terdeteksi, tapi network belum terbaca", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val cm = requireContext().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        runCatching { cm.bindProcessToNetwork(camNet) }
+//        val isCamera = (WifiMonitor.statusFlow.value?.isCamera == true) // atau simpan dari callback
+//        if (!isCamera) {
+//            Toast.makeText(requireContext(), "Belum terhubung ke Wi-Fi kamera", Toast.LENGTH_SHORT).show()
+//            startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+//            return
+//        }
+//
+//        val camNet = findCameraWifiNetworkStrict() ?: run {
+//            Toast.makeText(requireContext(), "Wi-Fi kamera terdeteksi, tapi network belum terbaca", Toast.LENGTH_SHORT).show()
+//            return
+//        }
+//
+//        val cm = requireContext().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+//        runCatching { cm.bindProcessToNetwork(camNet) }
         startActivity(Intent(requireContext(), ConfirmPatientActivity::class.java))
     }
 

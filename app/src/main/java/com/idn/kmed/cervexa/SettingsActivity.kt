@@ -31,7 +31,7 @@ class SettingsActivity : AppCompatActivity() {
         rowRot = findViewById(R.id.rowRotation)
 
         // Load nilai awal
-        val useHw = prefs.getBoolean(KEY_USE_HW_DECODER, false)
+        val useHw = prefs.getBoolean(KEY_USE_HW_DECODER, true)
         rot = prefs.getInt(KEY_CAMERA_ROTATION_DEG, 0)
         swHw.isChecked = useHw
         tvRotVal.text = "${rot}°"

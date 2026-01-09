@@ -84,4 +84,5 @@ dependencies {
     implementation 'com.github.chrisbanes:PhotoView:2.3.0'
 //    implementation 'com.github.alexeyvasilyev:rtsp-client-android:1.0.2'
     implementation project(':library-client-rtsp')
+    implementation 'org.videolan.android:libvlc-all:3.6.5'
 }

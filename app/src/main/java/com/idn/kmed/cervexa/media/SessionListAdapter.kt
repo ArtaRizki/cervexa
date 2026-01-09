@@ -49,7 +49,9 @@ class SessionListAdapter(
     }
     private val vidCache = object : android.util.LruCache<String, Bitmap>(128) {}
 
-    init { setHasStableIds(true) }
+    init {
+        setHasStableIds(true)
+    }
 
     /** Tambahkan batch (lazy load) dan gabungkan ke rows dengan DiffUtil */
     fun append(batch: List<SessionItem>) {
@@ -64,18 +66,20 @@ class SessionListAdapter(
 
         // 3. LOGIKA BARU: Grouping by Patient Identity
         // Tujuannya: Jika NIK sama (atau Nama sama), jadikan satu item saja (ambil yang terbaru)
+//        val distinctPatients = allRawItems
+//            .groupBy { item ->
+//                // Kunci unik: Prioritaskan NIK(GAJADI), jika kosong pakai Nama, jika kosong pakai nama folder
+//                val uniqueKey =
+//                    item.nama?.takeIf { it.isNotBlank() }
+//                        ?: item.patientDir.name
+//                uniqueKey
+//            }
+//            .map { (_, sessions) ->
+//                // Dari beberapa sesi milik pasien yang sama, ambil yang 'lastTs' (timestamp) paling besar/baru
+//                sessions.maxByOrNull { it.lastTs }!!
+//            }
         val distinctPatients = allRawItems
-            .groupBy { item ->
-                // Kunci unik: Prioritaskan NIK, jika kosong pakai Nama, jika kosong pakai nama folder
-                val uniqueKey = item.nik?.takeIf { it.isNotBlank() }
-                    ?: item.nama?.takeIf { it.isNotBlank() }
-                    ?: item.patientDir.name
-                uniqueKey
-            }
-            .map { (_, sessions) ->
-                // Dari beberapa sesi milik pasien yang sama, ambil yang 'lastTs' (timestamp) paling besar/baru
-                sessions.maxByOrNull { it.lastTs }!!
-            }
+            .distinctBy { it.patientDir.absolutePath }
 
         // 4. Lanjutkan logika grouping by Month (seperti kode asli) menggunakan list yang sudah disaring
         val grouped = distinctPatients.groupBy { it.monthKey }
@@ -136,7 +140,7 @@ class SessionListAdapter(
 
     override fun getHeaderText(position: Int): String = when (val r = rows.getOrNull(position)) {
         is SessRow.Header -> r.key
-        is SessRow.Item   -> r.sess.monthKey
+        is SessRow.Item -> r.sess.monthKey
         else -> ""
     }
 
@@ -148,7 +152,7 @@ class SessionListAdapter(
 
     override fun getItemId(position: Int): Long = when (val r = rows[position]) {
         is SessRow.Header -> ("H|" + r.key).hashCode().toLong()
-        is SessRow.Item   -> ("I|" + r.sess.patientDir.absolutePath).hashCode().toLong()
+        is SessRow.Item -> ("I|" + r.sess.patientDir.absolutePath).hashCode().toLong()
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -162,7 +166,7 @@ class SessionListAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val r = rows[position]) {
             is SessRow.Header -> (holder as HeaderVH).bind(r.key)
-            is SessRow.Item   -> (holder as ItemVH).bind(
+            is SessRow.Item -> (holder as ItemVH).bind(
                 s = r.sess,
                 click = onSessionClick,
                 moreClick = onMoreClick,
@@ -180,14 +184,16 @@ class SessionListAdapter(
 
     // ---------- ViewHolders ----------
     class HeaderVH(v: View) : RecyclerView.ViewHolder(v) {
-        fun bind(text: String) { (itemView as TextView).text = text }
+        fun bind(text: String) {
+            (itemView as TextView).text = text
+        }
     }
 
     class ItemVH(v: View) : RecyclerView.ViewHolder(v) {
         private val ivThumb: ImageView = v.findViewById(R.id.ivThumb)
-        private val tvTitle: TextView  = v.findViewById(R.id.tvTitle)
-        private val tvNik: TextView    = v.findViewById(R.id.tvSub1)
-        private val tvTs: TextView     = v.findViewById(R.id.tvSub2)
+        private val tvTitle: TextView = v.findViewById(R.id.tvTitle)
+        private val tvNik: TextView = v.findViewById(R.id.tvSub1)
+        private val tvTs: TextView = v.findViewById(R.id.tvSub2)
         private val btnMore: ImageButton = v.findViewById(R.id.btnMore)
         private val cancelled = AtomicBoolean(false)
 
@@ -203,8 +209,8 @@ class SessionListAdapter(
             itemView.setOnClickListener { click(s) }
 
             tvTitle.text = s.nama ?: s.patientDir.name
-            tvNik.text   = s.nik ?: "—"
-            tvTs.text    = formatTs(s.lastTs) // "yyyy-MM-dd, HH:mm"
+            tvNik.text = s.nik ?: "—"
+            tvTs.text = formatTs(s.lastTs) // "yyyy-MM-dd, HH:mm"
 
             btnMore.setOnClickListener { moreClick(s) }
 
@@ -222,13 +228,18 @@ class SessionListAdapter(
                 else
                     extractVideoFrame(s.thumb.file)
                 if (bmp != null) {
-                    if (s.thumb.type == MediaType.IMAGE) imgCache.put(key, bmp) else vidCache.put(key, bmp)
+                    if (s.thumb.type == MediaType.IMAGE) imgCache.put(key, bmp) else vidCache.put(
+                        key,
+                        bmp
+                    )
                 }
                 ivThumb.post { if (!cancelled.get()) ivThumb.setImageBitmap(bmp) }
             }
         }
 
-        fun onRecycled() { cancelled.set(true) }
+        fun onRecycled() {
+            cancelled.set(true)
+        }
     }
 }
 
@@ -253,7 +264,8 @@ private fun extractVideoFrame(file: File): Bitmap? {
     val mmr = MediaMetadataRetriever()
     return try {
         mmr.setDataSource(file.absolutePath)
-        val ms = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        val ms =
+            mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
         val us = if (ms > 0) (ms / 2) * 1000L else 1_000_000L
         mmr.getFrameAtTime(us, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.let { src ->
             val r = minOf(480f / src.width, 480f / src.height)

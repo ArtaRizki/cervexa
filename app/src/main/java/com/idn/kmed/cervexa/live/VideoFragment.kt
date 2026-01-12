@@ -1,6 +1,7 @@
 package com.idn.kmed.cervexa.live
 
 import android.annotation.SuppressLint
+import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
@@ -24,9 +25,6 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
-import com.google.android.material.shape.CornerFamily
-import com.google.android.material.shape.MaterialShapeDrawable
-import com.google.android.material.shape.ShapeAppearanceModel
 import com.idn.kmed.cervexa.HomeActivity
 import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.databinding.FragmentVideoBinding
@@ -38,13 +36,13 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.interfaces.IVLCVout
 import java.io.File
+import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 
-// Hapus implementasi IVLCVout.Callback di level class agar tidak error
 class VideoFragment : Fragment() {
 
     private lateinit var binding: FragmentVideoBinding
@@ -65,7 +63,7 @@ class VideoFragment : Fragment() {
     // ==== VLC Components ====
     private var libVlc: LibVLC? = null
     private var mediaPlayer: MediaPlayer? = null
-    private var textureView: TextureView? = null // Wajib pakai TextureView di XML
+    private var textureView: TextureView? = null
 
     // ==== Encode / Flags ====
     private lateinit var recorder: RealtimeBitmapEncoder
@@ -94,6 +92,10 @@ class VideoFragment : Fragment() {
     private var maxScale = 5f
     private var focusX = 0f
     private var focusY = 0f
+
+    private val prefs by lazy {
+        requireContext().getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
+    }
 
     private lateinit var scaleDetector: ScaleGestureDetector
     private lateinit var gestureDetector: GestureDetector
@@ -134,7 +136,6 @@ class VideoFragment : Fragment() {
         liveViewModel = ViewModelProvider(this)[LiveViewModel::class.java]
         binding = FragmentVideoBinding.inflate(inflater, container, false)
 
-        // Pastikan di XML ID-nya textureView
         textureView = binding.textureView
 
         // Setup Gesture
@@ -164,10 +165,7 @@ class VideoFragment : Fragment() {
                 }
 
                 override fun onScroll(
-                    e1: MotionEvent?,
-                    e2: MotionEvent,
-                    distanceX: Float,
-                    distanceY: Float
+                    e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float
                 ): Boolean {
                     if (currentScale > 1.01f) {
                         textureView?.translationX = (textureView?.translationX ?: 0f) - distanceX
@@ -184,7 +182,6 @@ class VideoFragment : Fragment() {
             true
         }
 
-        // Button Listeners
         binding.bnStartStopImage?.setOnClickListener {
             if (mediaPlayer?.isPlaying == true) stopStreamAndExit() else startVlcStream()
         }
@@ -199,7 +196,6 @@ class VideoFragment : Fragment() {
             if (record.get()) stopVideoRecording() else startVideoRecording()
         }
 
-        // Back Handler (Show Dialog)
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(true) {
@@ -211,7 +207,6 @@ class VideoFragment : Fragment() {
         binding.topAppBar.setNavigationOnClickListener { showSaveConfirmDialog() }
         binding.btnBackLite?.setOnClickListener { showSaveConfirmDialog() }
 
-        // Setup RecyclerView Thumbs
         binding.rvThumbs.apply {
             layoutManager = androidx.recyclerview.widget.GridLayoutManager(requireContext(), 4)
             thumbsAdapter = ThumbAdapter { _, position ->
@@ -288,37 +283,35 @@ class VideoFragment : Fragment() {
         requireActivity().window.statusBarColor = ContextCompat.getColor(requireContext(), color)
     }
 
-    // ==========================================
-    // VLC STREAMING LOGIC (Fixed for Mi Stick)
-    // ==========================================
-
     private fun startVlcStream() {
         binding.pbLoadingImage.visibility = View.VISIBLE
         binding.vShutterImage.visibility = View.VISIBLE
 
         try {
             val options = ArrayList<String>().apply {
-                // 1. Kunci koneksi lancar
                 add("--rtsp-tcp")
-                add("--network-caching=250") // Buffer 250ms (rendah delay)
+                add("--network-caching=250")
                 add("--drop-late-frames")
-
-                // 2. Kunci Performa Mi Stick (Hardware Decoder)
                 add("--avcodec-hw=any")
 
-                // 3. Kunci ANTI-BLANK SCREEN (Wajib untuk TextureView di Mi Stick)
-                add("--no-mediacodec-dr") // Matikan Direct Rendering
+                // === FIX BLANK SCREEN (XIAOMI STICK) ===
+                add("--no-mediacodec-dr")
                 add("--no-omxil-dr")
             }
 
             libVlc = LibVLC(requireContext(), options)
             mediaPlayer = MediaPlayer(libVlc)
 
-            // Setup Output ke TextureView
             val vout = mediaPlayer!!.vlcVout
             vout.setVideoView(textureView)
 
-            // Callback untuk Listener Layout (Agar video tidak gepeng)
+            // Callback untuk Surface
+            vout.addCallback(object : IVLCVout.Callback {
+                override fun onSurfacesCreated(vlcVout: IVLCVout?) {}
+                override fun onSurfacesDestroyed(vlcVout: IVLCVout?) {}
+            })
+
+            // Listener untuk Layout (Agar video tidak gepeng)
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
                 override fun onNewVideoLayout(
                     vlcVout: IVLCVout?,
@@ -354,7 +347,6 @@ class VideoFragment : Fragment() {
                 }
             })
 
-            // Setup URL
             val rawUrl = liveViewModel.rtspRequest.value ?: ""
             val user = liveViewModel.rtspUsername.value ?: ""
             val pass = liveViewModel.rtspPassword.value ?: ""
@@ -365,7 +357,8 @@ class VideoFragment : Fragment() {
             }
 
             val media = Media(libVlc, Uri.parse(finalUrl))
-            media.setHWDecoderEnabled(true, false) // Paksa HW decode di level media juga
+            media.setHWDecoderEnabled(true, false)
+            media.addOption(":network-caching=200")
             mediaPlayer?.media = media
             media.release()
 
@@ -395,8 +388,7 @@ class VideoFragment : Fragment() {
         libVlc?.release()
         mediaPlayer = null
         libVlc = null
-
-        binding.tvStatusImage?.text = "RTSP Disconnected"
+        binding.tvStatusImage?.text = "Disconnected"
         binding.vShutterImage.visibility = View.VISIBLE
         setKeepScreenOn(false)
     }
@@ -412,16 +404,12 @@ class VideoFragment : Fragment() {
         requireActivity().finish()
     }
 
-    // ==========================================
-    // RECORDING LOGIC (Frame Grabber)
-    // ==========================================
-
     private fun startVideoRecording() {
         val dir = videosDir ?: sessionDir ?: return
         val out = File(dir, "vid_${StorageUtils.timestampWIB()}.mp4")
         videoOutputFile = out
 
-        // Rekam di 720p agar ringan
+        // 720p aman untuk Mi Stick
         val recWidth = 1280
         val recHeight = 720
 
@@ -429,15 +417,11 @@ class VideoFragment : Fragment() {
             recorder = RealtimeBitmapEncoder(requireContext(), recWidth, recHeight, out)
             recorder.start()
             record.set(true)
-
             recordStartElapsedMs = android.os.SystemClock.elapsedRealtime()
             binding.recordHud.visibility = View.VISIBLE
-            binding.tvRecordTimer.text = "00:00:00"
             hudHandler.post(hudTick)
             binding.btnRecordVideo.setImageResource(R.drawable.btn_stop)
-
             startFrameGrabber(recWidth, recHeight)
-
         } catch (e: Exception) {
             record.set(false)
             Toast.makeText(requireContext(), "Gagal rekam: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -452,7 +436,6 @@ class VideoFragment : Fragment() {
         hudHandler.removeCallbacks(hudTick)
         binding.recordHud.visibility = View.GONE
         binding.btnRecordVideo.setImageResource(R.drawable.majesticons_video)
-        videoOutputFile = null
         binding.rvThumbs.postDelayed({ refreshThumbs() }, 300)
         Toast.makeText(requireContext(), "Video Tersimpan", Toast.LENGTH_SHORT).show()
     }
@@ -461,22 +444,19 @@ class VideoFragment : Fragment() {
         recordingJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
             while (record.get() && isActive) {
                 val start = System.currentTimeMillis()
-                // Ambil bitmap dari TextureView (Ringan karena sudah di-decode HW)
                 val bmp = withContext(Dispatchers.Main) { textureView?.getBitmap(width, height) }
-
                 if (bmp != null) {
                     recorder.submitBitmap(processTextToBitmapSafe(bmp))
                 }
-                // Target ~20fps
-                val elapsed = System.currentTimeMillis() - start
-                delay((50 - elapsed).coerceAtLeast(0))
+                val wait = (50 - (System.currentTimeMillis() - start)).coerceAtLeast(0)
+                delay(wait)
             }
         }
     }
 
     private fun takeSnapshot() {
         val dir = snapshotsDir ?: sessionDir ?: return
-        val bmp = textureView?.bitmap // Ambil resolusi asli layar
+        val bmp = textureView?.bitmap
         if (bmp != null) {
             runCatching {
                 StorageUtils.saveJpegWithPrefix(dir, processTextToBitmapSafe(bmp), prefix = "ss")
@@ -486,10 +466,6 @@ class VideoFragment : Fragment() {
             }
         }
     }
-
-    // ... (Sisa fungsi Overlay, Dialog, HUD sama seperti sebelumnya) ...
-    // Copy-paste sisa fungsi processTextToBitmapSafe, setKeepScreenOn, hudTick, dialogs, dll 
-    // dari kode yang saya berikan sebelumnya.
 
     private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
@@ -541,9 +517,6 @@ class VideoFragment : Fragment() {
         }
     }
 
-    // ==== DIALOGS & SELECTION MODE ====
-    // ... Copy fungsi showSaveConfirmDialog, showExitConfirmDialog, enterSelectionMode, dll dari kode sebelumnya ...
-
     private fun showSaveConfirmDialog() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Konfirmasi")
@@ -553,30 +526,6 @@ class VideoFragment : Fragment() {
             .show()
     }
 
-    private fun showSavingProgressAndExecute() {
-        val pv = layoutInflater.inflate(R.layout.dialog_progress_saving, null)
-        val pd =
-            MaterialAlertDialogBuilder(requireContext()).setView(pv).setCancelable(false).create()
-        pd.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
-        pd.show()
-        val bar = pv.findViewById<LinearProgressIndicator>(R.id.progress)
-        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
-            repeat(10) { bar.setProgressCompat((it + 1) * 10, true); delay(50) }
-            withContext(Dispatchers.IO) { delay(500) }
-            pd.dismiss(); showSaveSuccessDialog()
-        }
-    }
-
-    private fun showSaveSuccessDialog() {
-        val v = layoutInflater.inflate(R.layout.dialog_save_success, null)
-        val d = MaterialAlertDialogBuilder(requireContext()).setView(v).create()
-        d.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
-        d.show()
-        v.findViewById<TextView>(R.id.tvAction)
-            ?.setOnClickListener { d.dismiss(); stopStreamAndExit() }
-    }
-
-    // ... Sertakan fungsi enterSelectionMode, confirmDeleteSelected, deleteFiles, exitSelectionMode, showPatientInfoBottomSheet, refreshThumbs dari kode sebelumnya ...
     private fun enterSelectionMode() {
         selectionMode = true
         binding.topAppBar.menu.clear(); binding.topAppBar.inflateMenu(R.menu.menu_video_fragment_select)
@@ -613,6 +562,29 @@ class VideoFragment : Fragment() {
         thumbsAdapter.setSelectionMode(false)
     }
 
+    private fun refreshThumbs() {
+        val parent = sessionDir ?: return
+        val imgs =
+            File(parent, "Snapshots").listFiles { f -> f.extension.equals("jpg", true) }.orEmpty()
+        val vids =
+            File(parent, "Video").listFiles { f -> f.extension.equals("mp4", true) }.orEmpty()
+        val merged = (imgs.map { MediaItem(it, MediaType.IMAGE) } + vids.map {
+            MediaItem(
+                it,
+                MediaType.VIDEO
+            )
+        }).sortedByDescending { it.file.lastModified() }
+        allMediaItems = merged
+
+        val isEmpty = merged.isEmpty()
+        binding.tvEmptyThumbs?.visibility = if (isEmpty) View.VISIBLE else View.GONE
+        binding.tvImgNoMedia?.visibility = if (isEmpty) View.VISIBLE else View.GONE
+        binding.tvImgSubtitleNoMedia?.visibility = if (isEmpty) View.VISIBLE else View.GONE
+        binding.rvThumbs.visibility = if (isEmpty) View.GONE else View.VISIBLE
+        binding.btnSimpanCase.visibility = if (isEmpty) View.GONE else View.VISIBLE
+        thumbsAdapter.submitList(merged)
+    }
+
     private fun showPatientInfoBottomSheet() {
         val dialog = BottomSheetDialog(requireContext()); dialog.setContentView(
             layoutInflater.inflate(
@@ -621,6 +593,29 @@ class VideoFragment : Fragment() {
             )
         )
         dialog.show()
+    }
+
+    private fun showSavingProgressAndExecute() {
+        val pv = layoutInflater.inflate(R.layout.dialog_progress_saving, null)
+        val pd =
+            MaterialAlertDialogBuilder(requireContext()).setView(pv).setCancelable(false).create()
+        pd.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
+        pd.show()
+        val bar = pv.findViewById<LinearProgressIndicator>(R.id.progress)
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
+            repeat(10) { bar.setProgressCompat((it + 1) * 10, true); delay(50) }
+            withContext(Dispatchers.IO) { delay(500) }
+            pd.dismiss(); showSaveSuccessDialog()
+        }
+    }
+
+    private fun showSaveSuccessDialog() {
+        val v = layoutInflater.inflate(R.layout.dialog_save_success, null)
+        val d = MaterialAlertDialogBuilder(requireContext()).setView(v).create()
+        d.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
+        d.show()
+        v.findViewById<TextView>(R.id.tvAction)
+            ?.setOnClickListener { d.dismiss(); stopStreamAndExit() }
     }
 
     companion object {

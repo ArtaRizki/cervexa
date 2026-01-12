@@ -20,19 +20,17 @@ class RealtimeBitmapEncoder(
     private val width: Int,
     private val height: Int,
     private val outputFile: File,
-    private val frameRate: Int = 30,
-    private val bitRate: Int = 4_000_000,
+    private val frameRate: Int = 30, // Target FPS
+    private val bitRate: Int = 2_500_000, // TURUNKAN DIKIT (4Mbps agak berat buat software draw, 2.5Mbps cukup buat 720p)
     private val iFrameIntervalSec: Int = 1,
-    private val queueCapacity: Int = 2,      // <= KUNCI realtime: kecilkan buffer
+    private val queueCapacity: Int = 2,
 ) {
 
     companion object {
         private const val TAG = "RealtimeBitmapEncoder"
     }
 
-    // ===== FIX #1: bounded queue (anti backlog) =====
     private val bitmapQueue = ArrayBlockingQueue<android.graphics.Bitmap>(queueCapacity)
-
     private var encoderThread: Thread? = null
     private val running = AtomicBoolean(false)
 
@@ -41,6 +39,7 @@ class RealtimeBitmapEncoder(
     private lateinit var inputSurface: Surface
 
     private var trackIndex = -1
+
     @Volatile
     private var muxerStarted = false
 
@@ -50,54 +49,76 @@ class RealtimeBitmapEncoder(
     fun start() {
         if (running.getAndSet(true)) return
 
-        initEncoder()
+        try {
+            initEncoder()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to init encoder", e)
+            running.set(false)
+            return
+        }
 
         encoderThread = Thread {
             try {
-                val frameIntervalMs = (1000L / frameRate).coerceAtLeast(1L)
+                // Kalkulasi waktu sleep agar FPS terjaga stabil (30fps ~= 33ms)
+                val frameIntervalMs = (1000L / frameRate).coerceAtLeast(10L)
 
-                while (running.get() || bitmapQueue.isNotEmpty()) {
+                while (running.get()) {
+                    val startProcess = System.currentTimeMillis()
+
+                    // Ambil frame dari antrian
                     val bm = bitmapQueue.poll(100, TimeUnit.MILLISECONDS)
+
                     if (bm != null) {
                         drawBitmapToSurface(bm)
-                        // drain agar output cepat ditulis → kurangi latency
                         drainEncoder()
+
+                        // === [FIX PENTING UNTUK XIAOMI STICK] ===
+                        // Segera hancurkan bitmap setelah dipakai agar RAM lega
+                        if (!bm.isRecycled) {
+                            bm.recycle()
+                        }
+                        // ========================================
                     } else {
-                        // tetap drain sesekali walau tidak ada frame
+                        // Jika tidak ada frame baru, tetap drain encoder agar buffer tidak macet
                         drainEncoder()
                     }
 
-                    // throttle sederhana supaya tidak overrun (optional)
-                    // kalau mau super low-latency, kamu bisa comment sleep ini
-                    Thread.sleep(frameIntervalMs)
+                    // Jaga timing agar tidak terlalu ngebut memakan CPU
+                    val processTime = System.currentTimeMillis() - startProcess
+                    val sleepTime = (frameIntervalMs - processTime).coerceAtLeast(0)
+                    if (sleepTime > 0) {
+                        Thread.sleep(sleepTime)
+                    }
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "Encoder thread crashed", t)
             } finally {
                 finishEncoding()
+                // Bersihkan sisa queue jika ada
+                bitmapQueue.forEach { it.recycle() }
+                bitmapQueue.clear()
             }
         }.apply { start() }
     }
 
-    /**
-     * Submit frame terbaru.
-     * FIX #2: jangan createScaledBitmap (alloc berat). Scaling dilakukan saat draw ke Surface.
-     * FIX #3: drop-frame saat queue penuh (buang frame lama, keep newest).
-     */
     fun submitBitmap(bitmap: android.graphics.Bitmap) {
-        if (!running.get()) return
+        if (!running.get()) {
+            bitmap.recycle() // Recycle jika encoder sudah mati
+            return
+        }
 
-        // kalau queue penuh, buang yang lama supaya tidak delay
+        // Logic Drop Frame: Jika penuh, buang yang lama
         if (!bitmapQueue.offer(bitmap)) {
-            bitmapQueue.poll()        // drop oldest
-            bitmapQueue.offer(bitmap) // keep newest
+            val old = bitmapQueue.poll()
+            old?.recycle() // Recycle frame yang dibuang!
+            bitmapQueue.offer(bitmap)
         }
     }
 
     fun stop() {
         running.set(false)
         try {
-            encoderThread?.join(1500)
+            encoderThread?.join(1000)
         } catch (_: Throwable) {
         }
         encoderThread = null
@@ -113,9 +134,9 @@ class RealtimeBitmapEncoder(
                 setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
                 setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameIntervalSec)
-
-                // optional: beberapa device lebih stabil dengan set ini
-                // setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+                // Profil Baseline lebih ringan untuk chipset entry-level
+                // setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+                // setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel31)
             }
 
         encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
@@ -131,10 +152,17 @@ class RealtimeBitmapEncoder(
     private fun drawBitmapToSurface(bitmap: android.graphics.Bitmap) {
         if (!::inputSurface.isInitialized || !inputSurface.isValid) return
 
-        val canvas = inputSurface.lockCanvas(null)
+        val canvas = try {
+            inputSurface.lockCanvas(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to lock canvas", e)
+            return
+        }
+
         try {
-            canvas.drawColor(Color.BLACK, PorterDuff.Mode.SRC) // bersih & konsisten
-            // scaling terjadi di sini (tanpa alloc bitmap baru)
+            // Clear background (hitam)
+            canvas.drawColor(Color.BLACK, PorterDuff.Mode.SRC)
+            // Gambar bitmap (otomatis scaling sesuai destRect)
             canvas.drawBitmap(bitmap, null, destRect, null)
         } catch (t: Throwable) {
             Log.e(TAG, "drawBitmapToSurface error", t)
@@ -142,7 +170,7 @@ class RealtimeBitmapEncoder(
             try {
                 inputSurface.unlockCanvasAndPost(canvas)
             } catch (t: Throwable) {
-                // ignore
+                Log.e(TAG, "Failed to unlock canvas", t)
             }
         }
     }
@@ -151,16 +179,10 @@ class RealtimeBitmapEncoder(
         try {
             while (true) {
                 val outputIndex = encoder.dequeueOutputBuffer(bufferInfo, 0)
-
                 when {
                     outputIndex == MediaCodec.INFO_TRY_AGAIN_LATER -> return
-
                     outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        if (muxerStarted) {
-                            // Format changed should only happen once
-                            Log.w(TAG, "Format changed twice, ignoring")
-                            continue
-                        }
+                        if (muxerStarted) return
                         trackIndex = muxer.addTrack(encoder.outputFormat)
                         muxer.start()
                         muxerStarted = true
@@ -168,47 +190,39 @@ class RealtimeBitmapEncoder(
 
                     outputIndex >= 0 -> {
                         val outBuf = encoder.getOutputBuffer(outputIndex)
-
                         if (bufferInfo.size > 0 && muxerStarted && outBuf != null) {
                             outBuf.position(bufferInfo.offset)
                             outBuf.limit(bufferInfo.offset + bufferInfo.size)
                             muxer.writeSampleData(trackIndex, outBuf, bufferInfo)
                         }
-
                         encoder.releaseOutputBuffer(outputIndex, false)
-
                         if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error draining encoder", e)
+            // Log.e(TAG, "Drain error (benign if stopping)", e)
         }
     }
 
     private fun finishEncoding() {
-        // EOS
         try {
             if (::encoder.isInitialized) {
+                // Coba kirim EOS (End of Stream)
+                // Note: pada input surface + canvas, kadang signalEndOfInputStream() tidak efektif
+                // jika kita tidak menggambar frame lagi, tapi tetap dicoba.
                 runCatching { encoder.signalEndOfInputStream() }
                 drainEncoder()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error signaling EOS", e)
         }
 
-        // stop/release encoder
         runCatching { encoder.stop() }
         runCatching { encoder.release() }
-
-        // release surface
         runCatching { inputSurface.release() }
 
-        // stop/release muxer
         if (muxerStarted) {
-            runCatching { muxer.stop() }.onFailure {
-                Log.e(TAG, "Muxer stop failed (maybe no data written)", it)
-            }
+            runCatching { muxer.stop() }
         }
         runCatching { muxer.release() }
 

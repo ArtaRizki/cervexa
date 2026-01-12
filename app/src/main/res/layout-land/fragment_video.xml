@@ -9,21 +9,16 @@
     android:background="@android:color/black"
     android:theme="@style/AppTheme.Land.NoActionBar">
 
-    <FrameLayout
-        android:id="@+id/videoContainer"
+    <com.alexvas.rtsp.widget.RtspImageView
+        android:id="@+id/ivVideoImage"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="@android:color/black"
+        android:focusable="false"
+        android:scaleType="fitCenter"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <TextureView
-            android:id="@+id/textureView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-    </FrameLayout>
+        app:layout_constraintTop_toTopOf="parent" />
 
     <View
         android:id="@+id/vShutterImage"
@@ -31,10 +26,10 @@
         android:layout_height="0dp"
         android:background="@android:color/black"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/videoContainer"
-        app:layout_constraintEnd_toEndOf="@id/videoContainer"
-        app:layout_constraintStart_toStartOf="@id/videoContainer"
-        app:layout_constraintTop_toTopOf="@id/videoContainer" />
+        app:layout_constraintBottom_toBottomOf="@id/ivVideoImage"
+        app:layout_constraintEnd_toEndOf="@id/ivVideoImage"
+        app:layout_constraintStart_toStartOf="@id/ivVideoImage"
+        app:layout_constraintTop_toTopOf="@id/ivVideoImage" />
 
     <ProgressBar
         android:id="@+id/pbLoadingImage"
@@ -58,10 +53,12 @@
         android:focusableInTouchMode="true"
         android:nextFocusRight="@id/btnRecordVideo"
         android:nextFocusDown="@id/btnRecordVideo"
+
         android:padding="12dp"
         android:scaleType="centerInside"
         android:src="@drawable/baseline_arrow_back_24"
         app:layout_constraintStart_toStartOf="parent"
+
         app:layout_constraintTop_toTopOf="parent"
         app:tint="@android:color/white" />
 
@@ -97,6 +94,7 @@
         android:gravity="center"
         android:orientation="vertical"
         android:padding="8dp"
+
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -108,13 +106,16 @@
             android:layout_marginBottom="24dp"
             android:background="@drawable/bg_btn_remote_selector"
             android:clickable="true"
+
             android:contentDescription="Rekam Video"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:nextFocusLeft="@id/btnBackLite"
+
             android:nextFocusUp="@id/btnBackLite"
             android:nextFocusDown="@id/btnSnapshot"
             android:padding="18dp"
+
             android:scaleType="centerInside"
             android:src="@drawable/majesticons_video"
             app:tint="@android:color/white" />
@@ -125,15 +126,19 @@
             android:layout_height="70dp"
             android:background="@drawable/bg_btn_remote_selector"
             android:clickable="true"
+
             android:contentDescription="Ambil Foto"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:nextFocusLeft="@id/btnBackLite"
+
             android:nextFocusUp="@id/btnRecordVideo"
             android:padding="18dp"
             android:scaleType="centerInside"
+
             android:src="@drawable/mage_camera_fill"
             app:tint="@android:color/white" />
+
     </LinearLayout>
 
     <TextView

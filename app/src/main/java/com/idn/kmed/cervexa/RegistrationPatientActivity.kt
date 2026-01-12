@@ -1,13 +1,11 @@
 package com.idn.kmed.cervexa
 
 import android.app.DatePickerDialog
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
-import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -37,20 +35,13 @@ class RegistrationPatientActivity : AppCompatActivity() {
     }
     private var selectedDobUtcMs: Long? = null
 
-    // Helper untuk menyembunyikan keyboard secara paksa
-    private fun forceHideKeyboard(view: View) {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-        imm?.hideSoftInputFromWindow(view.windowToken, 0)
-    }
-
-    private fun blockCenterKey(et: TextInputEditText) {
+    fun blockCenterKey(et: TextInputEditText) {
         et.setOnKeyListener { _, keyCode, event ->
             if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)
                 && event.action == KeyEvent.ACTION_DOWN
             ) true else false
         }
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_registration_patient)
@@ -58,6 +49,8 @@ class RegistrationPatientActivity : AppCompatActivity() {
         // Toolbar Navigasi
         val toolbar = findViewById<MaterialToolbar>(R.id.topAppBar)
         toolbar.setNavigationOnClickListener { finish() }
+
+        // Agar toolbar bisa difokus remote (opsional, untuk tombol back)
         toolbar.isFocusable = true
         toolbar.isFocusableInTouchMode = true
 
@@ -87,37 +80,35 @@ class RegistrationPatientActivity : AppCompatActivity() {
         }
 
         btnNext.setOnClickListener {
-            // Hapus fokus agar keyboard tidak muncul lagi di field terakhir
             currentFocus?.clearFocus()
+            blockCenterKey(etNama)
+            blockCenterKey(etNik)
+            blockCenterKey(etRS)
+            blockCenterKey(etNrm)
             handleRegistration()
         }
     }
 
     private fun setupTvDateInput() {
         etDob.apply {
-            // 1. Matikan input type text
+            // benar-benar cegah keyboard & input manual
             inputType = InputType.TYPE_NULL
             keyListener = null
             isCursorVisible = false
 
-            // 2. Cegah keyboard muncul (API 21+)
+            // cegah soft keyboard muncul saat fokus (API 21+)
             showSoftInputOnFocus = false
 
-            // 3. Logika Fokus: Matikan Keyboard & Jangan Auto-Open Dialog
-            onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
-                if (hasFocus) {
-                    // PENTING: Paksa keyboard mati saat fokus mendarat di sini
-                    // (misal pindah dari field NIK ke Tanggal Lahir)
-                    forceHideKeyboard(v)
-                }
+            // opsional: kalau masih ada IME/keyboard TV yang “maksa”
+            setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) post { showTvDatePicker() }
             }
         }
-
         // Fungsi pembuka date picker
         val openPicker = {
-            // Pastikan keyboard benar-benar mati sebelum dialog muncul
-            forceHideKeyboard(etDob)
-
+            // [FIX PENTING] Gunakan .post {}
+            // Ini menjamin dialog baru muncul SETELAH event tombol Enter selesai sepenuhnya.
+            // Tanpa ini, fokus sering nyangkut di EditText belakang dialog.
             etDob.post {
                 showTvDatePicker()
             }
@@ -130,17 +121,21 @@ class RegistrationPatientActivity : AppCompatActivity() {
         // 2. Klik via Remote (Enter / D-Pad Center)
         etDob.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                // Hanya eksekusi saat tombol DILEPAS (ACTION_UP)
                 if (event.action == KeyEvent.ACTION_UP) {
                     openPicker()
                 }
+                // Wajib return true pada DOWN dan UP agar event tidak bocor
                 return@setOnKeyListener true
             }
             false
         }
+
+        // Pastikan keyboard tidak muncul saat fokus (sudah aman karena inputType="none")
+        etDob.setOnFocusChangeListener { _, _ -> }
     }
 
     private fun showTvDatePicker() {
-        // ... (Kode sama seperti sebelumnya) ...
         val calendar = Calendar.getInstance()
         if (selectedDobUtcMs != null) {
             calendar.timeInMillis = selectedDobUtcMs!!
@@ -152,7 +147,7 @@ class RegistrationPatientActivity : AppCompatActivity() {
 
         val datePicker = DatePickerDialog(
             this,
-            R.style.BlueDatePickerDialog,
+            R.style.BlueDatePickerDialog, // Pastikan style ini sesuai XML tadi
             { _, selectedYear, selectedMonth, selectedDay ->
                 val selectedCal = Calendar.getInstance()
                 selectedCal.set(selectedYear, selectedMonth, selectedDay)
@@ -163,24 +158,23 @@ class RegistrationPatientActivity : AppCompatActivity() {
                 etDob.setText(dateFormat.format(selectedCal.time))
                 tilDob.error = null
 
-                // Pindahkan fokus ke input berikutnya (RS)
                 etRS.requestFocus()
             },
             year, month, day
         )
 
+        // --- BAGIAN YANG DIHAPUS/DIKOMENTARI ---
+        // datePicker.datePicker.maxDate = System.currentTimeMillis() // <--- HAPUS INI agar masa depan bisa dipilih
+        // ---------------------------------------
+
+        // Tetap batasi masa lalu (misal 130 tahun) agar user tidak scroll terlalu jauh ke tahun 1900
         val minCal = Calendar.getInstance()
         minCal.add(Calendar.YEAR, -130)
         datePicker.datePicker.minDate = minCal.timeInMillis
 
-        // PENTING UNTUK TV: Cegah keyboard muncul saat dialog ditutup/dibuka
-        datePicker.setOnDismissListener {
-            // Pastikan keyboard tetap mati setelah dialog tutup
-            etDob.postDelayed({ forceHideKeyboard(etDob) }, 100)
-        }
-
         datePicker.show()
 
+        // [OPSIONAL] Memaksa warna tombol secara manual jika XML tidak tembus di beberapa TV
         datePicker.getButton(DatePickerDialog.BUTTON_POSITIVE)
             ?.setBackgroundColor(android.graphics.Color.parseColor("#1E63E4"))
         datePicker.getButton(DatePickerDialog.BUTTON_POSITIVE)
@@ -192,7 +186,6 @@ class RegistrationPatientActivity : AppCompatActivity() {
     }
 
     private fun handleRegistration() {
-        // ... (Kode sama seperti sebelumnya) ...
         if (!validate()) return
 
         val nama = etNama.text?.toString()?.trim().orEmpty()
@@ -211,7 +204,6 @@ class RegistrationPatientActivity : AppCompatActivity() {
     }
 
     private fun validate(): Boolean {
-        // ... (Kode sama seperti sebelumnya) ...
         var ok = true
 
         val nama = etNama.text?.toString()?.trim().orEmpty()

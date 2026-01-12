@@ -7,7 +7,7 @@
     android:layout_height="match_parent"
     android:animateLayoutChanges="true"
     android:background="@color/colorWhite"
-    tools:context="com.idn.kmed.cervexa.live.VideoFragment">
+    tools:context="live.VideoFragment">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/topAppBar"
@@ -20,24 +20,20 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:menu="@menu/menu_video_fragment"
+
         app:navigationIcon="@drawable/baseline_arrow_back_24"
         app:title="Cervexa Colposcope" />
 
-    <FrameLayout
-        android:id="@+id/videoContainer"
+    <com.alexvas.rtsp.widget.RtspImageView
+        android:id="@+id/ivVideoImage"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="@android:color/black"
+        android:focusable="false"
+        android:scaleType="fitXY"
         app:layout_constraintDimensionRatio="16:9"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/topAppBar">
-
-        <TextureView
-            android:id="@+id/textureView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-    </FrameLayout>
+        app:layout_constraintTop_toBottomOf="@+id/topAppBar" />
 
     <View
         android:id="@+id/vShutterImage"
@@ -46,10 +42,10 @@
         android:background="@android:color/black"
         android:elevation="2dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/videoContainer"
-        app:layout_constraintEnd_toEndOf="@id/videoContainer"
-        app:layout_constraintStart_toStartOf="@id/videoContainer"
-        app:layout_constraintTop_toTopOf="@id/videoContainer" />
+        app:layout_constraintBottom_toBottomOf="@id/ivVideoImage"
+        app:layout_constraintEnd_toEndOf="@id/ivVideoImage"
+        app:layout_constraintStart_toStartOf="@id/ivVideoImage"
+        app:layout_constraintTop_toTopOf="@id/ivVideoImage" />
 
     <ProgressBar
         android:id="@+id/pbLoadingImage"
@@ -57,73 +53,84 @@
         android:layout_height="wrap_content"
         android:elevation="3dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/videoContainer"
-        app:layout_constraintEnd_toEndOf="@id/videoContainer"
-        app:layout_constraintStart_toStartOf="@id/videoContainer"
-        app:layout_constraintTop_toTopOf="@id/videoContainer" />
+        app:layout_constraintBottom_toBottomOf="@id/ivVideoImage"
+        app:layout_constraintEnd_toEndOf="@id/ivVideoImage"
+        app:layout_constraintStart_toStartOf="@id/ivVideoImage"
+        app:layout_constraintTop_toTopOf="@id/ivVideoImage" />
 
     <LinearLayout
         android:id="@+id/bottomControls"
         android:layout_width="0dp"
         android:layout_height="90dp"
         android:background="@drawable/border_bottom_rounded"
-        android:descendantFocusability="afterDescendants"
         android:gravity="center"
         android:orientation="horizontal"
+
+        android:descendantFocusability="afterDescendants"
+
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/videoContainer">
+        app:layout_constraintTop_toBottomOf="@+id/ivVideoImage">
 
         <ImageButton
             android:id="@+id/btnSnapshot"
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_marginHorizontal="16dp"
+            android:padding="12dp"
+
             android:background="@drawable/bg_btn_remote_selector"
-            android:clickable="true"
+            android:src="@drawable/mage_camera_fill"
+            android:scaleType="centerInside"
+
             android:focusable="true"
             android:focusableInTouchMode="true"
+            android:clickable="true"
+
             android:nextFocusRight="@+id/btnRecordVideo"
             android:nextFocusUp="@+id/topAppBar"
-            android:nextFocusDown="@+id/rvThumbs"
-            android:padding="12dp"
-            android:scaleType="centerInside"
-            android:src="@drawable/mage_camera_fill" />
+            android:nextFocusDown="@+id/rvThumbs" />
 
         <ImageButton
             android:id="@+id/btnRecordVideo"
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_marginHorizontal="16dp"
+            android:padding="12dp"
+
             android:background="@drawable/bg_btn_remote_selector"
-            android:clickable="true"
+            android:src="@drawable/majesticons_video"
+            android:scaleType="centerInside"
+
             android:focusable="true"
             android:focusableInTouchMode="true"
+            android:clickable="true"
+
             android:nextFocusLeft="@+id/btnSnapshot"
             android:nextFocusRight="@+id/btnEnterLandscape"
             android:nextFocusUp="@+id/topAppBar"
-            android:nextFocusDown="@+id/rvThumbs"
-            android:padding="12dp"
-            android:scaleType="centerInside"
-            android:src="@drawable/majesticons_video" />
+            android:nextFocusDown="@+id/rvThumbs" />
 
         <ImageButton
             android:id="@+id/btnEnterLandscape"
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_marginHorizontal="16dp"
+            android:padding="12dp"
+
             android:background="@drawable/bg_btn_remote_selector"
-            android:clickable="true"
+            android:src="@drawable/tdesign_fullscreen"
+            android:scaleType="centerInside"
+
             android:focusable="true"
             android:focusableInTouchMode="true"
+            android:clickable="true"
+
             android:nextFocusLeft="@+id/btnRecordVideo"
             android:nextFocusUp="@+id/topAppBar"
-            android:nextFocusDown="@+id/rvThumbs"
-            android:padding="12dp"
-            android:scaleType="centerInside"
-            android:src="@drawable/tdesign_fullscreen" />
-    </LinearLayout>
+            android:nextFocusDown="@+id/rvThumbs" />
 
+    </LinearLayout>
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvThumbs"
         android:layout_width="0dp"
@@ -132,10 +139,12 @@
         android:layout_marginBottom="16dp"
         android:descendantFocusability="afterDescendants"
         android:focusable="true"
+
         android:nextFocusUp="@id/btnRecordVideo"
         android:nextFocusDown="@id/btnSimpanCase"
         android:paddingHorizontal="16dp"
         android:visibility="gone"
+
         app:layout_constraintBottom_toTopOf="@+id/btnSimpanCase"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -151,8 +160,8 @@
         android:paddingHorizontal="12dp"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="@id/videoContainer"
-        app:layout_constraintTop_toTopOf="@id/videoContainer">
+        app:layout_constraintStart_toStartOf="@id/ivVideoImage"
+        app:layout_constraintTop_toTopOf="@id/ivVideoImage">
 
         <TextView
             android:id="@+id/tvRecordTimer"
@@ -211,9 +220,11 @@
         android:layout_margin="24dp"
         android:focusable="true"
         android:focusableInTouchMode="true"
+
         android:nextFocusUp="@id/rvThumbs"
         android:text="Simpan"
         android:textColor="@color/colorWhite"
+
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />

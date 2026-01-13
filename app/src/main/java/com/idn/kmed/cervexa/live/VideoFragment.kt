@@ -297,17 +297,24 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
         try {
             val options = ArrayList<String>().apply {
-                // 1. Koneksi Stabil
-                add("--rtsp-tcp")
-                add("--network-caching=400") // Buffer 400ms agar mulus di software decode
+                // 1. SETTING KONEKSI (ULTRA LOW LATENCY)
+                add("--rtsp-tcp")            // Wajib TCP agar gambar tidak rusak
+                add("--network-caching=100") // Buffer cuma 100ms (KUNCI UTAMA ANTI DELAY)
+                add("--live-caching=100")    // Samakan caching live
 
-                // 2. SOFTWARE DECODE (Solusi Pamungkas untuk Mi Stick @ 720P)
-                add("--codec=all") // Paksa software decoder (jangan pakai avcodec-hw)
+                // 2. TIMING & CLOCK
+                add("--clock-jitter=0")      // Matikan koreksi jitter
+                add("--clock-synchro=0")     // Matikan sinkronisasi jam (tampilkan secepat mungkin)
+                add("--file-caching=100")    // Jaga-jaga jika dianggap file
 
-                // 3. RENDERER (Solusi Anti-Blank Screen)
-                add("--vout=gles2") // Paksa OpenGL ES 2 renderer untuk TextureView
+                // 3. DECODER (SOFTWARE 720P OPTIMIZED)
+                add("--codec=all")           // Tetap pakai Software karena HW sering blank
+                add("--avcodec-threads=4")   // Paksa pakai 4 core CPU untuk decode (biar ngebut)
 
-                // 4. Optimasi performa
+                // 4. RENDERER (ANTI BLANK)
+                add("--vout=gles2")          // OpenGL ES 2 wajib untuk TextureView
+
+                // 5. FRAME DROP (Agar tidak numpuk kalau lag)
                 add("--drop-late-frames")
                 add("--skip-frames")
             }
@@ -318,10 +325,10 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             val vout = mediaPlayer!!.vlcVout
             vout.setVideoView(textureView)
 
-            // Callback Surface (Interface IVLCVout.Callback diimplementasikan oleh Fragment ini)
+            // Callback Surface
             vout.addCallback(this)
 
-            // Listener Layout (Anonymous Inner Class - Fix Overrides Nothing)
+            // Listener Layout
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
                 override fun onNewVideoLayout(
                     vlcVout: IVLCVout?,
@@ -367,20 +374,26 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             }
 
             val media = Media(libVlc, Uri.parse(finalUrl))
-            // Jangan aktifkan HW Decoder di sini karena kita pakai mode Software
-            // media.setHWDecoderEnabled(true, false) <--- DISABLE INI
+            // Pastikan HW Decoder mati di level media juga
+            media.setHWDecoderEnabled(false, false)
+
+            // Tambahkan opsi caching di level media juga untuk memastikan
+            media.addOption(":network-caching=100")
+            media.addOption(":clock-jitter=0")
+            media.addOption(":clock-synchro=0")
+
             mediaPlayer?.media = media
             media.release()
 
             mediaPlayer?.play()
 
-            binding.tvStatusImage?.text = "RTSP Connected (SW 720P)"
+            binding.tvStatusImage?.text = "RTSP Live (Low Latency)"
             binding.bnStartStopImage?.text = "Stop RTSP"
 
             binding.pbLoadingImage.postDelayed({
                 binding.pbLoadingImage.visibility = View.GONE
                 binding.vShutterImage.visibility = View.GONE
-            }, 1500)
+            }, 1000)
 
             setKeepScreenOn(true)
 

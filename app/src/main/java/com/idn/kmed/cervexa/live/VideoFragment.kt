@@ -299,7 +299,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             val options = ArrayList<String>().apply {
                 // 1. SETTING KONEKSI (ULTRA LOW LATENCY)
                 add("--rtsp-tcp")            // Wajib TCP agar gambar tidak rusak
-                add("--network-caching=100") // Buffer cuma 100ms (KUNCI UTAMA ANTI DELAY)
+                add("--network-caching=200") // Buffer cuma 100ms (KUNCI UTAMA ANTI DELAY)
                 add("--live-caching=100")    // Samakan caching live
 
                 // 2. TIMING & CLOCK

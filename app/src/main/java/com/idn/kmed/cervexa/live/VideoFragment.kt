@@ -27,6 +27,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.idn.kmed.cervexa.HomeActivity
 import com.idn.kmed.cervexa.R
+import com.idn.kmed.cervexa.SettingsActivity.Companion.KEY_CAMERA_ROTATION_DEG
 import com.idn.kmed.cervexa.databinding.FragmentVideoBinding
 import com.idn.kmed.cervexa.record.RealtimeBitmapEncoder
 import com.idn.kmed.cervexa.utils.*
@@ -43,7 +44,7 @@ import java.time.format.DateTimeFormatter
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 
-class VideoFragment : Fragment() {
+class VideoFragment : Fragment(), IVLCVout.Callback {
 
     private lateinit var binding: FragmentVideoBinding
     private lateinit var liveViewModel: LiveViewModel
@@ -138,11 +139,12 @@ class VideoFragment : Fragment() {
 
         textureView = binding.textureView
 
-        // Setup Gesture
+        // Gesture: pinch to zoom
         scaleDetector = ScaleGestureDetector(
             requireContext(),
             object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    val prev = currentScale
                     currentScale =
                         (currentScale * detector.scaleFactor).coerceIn(minScale, maxScale)
                     focusX = detector.focusX
@@ -196,6 +198,7 @@ class VideoFragment : Fragment() {
             if (record.get()) stopVideoRecording() else startVideoRecording()
         }
 
+        // Handle Back Button
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(true) {
@@ -207,6 +210,7 @@ class VideoFragment : Fragment() {
         binding.topAppBar.setNavigationOnClickListener { showSaveConfirmDialog() }
         binding.btnBackLite?.setOnClickListener { showSaveConfirmDialog() }
 
+        // Setup Thumbs Adapter
         binding.rvThumbs.apply {
             layoutManager = androidx.recyclerview.widget.GridLayoutManager(requireContext(), 4)
             thumbsAdapter = ThumbAdapter { _, position ->
@@ -283,20 +287,29 @@ class VideoFragment : Fragment() {
         requireActivity().window.statusBarColor = ContextCompat.getColor(requireContext(), color)
     }
 
+    // ==========================================
+    // VLC STREAMING LOGIC (720P SW DECODE OPTIMIZED)
+    // ==========================================
+
     private fun startVlcStream() {
         binding.pbLoadingImage.visibility = View.VISIBLE
         binding.vShutterImage.visibility = View.VISIBLE
 
         try {
             val options = ArrayList<String>().apply {
+                // 1. Koneksi Stabil
                 add("--rtsp-tcp")
-                add("--network-caching=250")
-                add("--drop-late-frames")
-                add("--avcodec-hw=any")
+                add("--network-caching=400") // Buffer 400ms agar mulus di software decode
 
-                // === FIX BLANK SCREEN (XIAOMI STICK) ===
-                add("--no-mediacodec-dr")
-                add("--no-omxil-dr")
+                // 2. SOFTWARE DECODE (Solusi Pamungkas untuk Mi Stick @ 720P)
+                add("--codec=all") // Paksa software decoder (jangan pakai avcodec-hw)
+
+                // 3. RENDERER (Solusi Anti-Blank Screen)
+                add("--vout=gles2") // Paksa OpenGL ES 2 renderer untuk TextureView
+
+                // 4. Optimasi performa
+                add("--drop-late-frames")
+                add("--skip-frames")
             }
 
             libVlc = LibVLC(requireContext(), options)
@@ -305,13 +318,10 @@ class VideoFragment : Fragment() {
             val vout = mediaPlayer!!.vlcVout
             vout.setVideoView(textureView)
 
-            // Callback untuk Surface
-            vout.addCallback(object : IVLCVout.Callback {
-                override fun onSurfacesCreated(vlcVout: IVLCVout?) {}
-                override fun onSurfacesDestroyed(vlcVout: IVLCVout?) {}
-            })
+            // Callback Surface (Interface IVLCVout.Callback diimplementasikan oleh Fragment ini)
+            vout.addCallback(this)
 
-            // Listener untuk Layout (Agar video tidak gepeng)
+            // Listener Layout (Anonymous Inner Class - Fix Overrides Nothing)
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
                 override fun onNewVideoLayout(
                     vlcVout: IVLCVout?,
@@ -357,14 +367,14 @@ class VideoFragment : Fragment() {
             }
 
             val media = Media(libVlc, Uri.parse(finalUrl))
-            media.setHWDecoderEnabled(true, false)
-            media.addOption(":network-caching=200")
+            // Jangan aktifkan HW Decoder di sini karena kita pakai mode Software
+            // media.setHWDecoderEnabled(true, false) <--- DISABLE INI
             mediaPlayer?.media = media
             media.release()
 
             mediaPlayer?.play()
 
-            binding.tvStatusImage?.text = "RTSP Connected (VLC HW)"
+            binding.tvStatusImage?.text = "RTSP Connected (SW 720P)"
             binding.bnStartStopImage?.text = "Stop RTSP"
 
             binding.pbLoadingImage.postDelayed({
@@ -404,12 +414,16 @@ class VideoFragment : Fragment() {
         requireActivity().finish()
     }
 
+    // ==========================================
+    // RECORDING LOGIC
+    // ==========================================
+
     private fun startVideoRecording() {
         val dir = videosDir ?: sessionDir ?: return
         val out = File(dir, "vid_${StorageUtils.timestampWIB()}.mp4")
         videoOutputFile = out
 
-        // 720p aman untuk Mi Stick
+        // 720p (Sesuai dengan stream input)
         val recWidth = 1280
         val recHeight = 720
 
@@ -474,7 +488,9 @@ class VideoFragment : Fragment() {
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
 
         val canvas = Canvas(bitmap)
-        val paintText = Paint().apply { color = Color.WHITE; textSize = 36f; isAntiAlias = true }
+        val paintText = Paint().apply {
+            color = Color.WHITE; textSize = 36f; isAntiAlias = true; textAlign = Paint.Align.LEFT
+        }
         val paintBox = Paint().apply { color = Color.argb(128, 0, 0, 0); style = Paint.Style.FILL }
 
         canvas.drawRect(
@@ -517,11 +533,25 @@ class VideoFragment : Fragment() {
         }
     }
 
+    // ==== IMPLEMENTASI IVLCVout.Callback (Untuk Surface) ====
+    override fun onSurfacesCreated(vlcVout: IVLCVout?) {}
+    override fun onSurfacesDestroyed(vlcVout: IVLCVout?) {}
+
+    // ==== DIALOGS & HELPER ====
     private fun showSaveConfirmDialog() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Konfirmasi")
             .setMessage("Simpan media dan tutup sesi?")
             .setPositiveButton("Simpan") { _, _ -> showSavingProgressAndExecute() }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun showExitConfirmDialog() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Selesaikan Sesi?")
+            .setMessage("Keluar dan selesaikan sesi?")
+            .setPositiveButton("Selesai") { _, _ -> stopStreamAndExit() }
             .setNegativeButton("Batal", null)
             .show()
     }

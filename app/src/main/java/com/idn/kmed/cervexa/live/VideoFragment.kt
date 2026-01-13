@@ -297,26 +297,39 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
         try {
             val options = ArrayList<String>().apply {
-                // 1. SETTING KONEKSI (ULTRA LOW LATENCY)
-                add("--rtsp-tcp")            // Wajib TCP agar gambar tidak rusak
-                add("--network-caching=200") // Buffer cuma 100ms (KUNCI UTAMA ANTI DELAY)
-                add("--live-caching=100")    // Samakan caching live
+                // 1. LATENCY & BUFFERING (Critical for Speed)
+                // Set cache ke nilai sangat rendah. 0 = real-time murni (resiko artifact jika wifi tidak stabil)
+                // Disarankan 30-50ms untuk keseimbangan.
+                add("--network-caching=30")
+                add("--live-caching=30")
+                add("--file-caching=30")
 
-                // 2. TIMING & CLOCK
-                add("--clock-jitter=0")      // Matikan koreksi jitter
-                add("--clock-synchro=0")     // Matikan sinkronisasi jam (tampilkan secepat mungkin)
-                add("--file-caching=100")    // Jaga-jaga jika dianggap file
+                // 2. PROTOCOL & TIMING
+                // "--rtsp-tcp" membuat gambar stabil tapi menambah sedikit delay.
+                // Jika WiFi Camera point-to-point (dekat), coba hapus baris ini agar menggunakan UDP (lebih cepat).
+                // Jika gambar hancur/abu-abu, pasang lagi "--rtsp-tcp".
+                add("--rtsp-tcp")
 
-                // 3. DECODER (SOFTWARE 720P OPTIMIZED)
-                add("--codec=all")           // Tetap pakai Software karena HW sering blank
-                add("--avcodec-threads=4")   // Paksa pakai 4 core CPU untuk decode (biar ngebut)
+                add("--clock-jitter=0")      // Matikan kompensasi jitter
+                add("--clock-synchro=0")     // Matikan sinkronisasi jam sistem
 
-                // 4. RENDERER (ANTI BLANK)
-                add("--vout=gles2")          // OpenGL ES 2 wajib untuk TextureView
+                // 3. DECODER & PERFORMANCE
+                // PENTING: Coba aktifkan HW Decoder (MediaCodec) agar CPU ringan & render cepat
+                add("--codec=mediacodec_ndk,mediacodec_jni,all")
 
-                // 5. FRAME DROP (Agar tidak numpuk kalau lag)
-                add("--drop-late-frames")
-                add("--skip-frames")
+                // Jika tetap ingin SW Decode, gunakan flag 'low-delay' ffmpeg
+                add("--avcodec-threads=4")
+                add("--avcodec-fast")        // Allow non-spec compliant speedup tricks
+                add("--avcodec-skiploopfilter=4") // Skip filter untuk mempercepat decode (sedikit kurangi kualitas)
+
+                // 4. RENDERING
+                add("--vout=gles2")          // OpenGL ES 2
+                add("--low-delay")           // Flag prioritas low delay
+                add("--no-audio")            // MATIKAN AUDIO: Audio processing menambah delay video!
+
+                // 5. FRAME HANDLING
+                add("--drop-late-frames")    // Buang frame telat
+                add("--skip-frames")         // Skip frame jika overload
             }
 
             libVlc = LibVLC(requireContext(), options)
@@ -325,23 +338,14 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             val vout = mediaPlayer!!.vlcVout
             vout.setVideoView(textureView)
 
-            // Callback Surface
+            // Pasang Callback & Listener seperti sebelumnya...
             vout.addCallback(this)
-
-            // Listener Layout
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
-                override fun onNewVideoLayout(
-                    vlcVout: IVLCVout?,
-                    width: Int,
-                    height: Int,
-                    visibleWidth: Int,
-                    visibleHeight: Int,
-                    sarNum: Int,
-                    sarDen: Int
-                ) {
+                override fun onNewVideoLayout(vlcVout: IVLCVout?, width: Int, height: Int, visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int) {
                     if (width * height == 0) return
                     ivVideoImageResolution = Pair(width, height)
 
+                    // Logic layout update tetap sama...
                     textureView?.post {
                         if (!isAdded || textureView == null) return@post
                         val container = binding.videoContainer
@@ -364,6 +368,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                 }
             })
 
+            // URL Handling
             val rawUrl = liveViewModel.rtspRequest.value ?: ""
             val user = liveViewModel.rtspUsername.value ?: ""
             val pass = liveViewModel.rtspPassword.value ?: ""
@@ -374,11 +379,14 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             }
 
             val media = Media(libVlc, Uri.parse(finalUrl))
-            // Pastikan HW Decoder mati di level media juga
-            media.setHWDecoderEnabled(false, false)
 
-            // Tambahkan opsi caching di level media juga untuk memastikan
-            media.addOption(":network-caching=100")
+            // === UPDATE SETTING MEDIA ===
+            // Ubah ke TRUE untuk Hardware Acceleration (Lebih cepat dari SW)
+            // Jika layar menjadi hitam/hijau di HP tertentu, ubah kembali ke (false, false)
+            media.setHWDecoderEnabled(true, true)
+
+            // Tambahkan option spesifik per media
+            media.addOption(":network-caching=30")
             media.addOption(":clock-jitter=0")
             media.addOption(":clock-synchro=0")
 
@@ -387,20 +395,20 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
             mediaPlayer?.play()
 
-            binding.tvStatusImage?.text = "RTSP Live (Low Latency)"
+            // ... sisa kode UI update (KeepScreenOn, dll)
+            binding.tvStatusImage?.text = "RTSP Live (Zero Latency)"
             binding.bnStartStopImage?.text = "Stop RTSP"
 
             binding.pbLoadingImage.postDelayed({
                 binding.pbLoadingImage.visibility = View.GONE
                 binding.vShutterImage.visibility = View.GONE
-            }, 1000)
+            }, 500) // Kurangi waktu tunggu loading
 
             setKeepScreenOn(true)
 
         } catch (e: Exception) {
             Log.e(TAG, "Error starting VLC", e)
-            Toast.makeText(requireContext(), "Gagal Start Stream: ${e.message}", Toast.LENGTH_SHORT)
-                .show()
+            Toast.makeText(requireContext(), "Gagal Start Stream: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 

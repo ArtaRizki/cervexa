@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.*
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
@@ -25,6 +26,9 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.google.android.material.shape.CornerFamily
+import com.google.android.material.shape.MaterialShapeDrawable
+import com.google.android.material.shape.ShapeAppearanceModel
 import com.idn.kmed.cervexa.HomeActivity
 import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.SettingsActivity.Companion.KEY_CAMERA_ROTATION_DEG
@@ -60,6 +64,9 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     private var patientDobUtc: Long = -1L
     private var patientAge: Int = 0
     private var snapshotsDir: File? = null
+
+    // Timer untuk jam overlay
+    private var clockJob: Job? = null
 
     // ==== VLC Components ====
     private var libVlc: LibVLC? = null
@@ -124,6 +131,11 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                 videosDir = File(parent, "Video").apply { if (!exists()) mkdirs() }
             }
         }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        clockJob?.cancel() // Hentikan jam saat keluar layar
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -213,7 +225,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         // Setup Thumbs Adapter
         binding.rvThumbs.apply {
             layoutManager = androidx.recyclerview.widget.GridLayoutManager(requireContext(), 4)
-            thumbsAdapter = ThumbAdapter { _, position ->
+            thumbsAdapter = ThumbAdapter { item, position ->
                 val paths = ArrayList(allMediaItems.map { it.file.absolutePath })
                 val types = ArrayList(allMediaItems.map { it.type.name })
                 val i = Intent(
@@ -254,8 +266,30 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         binding.btnSimpanCase.setOnClickListener { showSaveConfirmDialog() }
         binding.tvMediaTgl?.text = formattedDate
         refreshThumbs()
+        // === 1. SET OVERLAY INFO (Kiri Bawah) ===
+        val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
+        binding.tvOverlayInfo.text = infoText
+
+        // === 2. JALANKAN JAM LIVE (Kanan Bawah) ===
+        startOverlayClock()
 
         return binding.root
+    }
+
+    private fun startOverlayClock() {
+        clockJob?.cancel()
+        clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
+            while (isActive) {
+                val now = if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    java.time.ZonedDateTime.now()
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
+                } else {
+                    SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
+                }
+                binding.tvOverlayClock.text = now
+                delay(1000) // Update setiap 1 detik
+            }
+        }
     }
 
     private fun applyZoomMatrix() {
@@ -288,7 +322,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     }
 
     // ==========================================
-    // VLC STREAMING LOGIC (720P SW DECODE OPTIMIZED)
+    // VLC STREAMING LOGIC (ULTRA LOW LATENCY)
     // ==========================================
 
     private fun startVlcStream() {
@@ -297,39 +331,19 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
         try {
             val options = ArrayList<String>().apply {
-                // 1. LATENCY & BUFFERING (Critical for Speed)
-                // Set cache ke nilai sangat rendah. 0 = real-time murni (resiko artifact jika wifi tidak stabil)
-                // Disarankan 30-50ms untuk keseimbangan.
-                add("--network-caching=30")
-                add("--live-caching=30")
-                add("--file-caching=30")
-
-                // 2. PROTOCOL & TIMING
-                // "--rtsp-tcp" membuat gambar stabil tapi menambah sedikit delay.
-                // Jika WiFi Camera point-to-point (dekat), coba hapus baris ini agar menggunakan UDP (lebih cepat).
-                // Jika gambar hancur/abu-abu, pasang lagi "--rtsp-tcp".
+                // 1. Koneksi Stabil
                 add("--rtsp-tcp")
+                add("--network-caching=100") // Buffer 400ms agar mulus di software decode
 
-                add("--clock-jitter=0")      // Matikan kompensasi jitter
-                add("--clock-synchro=0")     // Matikan sinkronisasi jam sistem
+                // 2. SOFTWARE DECODE (Solusi Pamungkas untuk Mi Stick @ 720P)
+                add("--codec=all") // Paksa software decoder (jangan pakai avcodec-hw)
 
-                // 3. DECODER & PERFORMANCE
-                // PENTING: Coba aktifkan HW Decoder (MediaCodec) agar CPU ringan & render cepat
-                add("--codec=mediacodec_ndk,mediacodec_jni,all")
+                // 3. RENDERER (Solusi Anti-Blank Screen)
+                add("--vout=gles2") // Paksa OpenGL ES 2 renderer untuk TextureView
 
-                // Jika tetap ingin SW Decode, gunakan flag 'low-delay' ffmpeg
-                add("--avcodec-threads=4")
-                add("--avcodec-fast")        // Allow non-spec compliant speedup tricks
-                add("--avcodec-skiploopfilter=4") // Skip filter untuk mempercepat decode (sedikit kurangi kualitas)
-
-                // 4. RENDERING
-                add("--vout=gles2")          // OpenGL ES 2
-                add("--low-delay")           // Flag prioritas low delay
-                add("--no-audio")            // MATIKAN AUDIO: Audio processing menambah delay video!
-
-                // 5. FRAME HANDLING
-                add("--drop-late-frames")    // Buang frame telat
-                add("--skip-frames")         // Skip frame jika overload
+                // 4. Optimasi performa
+                add("--drop-late-frames")
+                add("--skip-frames")
             }
 
             libVlc = LibVLC(requireContext(), options)
@@ -338,14 +352,23 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             val vout = mediaPlayer!!.vlcVout
             vout.setVideoView(textureView)
 
-            // Pasang Callback & Listener seperti sebelumnya...
+            // Callback Surface (Interface IVLCVout.Callback diimplementasikan oleh Fragment ini)
             vout.addCallback(this)
+
+            // Listener Layout (Anonymous Inner Class - Fix Overrides Nothing)
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
-                override fun onNewVideoLayout(vlcVout: IVLCVout?, width: Int, height: Int, visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int) {
+                override fun onNewVideoLayout(
+                    vlcVout: IVLCVout?,
+                    width: Int,
+                    height: Int,
+                    visibleWidth: Int,
+                    visibleHeight: Int,
+                    sarNum: Int,
+                    sarDen: Int
+                ) {
                     if (width * height == 0) return
                     ivVideoImageResolution = Pair(width, height)
 
-                    // Logic layout update tetap sama...
                     textureView?.post {
                         if (!isAdded || textureView == null) return@post
                         val container = binding.videoContainer
@@ -368,7 +391,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                 }
             })
 
-            // URL Handling
             val rawUrl = liveViewModel.rtspRequest.value ?: ""
             val user = liveViewModel.rtspUsername.value ?: ""
             val pass = liveViewModel.rtspPassword.value ?: ""
@@ -379,36 +401,27 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             }
 
             val media = Media(libVlc, Uri.parse(finalUrl))
-
-            // === UPDATE SETTING MEDIA ===
-            // Ubah ke TRUE untuk Hardware Acceleration (Lebih cepat dari SW)
-            // Jika layar menjadi hitam/hijau di HP tertentu, ubah kembali ke (false, false)
-            media.setHWDecoderEnabled(true, true)
-
-            // Tambahkan option spesifik per media
-            media.addOption(":network-caching=30")
-            media.addOption(":clock-jitter=0")
-            media.addOption(":clock-synchro=0")
-
+            // Jangan aktifkan HW Decoder di sini karena kita pakai mode Software
+            // media.setHWDecoderEnabled(true, false) <--- DISABLE INI
             mediaPlayer?.media = media
             media.release()
 
             mediaPlayer?.play()
 
-            // ... sisa kode UI update (KeepScreenOn, dll)
-            binding.tvStatusImage?.text = "RTSP Live (Zero Latency)"
+            binding.tvStatusImage?.text = "RTSP Connected (SW 720P)"
             binding.bnStartStopImage?.text = "Stop RTSP"
 
             binding.pbLoadingImage.postDelayed({
                 binding.pbLoadingImage.visibility = View.GONE
                 binding.vShutterImage.visibility = View.GONE
-            }, 500) // Kurangi waktu tunggu loading
+            }, 1500)
 
             setKeepScreenOn(true)
 
         } catch (e: Exception) {
             Log.e(TAG, "Error starting VLC", e)
-            Toast.makeText(requireContext(), "Gagal Start Stream: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Gagal Start Stream: ${e.message}", Toast.LENGTH_SHORT)
+                .show()
         }
     }
 
@@ -498,10 +511,17 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             }.onSuccess {
                 Toast.makeText(requireContext(), "Snapshot Tersimpan", Toast.LENGTH_SHORT).show()
                 refreshThumbs()
+            }.onFailure {
+                Toast.makeText(
+                    requireContext(),
+                    "Gagal snapshot: ${it.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
 
+    // ==== OVERLAY NAMA RS & NRM ====
     private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
         val formatted = if (android.os.Build.VERSION.SDK_INT >= 26)
@@ -514,6 +534,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         }
         val paintBox = Paint().apply { color = Color.argb(128, 0, 0, 0); style = Paint.Style.FILL }
 
+        // Overlay Timestamp (Kanan Bawah)
         canvas.drawRect(
             bitmap.width.toFloat() - 360f,
             bitmap.height.toFloat() - 60f,
@@ -527,9 +548,15 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             paintText
         )
 
+        // Overlay Nama RS & NRM (Kiri Bawah) - Sesuai Request
         canvas.drawRect(0f, bitmap.height.toFloat() - 65f, 650f, bitmap.height.toFloat(), paintBox)
-        val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
-        canvas.drawText(infoText, 20f, bitmap.height.toFloat() - 20f, paintText)
+
+        if (patientNrm.isEmpty()) {
+            canvas.drawText("$patientRs", 20f, bitmap.height.toFloat() - 20f, paintText)
+        } else {
+            canvas.drawText("$patientRs/$patientNrm", 20f, bitmap.height.toFloat() - 20f, paintText)
+        }
+
         return bitmap
     }
 
@@ -643,6 +670,31 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                 null
             )
         )
+        // Setup Views in BS
+        val btnClose = dialog.findViewById<ImageButton>(R.id.btnClose)
+        val tvNama = dialog.findViewById<TextView>(R.id.tvNama)
+        val tvNik = dialog.findViewById<TextView>(R.id.tvNik)
+        val tvDob = dialog.findViewById<TextView>(R.id.tvDob)
+        val tvNrm = dialog.findViewById<TextView>(R.id.tvNrm)
+        val tvTanggal = dialog.findViewById<TextView>(R.id.tvTanggal)
+
+        // Isi data AKTUAL
+        val sdfNow = SimpleDateFormat("d MMMM yyyy, HH:mm", Locale("id", "ID")).apply {
+            timeZone = TimeZone.getTimeZone("Asia/Jakarta")
+        }
+        tvTanggal?.text = sdfNow.format(Date())
+
+        val namaSafe = patientNama.ifBlank { "-" }
+        tvNama?.text = if (patientAge > 0) "$namaSafe ($patientRs)" else namaSafe
+        tvNik?.text = patientNik.ifBlank { "-" }
+        tvDob?.text = if (patientDobUtc > 0L) {
+            val sdfDob = SimpleDateFormat("dd/MM/yyyy", Locale("id", "ID"))
+            sdfDob.format(Date(patientDobUtc))
+        } else "-"
+        tvNrm?.text = patientNrm.ifBlank { "Tidak ada nomor rekam medis" }
+
+        btnClose?.setOnClickListener { dialog.dismiss() }
+
         dialog.show()
     }
 

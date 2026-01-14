@@ -226,17 +226,18 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         binding.rvThumbs.apply {
             layoutManager = androidx.recyclerview.widget.GridLayoutManager(requireContext(), 4)
             thumbsAdapter = ThumbAdapter { item, position ->
-                val paths = ArrayList(allMediaItems.map { it.file.absolutePath })
-                val types = ArrayList(allMediaItems.map { it.type.name })
-                val i = Intent(
-                    requireContext(),
-                    com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java
-                ).apply {
-                    putStringArrayListExtra("paths", paths)
-                    putStringArrayListExtra("types", types)
-                    putExtra("index", position)
-                }
-                startActivity(i)
+//                val paths = ArrayList(allMediaItems.map { it.file.absolutePath })
+//                val types = ArrayList(allMediaItems.map { it.type.name })
+//                val i = Intent(
+//                    requireContext(),
+//                    com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java
+//                ).apply {
+//                    putStringArrayListExtra("paths", paths)
+//                    putStringArrayListExtra("types", types)
+//                    putExtra("index", position)
+//                }
+//                startActivity(i)
+                openPreview(position)
             }
             thumbsAdapter.selectionListener = object : ThumbAdapter.SelectionListener {
                 override fun onSelectionChanged(count: Int) {
@@ -720,6 +721,28 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         v.findViewById<TextView>(R.id.tvAction)
             ?.setOnClickListener { d.dismiss(); stopStreamAndExit() }
     }
+
+    // === TAMBAHAN: Fungsi untuk buka preview yang support Landscape (TV) ===
+    private fun openPreview(position: Int) {
+        val paths = ArrayList(allMediaItems.map { it.file.absolutePath })
+        val types = ArrayList(allMediaItems.map { it.type.name })
+
+        // Cek apakah mode Landscape (TV) atau Portrait (HP)
+        val targetActivity = if (isLandscape()) {
+            com.idn.kmed.cervexa.gallery.MediaPagerActivityLand::class.java
+        } else {
+            com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java
+        }
+
+        val intent = Intent(requireContext(), targetActivity).apply {
+            putStringArrayListExtra("paths", paths)
+            putStringArrayListExtra("types", types)
+            putExtra("index", position)
+            putExtra("forceLandscape", isLandscape()) // Kirim flag landscape
+        }
+        startActivity(intent)
+    }
+
 
     companion object {
         private val TAG: String = VideoFragment::class.java.simpleName

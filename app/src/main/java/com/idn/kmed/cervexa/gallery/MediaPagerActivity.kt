@@ -41,7 +41,7 @@ open class MediaPagerActivity : AppCompatActivity() {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
             // biarkan default (boleh portrait)
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
         }
         setContentView(R.layout.activity_media_pager)
 
@@ -52,7 +52,9 @@ open class MediaPagerActivity : AppCompatActivity() {
         //Landscap
         findViewById<View>(R.id.bottomShare)?.setOnClickListener { onShareClick() }
         findViewById<View>(R.id.btnBackLite)?.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        findViewById<View>(R.id.btnExitLandscap)?.setOnClickListener { this.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+        findViewById<View>(R.id.btnExitLandscap)?.setOnClickListener {
+            this.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        }
 
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
@@ -117,7 +119,7 @@ open class MediaPagerActivity : AppCompatActivity() {
             clipData = android.content.ClipData.newRawUri("shared", uri)
         }
 
-        val chooser = Intent.createChooser(send, "Bagikan").apply {
+        val chooser = Intent.createChooser(send, "Bagiiiikan").apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             // (opsional) bawa clipData juga
             clipData = android.content.ClipData.newRawUri("shared", uri)
@@ -127,19 +129,34 @@ open class MediaPagerActivity : AppCompatActivity() {
     }
 
     private fun showShareSheet(file: File, mime: String) {
-        val dialog = BottomSheetDialog(this, com.google.android.material.R.style.Theme_Design_Light_BottomSheetDialog)
+        val dialog = BottomSheetDialog(
+            this,
+            com.google.android.material.R.style.Theme_Design_Light_BottomSheetDialog
+        )
         val v = layoutInflater.inflate(R.layout.bs_share_media, null)
         dialog.setContentView(v)
-
+        dialog.behavior.state =
+            com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        dialog.behavior.skipCollapsed = true
         // rounded top
         dialog.setOnShowListener {
-            val sheet = dialog.findViewById<android.widget.FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
+            val sheet =
+                dialog.findViewById<android.widget.FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
             sheet?.background = MaterialShapeDrawable(
                 ShapeAppearanceModel.Builder()
-                    .setTopLeftCorner(CornerFamily.ROUNDED, resources.getDimension(R.dimen.bs_top_radius))
-                    .setTopRightCorner(CornerFamily.ROUNDED, resources.getDimension(R.dimen.bs_top_radius))
+                    .setTopLeftCorner(
+                        CornerFamily.ROUNDED,
+                        resources.getDimension(R.dimen.bs_top_radius)
+                    )
+                    .setTopRightCorner(
+                        CornerFamily.ROUNDED,
+                        resources.getDimension(R.dimen.bs_top_radius)
+                    )
                     .build()
-            ).apply { this?.fillColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE) }
+            ).apply {
+                this?.fillColor =
+                    android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+            }
         }
 
         v.findViewById<ImageButton>(R.id.btnClose).setOnClickListener { dialog.dismiss() }
@@ -190,7 +207,12 @@ open class MediaPagerActivity : AppCompatActivity() {
     private fun fileUriForShare(f: File): Uri =
         androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
 
-    private fun shareToPackage(file: File, mime: String, vararg packages: String, fallbackChooser: Boolean = true) {
+    private fun shareToPackage(
+        file: File,
+        mime: String,
+        vararg packages: String,
+        fallbackChooser: Boolean = true
+    ) {
         val uri = fileUriForShare(file)
         val send = Intent(Intent.ACTION_SEND).apply {
             type = mime
@@ -200,7 +222,11 @@ open class MediaPagerActivity : AppCompatActivity() {
         // pilih paket pertama yang terpasang
         val pm = packageManager
         val pkg = packages.firstOrNull { p ->
-            try { pm.getPackageInfo(p, 0); true } catch (_: Exception) { false }
+            try {
+                pm.getPackageInfo(p, 0); true
+            } catch (_: Exception) {
+                false
+            }
         }
         if (pkg != null) {
             send.`package` = pkg
@@ -254,9 +280,10 @@ open class MediaPagerActivity : AppCompatActivity() {
 
         val uri = fileUriForShare(file)
 
-        val finalMime = if (loosenMediaMime && (mime.startsWith("image") || mime.startsWith("video"))) {
-            if (mime.startsWith("image")) "image/*" else "video/*"
-        } else mime
+        val finalMime =
+            if (loosenMediaMime && (mime.startsWith("image") || mime.startsWith("video"))) {
+                if (mime.startsWith("image")) "image/*" else "video/*"
+            } else mime
 
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = finalMime
@@ -390,8 +417,9 @@ open class MediaPagerActivity : AppCompatActivity() {
             val isVideo = mime.startsWith("video")
             val rel = if (isVideo) android.os.Environment.DIRECTORY_MOVIES + "/Cervexa"
             else android.os.Environment.DIRECTORY_PICTURES + "/Cervexa"
-            val coll = if (isVideo) android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
-            else android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            val coll =
+                if (isVideo) android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                else android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
             val cv = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, src.name)
                 put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
@@ -417,7 +445,12 @@ open class MediaPagerActivity : AppCompatActivity() {
             java.io.FileInputStream(src).use { `in` ->
                 java.io.FileOutputStream(dst).use { out -> `in`.copyTo(out) }
             }
-            android.media.MediaScannerConnection.scanFile(this, arrayOf(dst.absolutePath), arrayOf(mime), null)
+            android.media.MediaScannerConnection.scanFile(
+                this,
+                arrayOf(dst.absolutePath),
+                arrayOf(mime),
+                null
+            )
             Toast.makeText(this, "Disimpan ke galeri", Toast.LENGTH_SHORT).show()
         }
     }

@@ -475,6 +475,9 @@ class SessionMediaActivity : AppCompatActivity() {
         val dialog = BottomSheetDialog(this, com.google.android.material.R.style.Theme_Design_Light_BottomSheetDialog)
         val v = layoutInflater.inflate(R.layout.bs_share_media, null)
         dialog.setContentView(v)
+        dialog.behavior.state =
+            com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        dialog.behavior.skipCollapsed = true
 
         // rounded top
         dialog.setOnShowListener {

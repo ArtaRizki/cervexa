@@ -138,6 +138,16 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         clockJob?.cancel() // Hentikan jam saat keluar layar
     }
 
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        // === 1. SET OVERLAY INFO (Kiri Bawah) ===
+        val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
+        binding.tvOverlayInfo.text = infoText
+
+        // === 2. JALANKAN JAM LIVE (Kanan Bawah) ===
+        startOverlayClock()
+        super.onViewCreated(view, savedInstanceState)
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -201,6 +211,12 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         }
 
         binding.btnEnterLandscape?.setOnClickListener {
+            // === 1. SET OVERLAY INFO (Kiri Bawah) ===
+            val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
+            binding.tvOverlayInfo.text = infoText
+
+            // === 2. JALANKAN JAM LIVE (Kanan Bawah) ===
+            startOverlayClock()
             requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
 
@@ -226,17 +242,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         binding.rvThumbs.apply {
             layoutManager = androidx.recyclerview.widget.GridLayoutManager(requireContext(), 4)
             thumbsAdapter = ThumbAdapter { item, position ->
-//                val paths = ArrayList(allMediaItems.map { it.file.absolutePath })
-//                val types = ArrayList(allMediaItems.map { it.type.name })
-//                val i = Intent(
-//                    requireContext(),
-//                    com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java
-//                ).apply {
-//                    putStringArrayListExtra("paths", paths)
-//                    putStringArrayListExtra("types", types)
-//                    putExtra("index", position)
-//                }
-//                startActivity(i)
                 openPreview(position)
             }
             thumbsAdapter.selectionListener = object : ThumbAdapter.SelectionListener {
@@ -267,6 +272,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         binding.btnSimpanCase.setOnClickListener { showSaveConfirmDialog() }
         binding.tvMediaTgl?.text = formattedDate
         refreshThumbs()
+
         // === 1. SET OVERLAY INFO (Kiri Bawah) ===
         val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
         binding.tvOverlayInfo.text = infoText
@@ -278,18 +284,29 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     }
 
     private fun startOverlayClock() {
-        clockJob?.cancel()
-        clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
-            while (isActive) {
-                val now = if (android.os.Build.VERSION.SDK_INT >= 26) {
-                    java.time.ZonedDateTime.now()
-                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
-                } else {
-                    SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
-                }
-                binding.tvOverlayClock.text = now
-                delay(1000) // Update setiap 1 detik
+        if (clockJob?.isActive == true) {
+            val now = if (android.os.Build.VERSION.SDK_INT >= 26) {
+                java.time.ZonedDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
+            } else {
+                SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
             }
+            binding.tvOverlayClock.text = now
+        } else {
+            clockJob?.cancel()
+            clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
+                while (isActive) {
+                    val now = if (android.os.Build.VERSION.SDK_INT >= 26) {
+                        java.time.ZonedDateTime.now()
+                            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
+                    } else {
+                        SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
+                    }
+                    binding.tvOverlayClock.text = now
+                    delay(1000) // Update setiap 1 detik
+                }
+            }
+
         }
     }
 
@@ -334,7 +351,15 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             val options = ArrayList<String>().apply {
                 // 1. Koneksi Stabil
                 add("--rtsp-tcp")
-                add("--network-caching=100") // Buffer 400ms agar mulus di software decode
+                add("--network-caching=0") // Buffer 400ms agar mulus di software decode
+                add("--live-caching=0")
+                add("--file-caching=0")
+
+                add("--clock-jitter=0")
+                add("--clock-synchro=0")
+
+                add("--no-stats")
+                add("--quiet")
 
                 // 2. SOFTWARE DECODE (Solusi Pamungkas untuk Mi Stick @ 720P)
                 add("--codec=all") // Paksa software decoder (jangan pakai avcodec-hw)
@@ -379,7 +404,15 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                         val vidRatio = width.toFloat() / height.toFloat()
                         val viewRatio = viewWidth.toFloat() / viewHeight.toFloat()
 
-                        val lp = textureView?.layoutParams
+                        // Pastikan video selalu CENTER di dalam FrameLayout.
+                        // Tanpa gravity CENTER, saat kita ubah ukuran TextureView (sesuai aspect ratio),
+                        // posisinya bisa "melorot" (terlihat terlalu ke bawah/ke samping) terutama di landscape.
+                        val lp = (textureView?.layoutParams as? FrameLayout.LayoutParams)
+                            ?: FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                                FrameLayout.LayoutParams.MATCH_PARENT
+                            )
+                        lp.gravity = Gravity.CENTER
                         if (vidRatio > viewRatio) {
                             lp?.width = viewWidth
                             lp?.height = (viewWidth / vidRatio).toInt()
@@ -439,9 +472,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     }
 
     private fun stopStreamAndExit() {
-        stopVideoRecording()
-        stopVlcStream()
-
         val intent = Intent(requireContext(), HomeActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         intent.putExtra("open_tab", "media")
@@ -718,8 +748,28 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         val d = MaterialAlertDialogBuilder(requireContext()).setView(v).create()
         d.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
         d.show()
-        v.findViewById<TextView>(R.id.tvAction)
-            ?.setOnClickListener { d.dismiss(); stopStreamAndExit() }
+        val tvAction = v.findViewById<TextView>(R.id.tvAction)
+        if (tvAction != null) {
+            // 1. Wajib untuk Remote TV (D-Pad) agar bisa disorot
+            tvAction.isFocusable = true
+
+            // 2. JANGAN aktifkan ini agar Mouse bisa "Sekali Klik"
+            // tvAction.isFocusableInTouchMode = true  <-- HAPUS / KOMENTAR INI
+
+            // 3. Pastikan bisa diklik (Mouse & Jari)
+            tvAction.isClickable = true
+
+            // 4. (Opsional) Auto-focus agar user Remote tidak perlu geser kursor
+            // Tapi kalau mouse digerakkan, fokus akan hilang (ini normal)
+            tvAction.requestFocus()
+
+            tvAction.setOnClickListener {
+                d.dismiss()
+                stopStreamAndExit()
+                requireActivity().requestedOrientation =
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            }
+        }
     }
 
     // === TAMBAHAN: Fungsi untuk buka preview yang support Landscape (TV) ===
@@ -742,7 +792,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         }
         startActivity(intent)
     }
-
 
     companion object {
         private val TAG: String = VideoFragment::class.java.simpleName

@@ -75,7 +75,9 @@
             android:contentDescription="Exit Landscape"
             android:src="@drawable/mingcute_fullscreen_exit_2_line"
             android:layout_gravity="bottom|end"
-            android:layout_margin="30dp"
+            android:layout_marginTop="30dp"
+            android:layout_marginRight="30dp"
+            android:layout_marginBottom="90dp"
             app:tint="@android:color/white" />
 
         <ImageButton

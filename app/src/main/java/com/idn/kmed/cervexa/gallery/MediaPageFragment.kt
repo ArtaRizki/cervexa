@@ -35,8 +35,11 @@ class MediaPageFragment : Fragment() {
         }
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        // Pastikan nama layout sesuai dengan XML Anda (page_media)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
         val root = inflater.inflate(R.layout.page_media, container, false)
 
         val path = requireArguments().getString("path") ?: return root
@@ -45,7 +48,7 @@ class MediaPageFragment : Fragment() {
 
         // --- Bind Views ---
         val imageMode = root.findViewById<View>(R.id.imageMode)
-        val videoMode = root.findViewById<View>(R.id.videoMode)
+        val videoMode = root.findViewById<View>(R.id.videoMode) // Ini container video
 
         val photo = root.findViewById<PhotoView>(R.id.photoView)
         val video = root.findViewById<VideoView>(R.id.vvPreview)
@@ -53,12 +56,12 @@ class MediaPageFragment : Fragment() {
         val overlayImg = root.findViewById<LinearLayout>(R.id.overlayImage)
         val overlayVid = root.findViewById<LinearLayout>(R.id.overlayVideo)
 
-        val tvInfoRight = root.findViewById<TextView>(R.id.tvInfoRight) // Tanggal Image
-        val tvVidRight = root.findViewById<TextView>(R.id.tvVidRight)   // Durasi Video
+        val tvInfoRight = root.findViewById<TextView>(R.id.tvInfoRight)
+        val tvVidRight = root.findViewById<TextView>(R.id.tvVidRight)
 
         // --- Cek Validitas File ---
         if (!file.exists() || file.length() == 0L) {
-            Toast.makeText(context, "File media rusak atau tidak ditemukan", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "File media rusak/hilang", Toast.LENGTH_SHORT).show()
             return root
         }
 
@@ -66,16 +69,14 @@ class MediaPageFragment : Fragment() {
             // --- MODE GAMBAR ---
             imageMode.visibility = View.VISIBLE
             videoMode.visibility = View.GONE
-            overlayImg.visibility = View.VISIBLE // Tampilkan overlay info
+            overlayImg.visibility = View.VISIBLE
             overlayVid.visibility = View.GONE
 
-            // Setup PhotoView
             photo.minimumScale = 1f
-            photo.mediumScale  = 2.5f
+            photo.mediumScale = 2.5f
             photo.maximumScale = 5f
             photo.setImageURI(Uri.fromFile(file))
 
-            // Set Tanggal
             val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("id", "ID"))
             tvInfoRight.text = dateFormat.format(Date(file.lastModified()))
 
@@ -83,86 +84,104 @@ class MediaPageFragment : Fragment() {
             // --- MODE VIDEO ---
             imageMode.visibility = View.GONE
             videoMode.visibility = View.VISIBLE
+
+            // Default awal: Overlay disembunyikan dulu (nanti muncul kalau dipause)
             overlayImg.visibility = View.GONE
-            overlayVid.visibility = View.VISIBLE // Tampilkan overlay info
+            overlayVid.visibility = View.GONE
 
-            // Setup VideoView
             val uri = Uri.fromFile(file)
-
-            // 1. Ambil Durasi dengan Aman (Anti-Crash)
             val durationStr = getSafeDuration(file)
             tvVidRight.text = durationStr
 
-            // Jika durasi 00:00 (file rusak header-nya), jangan paksa mainkan
             if (durationStr == "00:00") {
-                Toast.makeText(context, "Video tidak dapat diputar", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Video corrupt", Toast.LENGTH_SHORT).show()
             } else {
                 try {
                     video.setVideoURI(uri)
 
+                    // 1. Pastikan kontroler bawaan mati
+//                    video.setMediaController(null)
                     val mc = MediaController(requireContext())
                     mc.setAnchorView(video)
                     video.setMediaController(mc)
 
+                    // 2. Fungsi Toggle: Play = Bersih, Pause = Muncul Info
+                    val togglePlay = {
+                        if (video.isPlaying) {
+                            video.pause()
+                            // Saat PAUSE: Munculkan overlay info (bar abu-abu)
+                            overlayVid.visibility = View.GONE
+                            Toast.makeText(context, "Video paused", Toast.LENGTH_SHORT).show()
+                        } else {
+                            video.start()
+                            // Saat PLAY: Sembunyikan overlay info (Layar bersih/Full)
+                            overlayVid.visibility = View.GONE
+                            Toast.makeText(context, "Video played", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+
+                    // 3. Pasang listener
+                    video.setOnClickListener { togglePlay() }
+                    videoMode.setOnClickListener { togglePlay() }
+
                     video.setOnPreparedListener { mp ->
                         val w = mp.videoWidth
                         val h = mp.videoHeight
-                        // Sesuaikan rasio aspek
                         if (w > 0 && h > 0) {
                             val lp = video.layoutParams as ConstraintLayout.LayoutParams
                             lp.dimensionRatio = "$w:$h"
                             video.layoutParams = lp
                         }
+                        mp.isLooping = true
+
+                        // Mulai video dan sembunyikan overlay agar bersih
                         video.start()
+                        overlayVid.visibility = View.GONE
                     }
 
-                    video.setOnErrorListener { _, _, _ ->
-                        // Cegah dialog error default Android muncul
-                        true
-                    }
+                    video.setOnErrorListener { _, _, _ -> true }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
         }
-
         return root
     }
 
     override fun onPause() {
         super.onPause()
-        try { view?.findViewById<VideoView>(R.id.vvPreview)?.pause() } catch (_: Exception) {}
+        try {
+            view?.findViewById<VideoView>(R.id.vvPreview)?.pause()
+        } catch (_: Exception) {
+        }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        try { view?.findViewById<VideoView>(R.id.vvPreview)?.stopPlayback() } catch (_: Exception) {}
+        try {
+            view?.findViewById<VideoView>(R.id.vvPreview)?.stopPlayback()
+        } catch (_: Exception) {
+        }
     }
 
-    /**
-     * Fungsi aman untuk mengambil durasi.
-     * Menggunakan try-catch agar aplikasi TIDAK CRASH jika file video korup.
-     */
     private fun getSafeDuration(file: File): String {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(file.absolutePath)
             val time = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             val timeInMillis = time?.toLongOrNull() ?: 0L
-
             if (timeInMillis == 0L) return "00:00"
-
             val minutes = TimeUnit.MILLISECONDS.toMinutes(timeInMillis)
             val seconds = TimeUnit.MILLISECONDS.toSeconds(timeInMillis) % 60
             String.format("%02d:%02d", minutes, seconds)
         } catch (e: Exception) {
-            // Log error tapi jangan crash
-            Log.e("MediaPage", "Gagal membaca file video: ${file.name}")
+            Log.e("MediaPage", "Gagal baca durasi: ${file.name}")
             "00:00"
         } finally {
             try {
                 retriever.release()
-            } catch (e: Exception) { /* ignore */ }
+            } catch (e: Exception) {
+            }
         }
     }
 }

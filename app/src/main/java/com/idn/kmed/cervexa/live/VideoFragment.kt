@@ -5,10 +5,7 @@ import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
+import android.graphics.*
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -26,12 +23,8 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
-import com.google.android.material.shape.CornerFamily
-import com.google.android.material.shape.MaterialShapeDrawable
-import com.google.android.material.shape.ShapeAppearanceModel
 import com.idn.kmed.cervexa.HomeActivity
 import com.idn.kmed.cervexa.R
-import com.idn.kmed.cervexa.SettingsActivity.Companion.KEY_CAMERA_ROTATION_DEG
 import com.idn.kmed.cervexa.databinding.FragmentVideoBinding
 import com.idn.kmed.cervexa.record.RealtimeBitmapEncoder
 import com.idn.kmed.cervexa.utils.*
@@ -41,7 +34,6 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.interfaces.IVLCVout
 import java.io.File
-import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -111,6 +103,45 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     private fun isLandscape(): Boolean =
         resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    // ===============================
+    // FIX LANDSCAPE: FIT CENTER MATRIX
+    // ===============================
+    private val fitMatrix = Matrix()
+    private var videoDisplayW = 0f
+    private var videoDisplayH = 0f
+
+    private fun applyFitCenterTransform() {
+        val tv = textureView ?: return
+        if (!isAdded) return
+
+        val container = binding.videoContainer
+        val viewW = container.width.toFloat()
+        val viewH = container.height.toFloat()
+        if (viewW <= 0f || viewH <= 0f) return
+        if (videoDisplayW <= 0f || videoDisplayH <= 0f) return
+
+        // Reset base state supaya tidak bentrok dengan transform
+        tv.translationX = 0f
+        tv.translationY = 0f
+
+        // IMPORTANT:
+        // Base rendering (fit/letterbox) lewat setTransform(Matrix).
+        // Zoom user tetap pakai scaleX/scaleY (property), jadi base + zoom terpisah.
+        // Jika mau ideal: gabung baseMatrix + userMatrix, tapi ini cukup untuk fix landscape.
+        val scale = minOf(viewW / videoDisplayW, viewH / videoDisplayH)
+        val scaledW = videoDisplayW * scale
+        val scaledH = videoDisplayH * scale
+        val dx = (viewW - scaledW) / 2f
+        val dy = (viewH - scaledH) / 2f
+
+        fitMatrix.reset()
+        fitMatrix.setScale(scale, scale)
+        fitMatrix.postTranslate(dx, dy)
+
+        tv.setTransform(fitMatrix)
+        tv.invalidate()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         arguments?.let { args ->
@@ -135,15 +166,14 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        clockJob?.cancel() // Hentikan jam saat keluar layar
+        clockJob?.cancel()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        // === 1. SET OVERLAY INFO (Kiri Bawah) ===
+        // Overlay info kiri bawah
         val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
         binding.tvOverlayInfo.text = infoText
-
-        // === 2. JALANKAN JAM LIVE (Kanan Bawah) ===
+        // Jam kanan bawah
         startOverlayClock()
         super.onViewCreated(view, savedInstanceState)
     }
@@ -161,12 +191,18 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
         textureView = binding.textureView
 
+        // Re-apply transform ketika container berubah ukuran (rotate / overlay / stb)
+        binding.videoContainer.viewTreeObserver.addOnGlobalLayoutListener {
+            if (videoDisplayW > 0f && videoDisplayH > 0f) {
+                applyFitCenterTransform()
+            }
+        }
+
         // Gesture: pinch to zoom
         scaleDetector = ScaleGestureDetector(
             requireContext(),
             object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScale(detector: ScaleGestureDetector): Boolean {
-                    val prev = currentScale
                     currentScale =
                         (currentScale * detector.scaleFactor).coerceIn(minScale, maxScale)
                     focusX = detector.focusX
@@ -180,6 +216,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             requireContext(),
             object : GestureDetector.SimpleOnGestureListener() {
                 override fun onDown(e: MotionEvent): Boolean = true
+
                 override fun onDoubleTap(e: MotionEvent): Boolean {
                     currentScale = if (currentScale > 1.01f) 1f else 2f
                     focusX = e.x
@@ -211,11 +248,8 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         }
 
         binding.btnEnterLandscape?.setOnClickListener {
-            // === 1. SET OVERLAY INFO (Kiri Bawah) ===
             val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
             binding.tvOverlayInfo.text = infoText
-
-            // === 2. JALANKAN JAM LIVE (Kanan Bawah) ===
             startOverlayClock()
             requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
@@ -226,7 +260,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             if (record.get()) stopVideoRecording() else startVideoRecording()
         }
 
-        // Handle Back Button
+        // Back button
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(true) {
@@ -238,20 +272,16 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         binding.topAppBar.setNavigationOnClickListener { showSaveConfirmDialog() }
         binding.btnBackLite?.setOnClickListener { showSaveConfirmDialog() }
 
-        // Setup Thumbs Adapter
+        // Thumbs Adapter
         binding.rvThumbs.apply {
             layoutManager = androidx.recyclerview.widget.GridLayoutManager(requireContext(), 4)
-            thumbsAdapter = ThumbAdapter { item, position ->
-                openPreview(position)
-            }
+            thumbsAdapter = ThumbAdapter { _, position -> openPreview(position) }
             thumbsAdapter.selectionListener = object : ThumbAdapter.SelectionListener {
                 override fun onSelectionChanged(count: Int) {
                     if (selectionMode) binding.topAppBar.title = "$count dipilih"
                 }
             }
-            thumbsAdapter.onStartSelectionRequested = {
-                if (!selectionMode) enterSelectionMode()
-            }
+            thumbsAdapter.onStartSelectionRequested = { if (!selectionMode) enterSelectionMode() }
             adapter = thumbsAdapter
         }
 
@@ -273,11 +303,9 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         binding.tvMediaTgl?.text = formattedDate
         refreshThumbs()
 
-        // === 1. SET OVERLAY INFO (Kiri Bawah) ===
+        // Overlay init
         val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
         binding.tvOverlayInfo.text = infoText
-
-        // === 2. JALANKAN JAM LIVE (Kanan Bawah) ===
         startOverlayClock()
 
         return binding.root
@@ -286,8 +314,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     private fun startOverlayClock() {
         if (clockJob?.isActive == true) {
             val now = if (android.os.Build.VERSION.SDK_INT >= 26) {
-                java.time.ZonedDateTime.now()
-                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
+                ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
             } else {
                 SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
             }
@@ -297,16 +324,15 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
                 while (isActive) {
                     val now = if (android.os.Build.VERSION.SDK_INT >= 26) {
-                        java.time.ZonedDateTime.now()
-                            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
+                        ZonedDateTime.now()
+                            .format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
                     } else {
                         SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
                     }
                     binding.tvOverlayClock.text = now
-                    delay(1000) // Update setiap 1 detik
+                    delay(1000)
                 }
             }
-
         }
     }
 
@@ -316,6 +342,11 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             pivotY = focusY
             scaleX = currentScale
             scaleY = currentScale
+
+            if (currentScale <= 1.01f) {
+                translationX = 0f
+                translationY = 0f
+            }
         }
     }
 
@@ -342,32 +373,23 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     // ==========================================
     // VLC STREAMING LOGIC (ULTRA LOW LATENCY)
     // ==========================================
-
     private fun startVlcStream() {
         binding.pbLoadingImage.visibility = View.VISIBLE
         binding.vShutterImage.visibility = View.VISIBLE
 
         try {
             val options = ArrayList<String>().apply {
-                // 1. Koneksi Stabil
                 add("--rtsp-tcp")
-                add("--network-caching=0") // Buffer 400ms agar mulus di software decode
-                add("--live-caching=0")
-                add("--file-caching=0")
-
+                add("--network-caching=10")
+                add("--live-caching=10")
+                add("--file-caching=10")
                 add("--clock-jitter=0")
                 add("--clock-synchro=0")
-
+                add("--no-audio")
                 add("--no-stats")
                 add("--quiet")
-
-                // 2. SOFTWARE DECODE (Solusi Pamungkas untuk Mi Stick @ 720P)
-                add("--codec=all") // Paksa software decoder (jangan pakai avcodec-hw)
-
-                // 3. RENDERER (Solusi Anti-Blank Screen)
-                add("--vout=gles2") // Paksa OpenGL ES 2 renderer untuk TextureView
-
-                // 4. Optimasi performa
+                add("--codec=all")
+                add("--vout=gles2")
                 add("--drop-late-frames")
                 add("--skip-frames")
             }
@@ -377,11 +399,8 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
             val vout = mediaPlayer!!.vlcVout
             vout.setVideoView(textureView)
-
-            // Callback Surface (Interface IVLCVout.Callback diimplementasikan oleh Fragment ini)
             vout.addCallback(this)
 
-            // Listener Layout (Anonymous Inner Class - Fix Overrides Nothing)
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
                 override fun onNewVideoLayout(
                     vlcVout: IVLCVout?,
@@ -397,30 +416,27 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
                     textureView?.post {
                         if (!isAdded || textureView == null) return@post
-                        val container = binding.videoContainer
-                        val viewWidth = container.width
-                        val viewHeight = container.height
 
-                        val vidRatio = width.toFloat() / height.toFloat()
-                        val viewRatio = viewWidth.toFloat() / viewHeight.toFloat()
+                        // hitung aspect ratio yang benar
+                        val vW = if (visibleWidth > 0) visibleWidth else width
+                        val vH = if (visibleHeight > 0) visibleHeight else height
 
-                        // Pastikan video selalu CENTER di dalam FrameLayout.
-                        // Tanpa gravity CENTER, saat kita ubah ukuran TextureView (sesuai aspect ratio),
-                        // posisinya bisa "melorot" (terlihat terlalu ke bawah/ke samping) terutama di landscape.
-                        val lp = (textureView?.layoutParams as? FrameLayout.LayoutParams)
-                            ?: FrameLayout.LayoutParams(
-                                FrameLayout.LayoutParams.MATCH_PARENT,
-                                FrameLayout.LayoutParams.MATCH_PARENT
-                            )
-                        lp.gravity = Gravity.CENTER
-                        if (vidRatio > viewRatio) {
-                            lp?.width = viewWidth
-                            lp?.height = (viewWidth / vidRatio).toInt()
-                        } else {
-                            lp?.height = viewHeight
-                            lp?.width = (viewHeight * vidRatio).toInt()
+                        var dispW = vW.toFloat()
+                        val dispH = vH.toFloat()
+                        if (sarNum > 0 && sarDen > 0) {
+                            dispW = dispW * sarNum / sarDen
                         }
-                        textureView?.layoutParams = lp
+
+                        videoDisplayW = dispW
+                        videoDisplayH = dispH
+
+                        // pastikan TextureView full container, lalu fit-center via matrix
+                        textureView?.layoutParams = FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT
+                        )
+
+                        applyFitCenterTransform()
                     }
                 }
             })
@@ -430,13 +446,15 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             val pass = liveViewModel.rtspPassword.value ?: ""
             val finalUrl = if (user.isNotEmpty() && !rawUrl.contains("//$user")) {
                 rawUrl.replace("rtsp://", "rtsp://$user:$pass@")
-            } else {
-                rawUrl
-            }
+            } else rawUrl
 
-            val media = Media(libVlc, Uri.parse(finalUrl))
-            // Jangan aktifkan HW Decoder di sini karena kita pakai mode Software
-            // media.setHWDecoderEnabled(true, false) <--- DISABLE INI
+            val media = Media(libVlc, Uri.parse(finalUrl)).apply {
+                addOption(":network-caching=0")
+                addOption(":live-caching=0")
+                addOption(":clock-jitter=0")
+                addOption(":clock-synchro=0")
+                addOption(":no-audio")
+            }
             mediaPlayer?.media = media
             media.release()
 
@@ -482,13 +500,11 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     // ==========================================
     // RECORDING LOGIC
     // ==========================================
-
     private fun startVideoRecording() {
         val dir = videosDir ?: sessionDir ?: return
         val out = File(dir, "vid_${StorageUtils.timestampWIB()}.mp4")
         videoOutputFile = out
 
-        // 720p (Sesuai dengan stream input)
         val recWidth = 1280
         val recHeight = 720
 
@@ -555,13 +571,17 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     // ==== OVERLAY NAMA RS & NRM ====
     private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
+
         val formatted = if (android.os.Build.VERSION.SDK_INT >= 26)
             ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
 
         val canvas = Canvas(bitmap)
         val paintText = Paint().apply {
-            color = Color.WHITE; textSize = 36f; isAntiAlias = true; textAlign = Paint.Align.LEFT
+            color = Color.WHITE
+            textSize = 36f
+            isAntiAlias = true
+            textAlign = Paint.Align.LEFT
         }
         val paintBox = Paint().apply { color = Color.argb(128, 0, 0, 0); style = Paint.Style.FILL }
 
@@ -571,7 +591,8 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             bitmap.height.toFloat() - 60f,
             bitmap.width.toFloat(),
             bitmap.height.toFloat(),
-            Paint().apply { color = "#3F3F3F".toColorInt() })
+            Paint().apply { color = "#3F3F3F".toColorInt() }
+        )
         canvas.drawText(
             formatted,
             bitmap.width.toFloat() - 350f,
@@ -579,9 +600,8 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             paintText
         )
 
-        // Overlay Nama RS & NRM (Kiri Bawah) - Sesuai Request
+        // Overlay Nama RS & NRM (Kiri Bawah)
         canvas.drawRect(0f, bitmap.height.toFloat() - 65f, 650f, bitmap.height.toFloat(), paintBox)
-
         if (patientNrm.isEmpty()) {
             canvas.drawText("$patientRs", 20f, bitmap.height.toFloat() - 20f, paintText)
         } else {
@@ -612,7 +632,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         }
     }
 
-    // ==== IMPLEMENTASI IVLCVout.Callback (Untuk Surface) ====
+    // ==== IMPLEMENTASI IVLCVout.Callback ====
     override fun onSurfacesCreated(vlcVout: IVLCVout?) {}
     override fun onSurfacesDestroyed(vlcVout: IVLCVout?) {}
 
@@ -626,18 +646,10 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             .show()
     }
 
-    private fun showExitConfirmDialog() {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Selesaikan Sesi?")
-            .setMessage("Keluar dan selesaikan sesi?")
-            .setPositiveButton("Selesai") { _, _ -> stopStreamAndExit() }
-            .setNegativeButton("Batal", null)
-            .show()
-    }
-
     private fun enterSelectionMode() {
         selectionMode = true
-        binding.topAppBar.menu.clear(); binding.topAppBar.inflateMenu(R.menu.menu_video_fragment_select)
+        binding.topAppBar.menu.clear()
+        binding.topAppBar.inflateMenu(R.menu.menu_video_fragment_select)
         binding.topAppBar.title = "0 dipilih"
         binding.topAppBar.setOnMenuItemClickListener {
             if (it.itemId == R.id.action_delete_selected) confirmDeleteSelected()
@@ -654,14 +666,16 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             .setTitle("Hapus ${files.size} item?")
             .setPositiveButton("Hapus") { _, _ ->
                 files.forEach { runCatching { it.delete() } }
-                refreshThumbs(); exitSelectionMode()
+                refreshThumbs()
+                exitSelectionMode()
             }
             .setNegativeButton("Batal", null).show()
     }
 
     private fun exitSelectionMode() {
         selectionMode = false
-        binding.topAppBar.menu.clear(); binding.topAppBar.inflateMenu(R.menu.menu_video_fragment)
+        binding.topAppBar.menu.clear()
+        binding.topAppBar.inflateMenu(R.menu.menu_video_fragment)
         binding.topAppBar.title = "Cervexa Colposcope"
         binding.topAppBar.setOnMenuItemClickListener {
             if (it.itemId == R.id.action_info_pasien) showPatientInfoBottomSheet()
@@ -677,12 +691,11 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             File(parent, "Snapshots").listFiles { f -> f.extension.equals("jpg", true) }.orEmpty()
         val vids =
             File(parent, "Video").listFiles { f -> f.extension.equals("mp4", true) }.orEmpty()
-        val merged = (imgs.map { MediaItem(it, MediaType.IMAGE) } + vids.map {
-            MediaItem(
-                it,
-                MediaType.VIDEO
-            )
-        }).sortedByDescending { it.file.lastModified() }
+
+        val merged = (imgs.map { MediaItem(it, MediaType.IMAGE) } +
+                vids.map { MediaItem(it, MediaType.VIDEO) })
+            .sortedByDescending { it.file.lastModified() }
+
         allMediaItems = merged
 
         val isEmpty = merged.isEmpty()
@@ -691,17 +704,14 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         binding.tvImgSubtitleNoMedia?.visibility = if (isEmpty) View.VISIBLE else View.GONE
         binding.rvThumbs.visibility = if (isEmpty) View.GONE else View.VISIBLE
         binding.btnSimpanCase.visibility = if (isEmpty) View.GONE else View.VISIBLE
+
         thumbsAdapter.submitList(merged)
     }
 
     private fun showPatientInfoBottomSheet() {
-        val dialog = BottomSheetDialog(requireContext()); dialog.setContentView(
-            layoutInflater.inflate(
-                R.layout.bs_patient_info,
-                null
-            )
-        )
-        // Setup Views in BS
+        val dialog = BottomSheetDialog(requireContext())
+        dialog.setContentView(layoutInflater.inflate(R.layout.bs_patient_info, null))
+
         val btnClose = dialog.findViewById<ImageButton>(R.id.btnClose)
         val tvNama = dialog.findViewById<TextView>(R.id.tvNama)
         val tvNik = dialog.findViewById<TextView>(R.id.tvNik)
@@ -709,7 +719,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         val tvNrm = dialog.findViewById<TextView>(R.id.tvNrm)
         val tvTanggal = dialog.findViewById<TextView>(R.id.tvTanggal)
 
-        // Isi data AKTUAL
         val sdfNow = SimpleDateFormat("d MMMM yyyy, HH:mm", Locale("id", "ID")).apply {
             timeZone = TimeZone.getTimeZone("Asia/Jakarta")
         }
@@ -725,7 +734,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         tvNrm?.text = patientNrm.ifBlank { "Tidak ada nomor rekam medis" }
 
         btnClose?.setOnClickListener { dialog.dismiss() }
-
         dialog.show()
     }
 
@@ -735,11 +743,13 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             MaterialAlertDialogBuilder(requireContext()).setView(pv).setCancelable(false).create()
         pd.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
         pd.show()
+
         val bar = pv.findViewById<LinearProgressIndicator>(R.id.progress)
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
             repeat(10) { bar.setProgressCompat((it + 1) * 10, true); delay(50) }
             withContext(Dispatchers.IO) { delay(500) }
-            pd.dismiss(); showSaveSuccessDialog()
+            pd.dismiss()
+            showSaveSuccessDialog()
         }
     }
 
@@ -748,19 +758,11 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         val d = MaterialAlertDialogBuilder(requireContext()).setView(v).create()
         d.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
         d.show()
+
         val tvAction = v.findViewById<TextView>(R.id.tvAction)
         if (tvAction != null) {
-            // 1. Wajib untuk Remote TV (D-Pad) agar bisa disorot
             tvAction.isFocusable = true
-
-            // 2. JANGAN aktifkan ini agar Mouse bisa "Sekali Klik"
-            // tvAction.isFocusableInTouchMode = true  <-- HAPUS / KOMENTAR INI
-
-            // 3. Pastikan bisa diklik (Mouse & Jari)
             tvAction.isClickable = true
-
-            // 4. (Opsional) Auto-focus agar user Remote tidak perlu geser kursor
-            // Tapi kalau mouse digerakkan, fokus akan hilang (ini normal)
             tvAction.requestFocus()
 
             tvAction.setOnClickListener {
@@ -772,12 +774,10 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         }
     }
 
-    // === TAMBAHAN: Fungsi untuk buka preview yang support Landscape (TV) ===
     private fun openPreview(position: Int) {
         val paths = ArrayList(allMediaItems.map { it.file.absolutePath })
         val types = ArrayList(allMediaItems.map { it.type.name })
 
-        // Cek apakah mode Landscape (TV) atau Portrait (HP)
         val targetActivity = if (isLandscape()) {
             com.idn.kmed.cervexa.gallery.MediaPagerActivityLand::class.java
         } else {
@@ -788,7 +788,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             putStringArrayListExtra("paths", paths)
             putStringArrayListExtra("types", types)
             putExtra("index", position)
-            putExtra("forceLandscape", isLandscape()) // Kirim flag landscape
+            putExtra("forceLandscape", isLandscape())
         }
         startActivity(intent)
     }

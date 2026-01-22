@@ -1,17 +1,20 @@
 package com.idn.kmed.cervexa
 
+import android.Manifest
 import android.app.UiModeManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageButton
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.ActionMenuView
 import androidx.appcompat.widget.Toolbar
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.view.children
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.RecyclerView
@@ -24,6 +27,9 @@ class HomeActivity : AppCompatActivity() {
 
     private lateinit var wifiViewModel: WifiViewModel
 
+    // Kode unik untuk request permission
+    private val REQ_PERMISSION_CONN = 2201
+
     // Helper untuk mendeteksi apakah ini TV
     private val isTvDevice: Boolean
         get() {
@@ -35,19 +41,23 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_home)
 
+        // 1. REQUEST PERMISSIONS DI AWAL (CRITICAL)
+        // Agar WifiMonitor bisa langsung membaca SSID tanpa menunggu user klik tombol connect
+        checkAndRequestPermissions()
+
         wifiViewModel = ViewModelProvider(this)[WifiViewModel::class.java]
 
-        // ✅ START WifiMonitor
-        WifiMonitor.init(this) { /* callback SSID lama tidak dipakai */ }
+        // 2. START WifiMonitor
+        WifiMonitor.init(this) { /* callback SSID sederhana (tidak dipakai krn ada ViewModel) */ }
         WifiMonitor.setOnStatusChanged { status ->
             wifiViewModel.updateStatus(status)
         }
 
-        // 1. SETUP TOOLBAR & MENU
+        // 3. SETUP TOOLBAR & MENU
         val toolbar =
             findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
 
-        // Listener Menu (sesuai toolbar.xml yang Anda kirim)
+        // Listener Menu
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_system_info -> {
@@ -67,7 +77,7 @@ class HomeActivity : AppCompatActivity() {
             setupToolbarForTv(toolbar)
         }
 
-        // 2. CEK ONBOARDING
+        // 4. CEK ONBOARDING
         val prefs = getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
         if (!prefs.getBoolean("on_boarding", false)) {
             startActivity(Intent(this, OnboardingActivity::class.java).apply {
@@ -76,7 +86,7 @@ class HomeActivity : AppCompatActivity() {
             finish(); return
         }
 
-        // 3. SETUP BOTTOM NAVIGATION
+        // 5. SETUP BOTTOM NAVIGATION
         val bottom = findViewById<BottomNavigationView>(R.id.nav_view)
 
         // [TV OPTIMIZATION] Setup Navigasi Bawah Remote
@@ -100,7 +110,7 @@ class HomeActivity : AppCompatActivity() {
             }
         }
 
-        // 4. HANDLE INTENT / DEFAULT FRAGMENT
+        // 6. HANDLE INTENT / DEFAULT FRAGMENT
         val openTab = intent.getStringExtra("open_tab")
         if (openTab == "media") {
             showFragment(MediaListFragment())
@@ -119,12 +129,71 @@ class HomeActivity : AppCompatActivity() {
     }
 
     // ==========================================
+    // PERMISSIONS LOGIC (SESUAI MANIFEST)
+    // ==========================================
+    private fun checkAndRequestPermissions() {
+        // Cek versi Android untuk menentukan permission mana yang diminta
+        if (Build.VERSION.SDK_INT >= 33) {
+            // Android 13 (Tiramisu) ke atas: Butuh NEARBY_WIFI_DEVICES
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.NEARBY_WIFI_DEVICES
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES),
+                    REQ_PERMISSION_CONN
+                )
+            }
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                    REQ_PERMISSION_CONN
+                )
+            }
+        } else {
+            // Android 12 (S) ke bawah: Butuh FINE_LOCATION untuk baca SSID
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                    REQ_PERMISSION_CONN
+                )
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        // Teruskan hasil ke WifiMonitor
+        WifiMonitor.handlePermissionResult(requestCode, grantResults, this)
+
+        // Jika permission diberikan, paksa refresh status Wi-Fi segera
+        // Ini memastikan status "Unknown SSID" langsung berubah jadi nama SSID
+        if (requestCode == REQ_PERMISSION_CONN && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            WifiMonitor.init(this) { }
+        }
+    }
+
+    // ==========================================
     // LOGIKA KHUSUS TV (REMOTE CONTROL)
     // ==========================================
 
-    /**
-     * Mencari tombol 'More Options' (Overflow) di Toolbar dan mengaktifkan fokus + background.
-     */
     private fun setupToolbarForTv(toolbar: Toolbar) {
         toolbar.isFocusable = false
 
@@ -157,7 +226,6 @@ class HomeActivity : AppCompatActivity() {
                 btn.setPadding(p, p, p, p)
 
                 // --- [FIX NAVIGASI TURUN] ---
-                // Saat tekan BAWAH dari titik tiga, paksa pindah ke elemen Fragment
                 btn.setOnKeyListener { _, keyCode, event ->
                     if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                         return@setOnKeyListener moveFocusToFragmentContent()
@@ -169,14 +237,14 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun moveFocusToFragmentContent(): Boolean {
-        // A. Cek jika sedang di Home Dashboard (Cari tombol Connect)
+        // A. Cek Home Dashboard
         val btnConnect = findViewById<View>(R.id.btn_connect)
         if (btnConnect != null && btnConnect.isShown) {
             btnConnect.requestFocus()
             return true
         }
 
-        // B. Cek jika sedang di Media List (Cari Search Bar atau List)
+        // B. Cek Media List
         val searchView = findViewById<View>(R.id.searchView)
         if (searchView != null && searchView.isShown) {
             searchView.requestFocus()
@@ -192,9 +260,7 @@ class HomeActivity : AppCompatActivity() {
         return false
     }
 
-    /** Helper untuk mendeteksi apakah view adalah tombol overflow (titik tiga) */
     private fun isOverflowButton(view: View): Boolean {
-        // Cek deskripsi konten standar Android ("More options") atau nama class
         return view.contentDescription == "More options" ||
                 view.javaClass.simpleName.contains("OverflowMenuButton")
     }
@@ -207,7 +273,6 @@ class HomeActivity : AppCompatActivity() {
         menuView?.children?.forEachIndexed { index, child ->
             child.isFocusable = true
             child.isFocusableInTouchMode = true
-            // Padding agar fokus ring tidak terlalu mepet
             child.setPadding(0, 16, 0, 16)
 
             // 1. Sync Tabs saat Fokus
@@ -230,34 +295,26 @@ class HomeActivity : AppCompatActivity() {
             // 2. Navigasi Tombol ATAS (DPAD_UP)
             child.setOnKeyListener { _, keyCode, event ->
                 if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                    // Prioritas: Cek elemen konten dulu (Search / Tombol Connect / List)
-
-                    // Cek elemen di HomeDashboardFragment
                     val btnConnect = findViewById<View>(R.id.btn_connect)
                     if (btnConnect != null && btnConnect.isShown) {
                         btnConnect.requestFocus()
                         return@setOnKeyListener true
                     }
 
-                    // Cek elemen di MediaListFragment (RecyclerView)
                     val rvMedia = findViewById<RecyclerView>(R.id.rv)
                     if (rvMedia != null && rvMedia.isShown && rvMedia.adapter != null && rvMedia.adapter!!.itemCount > 0) {
                         rvMedia.requestFocus()
                         return@setOnKeyListener true
                     }
 
-                    // Cek elemen di MediaListFragment (Search Bar)
                     val searchView = findViewById<View>(R.id.searchView)
                     if (searchView != null && searchView.isShown) {
                         searchView.requestFocus()
                         return@setOnKeyListener true
                     }
 
-                    // Kalau tidak ada konten yg bisa fokus, coba lari ke Toolbar (Titik Tiga)
                     val toolbar = findViewById<Toolbar>(R.id.topAppBar)
-                    toolbar?.requestLayout() // pancing layout refresh
-                    // Kita tidak bisa requestFocus ke toolbar langsung karena isFocusable=false,
-                    // tapi sistem akan mencari anak toolbar yang focusable (tombol overflow yang sudah kita setup)
+                    toolbar?.requestLayout()
                 }
                 false
             }
@@ -268,14 +325,5 @@ class HomeActivity : AppCompatActivity() {
         supportFragmentManager.beginTransaction()
             .replace(R.id.navHost, f)
             .commit()
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        WifiMonitor.handlePermissionResult(requestCode, grantResults, this)
     }
 }

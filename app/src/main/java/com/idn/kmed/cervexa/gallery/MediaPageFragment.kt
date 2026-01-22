@@ -4,6 +4,8 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,6 +18,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.Fragment
 import com.github.chrisbanes.photoview.PhotoView
 import com.idn.kmed.cervexa.R
+import androidx.exifinterface.media.ExifInterface
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -75,7 +78,14 @@ class MediaPageFragment : Fragment() {
             photo.minimumScale = 1f
             photo.mediumScale = 2.5f
             photo.maximumScale = 5f
-            photo.setImageURI(Uri.fromFile(file))
+            // Gunakan bitmap + EXIF rotation agar hasil landscape tidak "miring" / ter-rotate
+            runCatching {
+                val bmp = decodeBitmapWithExifRotation(file)
+                photo.setImageBitmap(bmp)
+            }.onFailure {
+                // fallback
+                photo.setImageURI(Uri.fromFile(file))
+            }
 
             val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("id", "ID"))
             tvInfoRight.text = dateFormat.format(Date(file.lastModified()))
@@ -129,9 +139,15 @@ class MediaPageFragment : Fragment() {
                         val h = mp.videoHeight
                         if (w > 0 && h > 0) {
                             val lp = video.layoutParams as ConstraintLayout.LayoutParams
-                            lp.dimensionRatio = "$w:$h"
+                            // Jika video punya metadata rotasi 90/270, ratio harus dibalik.
+                            val rot = getVideoRotationDeg(file)
+                            if (rot == 90 || rot == 270) lp.dimensionRatio = "$h:$w" else lp.dimensionRatio = "$w:$h"
                             video.layoutParams = lp
                         }
+
+                        // Terapkan rotasi ke view (VideoView adalah View, jadi rotation property bisa dipakai)
+                        val rot = getVideoRotationDeg(file)
+                        if (rot != 0) video.rotation = rot.toFloat()
                         mp.isLooping = true
 
                         // Mulai video dan sembunyikan overlay agar bersih
@@ -182,6 +198,41 @@ class MediaPageFragment : Fragment() {
                 retriever.release()
             } catch (e: Exception) {
             }
+        }
+    }
+
+    private fun decodeBitmapWithExifRotation(file: File): android.graphics.Bitmap {
+        val bmp = BitmapFactory.decodeFile(file.absolutePath)
+            ?: throw IllegalStateException("Gagal decode bitmap")
+
+        val exif = ExifInterface(file)
+        val orientation = exif.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+        )
+        val rot = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270
+            else -> 0
+        }
+        if (rot == 0) return bmp
+
+        val m = Matrix().apply { postRotate(rot.toFloat()) }
+        return android.graphics.Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+    }
+
+    private fun getVideoRotationDeg(file: File): Int {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            val rot = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                ?.toIntOrNull() ?: 0
+            ((rot % 360) + 360) % 360
+        } catch (_: Exception) {
+            0
+        } finally {
+            runCatching { retriever.release() }
         }
     }
 }

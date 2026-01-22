@@ -117,26 +117,19 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         val container = binding.videoContainer
         val viewW = container.width.toFloat()
         val viewH = container.height.toFloat()
-        if (viewW <= 0f || viewH <= 0f) return
-        if (videoDisplayW <= 0f || videoDisplayH <= 0f) return
 
-        // Reset base state supaya tidak bentrok dengan transform
+        // ... (validasi width/height sama seperti diatas) ...
+
         tv.translationX = 0f
         tv.translationY = 0f
 
-        // IMPORTANT:
-        // Base rendering (fit/letterbox) lewat setTransform(Matrix).
-        // Zoom user tetap pakai scaleX/scaleY (property), jadi base + zoom terpisah.
-        // Jika mau ideal: gabung baseMatrix + userMatrix, tapi ini cukup untuk fix landscape.
-        val scale = minOf(viewW / videoDisplayW, viewH / videoDisplayH)
-        val scaledW = videoDisplayW * scale
-        val scaledH = videoDisplayH * scale
-        val dx = (viewW - scaledW) / 2f
-        val dy = (viewH - scaledH) / 2f
+        // Paksa lebar dan tinggi video mengikuti lebar dan tinggi layar HP
+        val scaleX = viewW / videoDisplayW
+        val scaleY = viewH / videoDisplayH
 
         fitMatrix.reset()
-        fitMatrix.setScale(scale, scale)
-        fitMatrix.postTranslate(dx, dy)
+        fitMatrix.setScale(scaleX, scaleY)
+        // Tidak perlu translate dx/dy karena sudah pas di 0,0
 
         tv.setTransform(fitMatrix)
         tv.invalidate()

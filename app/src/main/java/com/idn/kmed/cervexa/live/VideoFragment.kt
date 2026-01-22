@@ -93,6 +93,10 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     private var focusX = 0f
     private var focusY = 0f
 
+    // ==== DEBUG PLACEHOLDER ====
+    private var debugPlaceholder: View? = null
+    private var useDebugPlaceholder = false // Set false untuk disable
+
     private val prefs by lazy {
         requireContext().getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
     }
@@ -118,21 +122,269 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         val viewW = container.width.toFloat()
         val viewH = container.height.toFloat()
 
-        // ... (validasi width/height sama seperti diatas) ...
+        // Validasi ukuran container
+        if (viewW <= 0f || viewH <= 0f) {
+            Log.w(TAG, "Container size invalid: ${viewW}x${viewH}")
+            return
+        }
 
+        // Validasi ukuran video
+        if (videoDisplayW <= 0f || videoDisplayH <= 0f) {
+            Log.w(TAG, "Video size invalid: ${videoDisplayW}x${videoDisplayH}")
+            return
+        }
+
+        // Reset translasi
         tv.translationX = 0f
         tv.translationY = 0f
 
-        // Paksa lebar dan tinggi video mengikuti lebar dan tinggi layar HP
-        val scaleX = viewW / videoDisplayW
-        val scaleY = viewH / videoDisplayH
+        // Hitung aspect ratio
+        val videoAspect = videoDisplayW / videoDisplayH
+        val viewAspect = viewW / viewH
 
+        val scaleX: Float
+        val scaleY: Float
+
+        if (videoAspect > viewAspect) {
+            // Video lebih lebar - fit by width
+            scaleX = viewW / videoDisplayW
+            scaleY = scaleX
+        } else {
+            // Video lebih tinggi - fit by height
+            scaleY = viewH / videoDisplayH
+            scaleX = scaleY
+        }
+
+        // Aplikasikan matrix transform
         fitMatrix.reset()
         fitMatrix.setScale(scaleX, scaleY)
-        // Tidak perlu translate dx/dy karena sudah pas di 0,0
+
+        // Center video di container
+        val scaledW = videoDisplayW * scaleX
+        val scaledH = videoDisplayH * scaleY
+        val dx = (viewW - scaledW) / 2f
+        val dy = (viewH - scaledH) / 2f
+
+        fitMatrix.postTranslate(dx, dy)
 
         tv.setTransform(fitMatrix)
         tv.invalidate()
+
+        Log.d(
+            TAG, "Transform applied - Video: ${videoDisplayW}x${videoDisplayH}, " +
+                    "View: ${viewW}x${viewH}, Scale: ${scaleX}x${scaleY}"
+        )
+    }
+
+    // ==========================================
+    // DEBUG PLACEHOLDER
+    // ==========================================
+    private fun showDebugPlaceholder() {
+        if (!useDebugPlaceholder) return
+
+        // Hapus placeholder lama jika ada
+        debugPlaceholder?.let { binding.videoContainer.removeView(it) }
+
+        // Buat placeholder baru
+        val placeholder = View(requireContext()).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+
+            // Buat pattern kotak-kotak untuk debugging
+            setBackgroundDrawable(object : android.graphics.drawable.Drawable() {
+                override fun draw(canvas: Canvas) {
+                    val paint = Paint()
+
+                    // Background hitam
+                    paint.color = Color.BLACK
+                    canvas.drawRect(bounds, paint)
+
+                    // Grid putih
+                    paint.color = Color.WHITE
+                    paint.strokeWidth = 2f
+                    val gridSize = 100f
+
+                    // Vertikal lines
+                    var x = 0f
+                    while (x < bounds.width()) {
+                        canvas.drawLine(x, 0f, x, bounds.height().toFloat(), paint)
+                        x += gridSize
+                    }
+
+                    // Horizontal lines
+                    var y = 0f
+                    while (y < bounds.height()) {
+                        canvas.drawLine(0f, y, bounds.width().toFloat(), y, paint)
+                        y += gridSize
+                    }
+
+                    // Garis tengah (merah vertikal, biru horizontal)
+                    paint.strokeWidth = 4f
+                    paint.color = Color.RED
+                    canvas.drawLine(
+                        bounds.width() / 2f, 0f,
+                        bounds.width() / 2f, bounds.height().toFloat(),
+                        paint
+                    )
+
+                    paint.color = Color.BLUE
+                    canvas.drawLine(
+                        0f, bounds.height() / 2f,
+                        bounds.width().toFloat(), bounds.height() / 2f,
+                        paint
+                    )
+
+                    // Diagonal corners (hijau)
+                    paint.color = Color.GREEN
+                    paint.strokeWidth = 3f
+                    val cornerSize = 100f
+
+                    // Top-left
+                    canvas.drawLine(0f, 0f, cornerSize, 0f, paint)
+                    canvas.drawLine(0f, 0f, 0f, cornerSize, paint)
+
+                    // Top-right
+                    canvas.drawLine(
+                        bounds.width().toFloat(),
+                        0f,
+                        bounds.width() - cornerSize,
+                        0f,
+                        paint
+                    )
+                    canvas.drawLine(
+                        bounds.width().toFloat(),
+                        0f,
+                        bounds.width().toFloat(),
+                        cornerSize,
+                        paint
+                    )
+
+                    // Bottom-left
+                    canvas.drawLine(
+                        0f,
+                        bounds.height().toFloat(),
+                        cornerSize,
+                        bounds.height().toFloat(),
+                        paint
+                    )
+                    canvas.drawLine(
+                        0f,
+                        bounds.height().toFloat(),
+                        0f,
+                        bounds.height() - cornerSize,
+                        paint
+                    )
+
+                    // Bottom-right
+                    canvas.drawLine(
+                        bounds.width().toFloat(), bounds.height().toFloat(),
+                        bounds.width() - cornerSize, bounds.height().toFloat(), paint
+                    )
+                    canvas.drawLine(
+                        bounds.width().toFloat(), bounds.height().toFloat(),
+                        bounds.width().toFloat(), bounds.height() - cornerSize, paint
+                    )
+
+                    // Text info di tengah
+                    paint.color = Color.YELLOW
+                    paint.textSize = 40f
+                    paint.textAlign = Paint.Align.CENTER
+                    paint.style = Paint.Style.FILL
+                    paint.isFakeBoldText = true
+
+                    val text = "${bounds.width()} x ${bounds.height()}"
+                    canvas.drawText(
+                        text,
+                        bounds.width() / 2f,
+                        bounds.height() / 2f - 50f,
+                        paint
+                    )
+
+                    paint.textSize = 30f
+                    canvas.drawText(
+                        "DEBUG PLACEHOLDER",
+                        bounds.width() / 2f,
+                        bounds.height() / 2f + 50f,
+                        paint
+                    )
+
+                    // Simulasi aspect ratio 16:9 (1280x720)
+                    paint.color = Color.CYAN
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 5f
+
+                    val videoW = 1280f
+                    val videoH = 720f
+                    val videoAspect = videoW / videoH
+                    val viewW = bounds.width().toFloat()
+                    val viewH = bounds.height().toFloat()
+                    val viewAspect = viewW / viewH
+
+                    val rectW: Float
+                    val rectH: Float
+
+                    if (videoAspect > viewAspect) {
+                        rectW = viewW
+                        rectH = viewW / videoAspect
+                    } else {
+                        rectH = viewH
+                        rectW = viewH * videoAspect
+                    }
+
+                    val left = (viewW - rectW) / 2f
+                    val top = (viewH - rectH) / 2f
+
+                    canvas.drawRect(left, top, left + rectW, top + rectH, paint)
+
+                    paint.textSize = 25f
+                    paint.style = Paint.Style.FILL
+                    canvas.drawText(
+                        "Expected 1280x720 area",
+                        bounds.width() / 2f,
+                        top - 20f,
+                        paint
+                    )
+
+                    // Info orientasi
+                    paint.textSize = 20f
+                    paint.color = Color.WHITE
+                    val orientation = if (isLandscape()) "LANDSCAPE" else "PORTRAIT"
+                    canvas.drawText(
+                        "Orientation: $orientation",
+                        bounds.width() / 2f,
+                        bounds.height() - 50f,
+                        paint
+                    )
+                }
+
+                override fun setAlpha(alpha: Int) {}
+                override fun setColorFilter(colorFilter: ColorFilter?) {}
+                override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
+            })
+        }
+
+        debugPlaceholder = placeholder
+        binding.videoContainer.addView(placeholder, 0) // Add di bawah TextureView
+
+        Log.d(TAG, "Debug placeholder shown")
+    }
+
+    private fun toggleDebugMode() {
+//        useDebugPlaceholder = !useDebugPlaceholder
+        if (debugPlaceholder != null) {
+            // Hapus placeholder, mulai stream asli
+            debugPlaceholder?.let { binding.videoContainer.removeView(it) }
+            debugPlaceholder = null
+            startVlcStream()
+            Toast.makeText(requireContext(), "Debug OFF - Camera ON", Toast.LENGTH_SHORT).show()
+        } else {
+            // Stop stream, tampilkan placeholder
+            stopVlcStream()
+            showDebugPlaceholder()
+            Toast.makeText(requireContext(), "Debug ON - Camera OFF", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -160,6 +412,8 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     override fun onDestroyView() {
         super.onDestroyView()
         clockJob?.cancel()
+        debugPlaceholder?.let { binding.videoContainer.removeView(it) }
+        debugPlaceholder = null
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -252,6 +506,12 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         binding.btnRecordVideo.setOnClickListener {
             if (record.get()) stopVideoRecording() else startVideoRecording()
         }
+
+        // Long press untuk toggle debug mode
+//        binding.btnBackLite?.setOnLongClickListener {
+//            toggleDebugMode()
+//            true
+//        }
 
         // Back button
         requireActivity().onBackPressedDispatcher.addCallback(
@@ -347,7 +607,11 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         super.onResume()
         updateStatusBarColor()
         liveViewModel.loadParams(requireContext())
-        if (mediaPlayer == null || mediaPlayer?.isPlaying == false) startVlcStream()
+        if (useDebugPlaceholder) {
+            showDebugPlaceholder()
+        } else if (mediaPlayer == null || mediaPlayer?.isPlaying == false) {
+            startVlcStream()
+        }
     }
 
     override fun onPause() {
@@ -355,7 +619,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         updateStatusBarColor()
         liveViewModel.saveParams(requireContext())
         if (record.get()) stopVideoRecording()
-        stopVlcStream()
+        if (!useDebugPlaceholder) stopVlcStream()
     }
 
     private fun updateStatusBarColor() {
@@ -367,6 +631,15 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     // VLC STREAMING LOGIC (ULTRA LOW LATENCY)
     // ==========================================
     private fun startVlcStream() {
+        if (useDebugPlaceholder) {
+            // Mode debug: tampilkan placeholder saja
+            binding.pbLoadingImage.visibility = View.GONE
+            binding.vShutterImage.visibility = View.GONE
+            showDebugPlaceholder()
+            binding.tvStatusImage?.text = "DEBUG MODE - Placeholder Active"
+            return
+        }
+
         binding.pbLoadingImage.visibility = View.VISIBLE
         binding.vShutterImage.visibility = View.VISIBLE
 
@@ -410,12 +683,14 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                     textureView?.post {
                         if (!isAdded || textureView == null) return@post
 
-                        // hitung aspect ratio yang benar
+                        // Hitung aspect ratio yang benar
                         val vW = if (visibleWidth > 0) visibleWidth else width
                         val vH = if (visibleHeight > 0) visibleHeight else height
 
                         var dispW = vW.toFloat()
-                        val dispH = vH.toFloat()
+                        var dispH = vH.toFloat()
+
+                        // Apply SAR (Sample Aspect Ratio)
                         if (sarNum > 0 && sarDen > 0) {
                             dispW = dispW * sarNum / sarDen
                         }
@@ -423,7 +698,12 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                         videoDisplayW = dispW
                         videoDisplayH = dispH
 
-                        // pastikan TextureView full container, lalu fit-center via matrix
+                        Log.d(
+                            TAG, "Video layout: ${width}x${height}, visible: ${vW}x${vH}, " +
+                                    "SAR: ${sarNum}:${sarDen}, display: ${dispW}x${dispH}"
+                        )
+
+                        // Set TextureView full container
                         textureView?.layoutParams = FrameLayout.LayoutParams(
                             FrameLayout.LayoutParams.MATCH_PARENT,
                             FrameLayout.LayoutParams.MATCH_PARENT

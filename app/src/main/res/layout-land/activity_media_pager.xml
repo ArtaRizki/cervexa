@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/root"
@@ -9,16 +8,15 @@
     android:background="@color/colorWhite"
     tools:context=".gallery.MediaPagerActivity">
 
-    <!-- AppBar -->
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBar"
-        android:visibility="gone"
-        android:background="@color/colorWhite"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:background="@color/colorWhite"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
@@ -26,26 +24,24 @@
             android:layout_height="?attr/actionBarSize"
             app:navigationIcon="@drawable/baseline_arrow_back_24"
             app:titleTextColor="@color/colorBlack"
-            tools:title="Image_17_06_2025 10:12:49.jpg"/>
+            tools:title="Image.jpg" />
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- Konten: ganti isi dengan ViewPager2 -->
     <FrameLayout
         android:id="@+id/pagerContainer"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@android:color/black"
-        app:layout_constraintTop_toBottomOf="@id/appBar"
-        app:layout_constraintBottom_toTopOf="@id/bottomShare"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toTopOf="parent">
 
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/pager"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"/>
+            android:layout_height="match_parent" />
 
-        <!-- Chip index -->
         <com.google.android.material.chip.Chip
             android:id="@+id/chipIndex"
             style="@style/Widget.Material3.Chip.Assist"
@@ -55,71 +51,41 @@
             android:layout_marginTop="40dp"
             android:background="@android:color/transparent"
             android:elevation="2dp"
-            android:text="5/6"
+            android:text="1/1"
             android:textColor="@color/colorWhite" />
 
         <ImageView
-            android:id="@id/bottomShare"
+            android:id="@+id/btnShare"
             android:layout_width="32dp"
             android:layout_height="32dp"
-            android:contentDescription="Bagikan"
-            android:src="@drawable/ic_menu_share_24"
             android:layout_gravity="top|end"
             android:layout_margin="40dp"
+            android:contentDescription="Bagikan"
+            android:src="@drawable/ic_menu_share_24"
             app:tint="@android:color/white" />
 
         <ImageView
             android:id="@+id/btnExitLandscap"
             android:layout_width="32dp"
             android:layout_height="32dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="30dp"
+            android:layout_marginBottom="90dp"
             android:contentDescription="Exit Landscape"
             android:src="@drawable/mingcute_fullscreen_exit_2_line"
-            android:layout_gravity="bottom|end"
-            android:layout_marginTop="30dp"
-            android:layout_marginRight="30dp"
-            android:layout_marginBottom="90dp"
             app:tint="@android:color/white" />
 
         <ImageButton
             android:id="@+id/btnBackLite"
             android:layout_width="40dp"
             android:layout_height="40dp"
+            android:layout_gravity="top|start"
             android:layout_margin="12dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Kembali"
             android:src="@drawable/baseline_arrow_back_24"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
             app:tint="@android:color/white" />
+
     </FrameLayout>
-
-    <!-- Bottom share -->
-    <LinearLayout
-        android:visibility="gone"
-        android:id="@+id/bottomShare"
-        android:layout_width="0dp"
-        android:layout_height="88dp"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:background="@color/colorWhite"
-        android:elevation="8dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
-
-        <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_menu_share_24"
-            android:contentDescription="Bagikan"
-            app:tint="#616161" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Bagikan"
-            android:textColor="#616161"
-            android:textSize="12sp"/>
-    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

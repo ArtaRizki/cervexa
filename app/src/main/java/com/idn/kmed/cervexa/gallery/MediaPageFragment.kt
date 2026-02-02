@@ -14,7 +14,6 @@ import android.widget.MediaController
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.Fragment
 import com.github.chrisbanes.photoview.PhotoView
 import com.idn.kmed.cervexa.R
@@ -135,20 +134,52 @@ class MediaPageFragment : Fragment() {
                     videoMode.setOnClickListener { togglePlay() }
 
                     video.setOnPreparedListener { mp ->
-                        val w = mp.videoWidth
-                        val h = mp.videoHeight
-                        if (w > 0 && h > 0) {
-                            val lp = video.layoutParams as ConstraintLayout.LayoutParams
-                            // Jika video punya metadata rotasi 90/270, ratio harus dibalik.
-                            val rot = getVideoRotationDeg(file)
-                            if (rot == 90 || rot == 270) lp.dimensionRatio = "$h:$w" else lp.dimensionRatio = "$w:$h"
-                            video.layoutParams = lp
-                        }
-
-                        // Terapkan rotasi ke view (VideoView adalah View, jadi rotation property bisa dipakai)
+                        val srcW = mp.videoWidth
+                        val srcH = mp.videoHeight
                         val rot = getVideoRotationDeg(file)
-                        if (rot != 0) video.rotation = rot.toFloat()
+
                         mp.isLooping = true
+
+                        // Fit-center video ke dalam parent (tanpa pakai dimensionRatio) agar tidak "miring" di landscape.
+                        video.post {
+                            if (!isAdded) return@post
+
+                            val parent = (video.parent as? View) ?: return@post
+                            val parentW = parent.width
+                            val parentH = parent.height
+                            if (parentW <= 0 || parentH <= 0 || srcW <= 0 || srcH <= 0) return@post
+
+                            // Kalau rotasi 90/270, dimensi tampilan kebalik
+                            val dispW = if (rot == 90 || rot == 270) srcH else srcW
+                            val dispH = if (rot == 90 || rot == 270) srcW else srcH
+
+                            val videoRatio = dispW.toFloat() / dispH.toFloat()
+                            val parentRatio = parentW.toFloat() / parentH.toFloat()
+
+                            val targetW: Int
+                            val targetH: Int
+                            if (parentRatio > videoRatio) {
+                                // Parent lebih lebar -> mentok tinggi
+                                targetH = parentH
+                                targetW = (parentH * videoRatio).toInt()
+                            } else {
+                                // Parent lebih tinggi -> mentok lebar
+                                targetW = parentW
+                                targetH = (parentW / videoRatio).toInt()
+                            }
+
+                            video.layoutParams = video.layoutParams.apply {
+                                width = targetW
+                                height = targetH
+                            }
+
+                            // center di parent
+                            video.translationX = (parentW - targetW) / 2f
+                            video.translationY = (parentH - targetH) / 2f
+
+                            // Terapkan rotasi (kalau ada)
+                            video.rotation = rot.toFloat()
+                        }
 
                         // Mulai video dan sembunyikan overlay agar bersih
                         video.start()

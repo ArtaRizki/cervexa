@@ -687,6 +687,13 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         try {
             vout.detachViews()
             vout.setVideoView(textureView)
+
+            // ===== KEY: Set window size sesuai container =====
+            vout.setWindowSize(
+                binding.videoContainer.width,
+                binding.videoContainer.height
+            )
+
             vout.addCallback(this)
 
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
@@ -699,21 +706,49 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                     textureView?.post {
                         if (!isAdded || textureView == null) return@post
                         applyVlcLayoutAndBaseTransform(
-                            width,
-                            height,
-                            visibleWidth,
-                            visibleHeight,
-                            sarNum,
-                            sarDen
+                            width, height, visibleWidth, visibleHeight, sarNum, sarDen
                         )
                     }
                 }
             })
-            Log.d(TAG, "VLC views reattached successfully")
+            Log.d(
+                TAG,
+                "VLC views reattached with window size: ${binding.videoContainer.width}x${binding.videoContainer.height}"
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Error reattaching VLC views", e)
         }
     }
+
+    private fun forceFullScreenCrop() {
+        val tv = textureView ?: return
+        val containerW = binding.videoContainer.width.toFloat()
+        val containerH = binding.videoContainer.height.toFloat()
+
+        if (containerW <= 0 || containerH <= 0) return
+
+        val tvW = tv.width.toFloat()
+        val tvH = tv.height.toFloat()
+
+        if (tvW <= 0 || tvH <= 0) return
+
+        // Calculate scale to fill container
+        val scaleX = containerW / tvW
+        val scaleY = containerH / tvH
+        val scale = Math.max(scaleX, scaleY) // Use max to ensure filling
+
+        // Center and scale
+        tv.scaleX = scale
+        tv.scaleY = scale
+        tv.translationX = (containerW - tvW * scale) / 2f
+        tv.translationY = (containerH - tvH * scale) / 2f
+
+        Log.d(
+            TAG,
+            "Force crop: scale=$scale, container=${containerW}x${containerH}, texture=${tvW}x${tvH}"
+        )
+    }
+
 
     private fun startVlcStream() {
         if (usePhoneCamera) return
@@ -729,7 +764,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 add("--vout=gles2")
                 add("--drop-late-frames")
                 add("--skip-frames")
-                // === ENHANCED: Better image quality ===
                 add("--video-filter=adjust")
                 add("--brightness=1.15")
                 add("--contrast=1.2")
@@ -740,8 +774,20 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             libVlc = LibVLC(requireContext(), options)
             mediaPlayer = MediaPlayer(libVlc)
 
+            mediaPlayer = MediaPlayer(libVlc).apply {
+                videoScale =
+                    MediaPlayer.ScaleType.SURFACE_FILL  // 0 = SURFACE_FILL (ignore aspect ratio)
+            }
+
             val vout = mediaPlayer!!.vlcVout
             vout.setVideoView(textureView)
+
+            // ===== KEY FIX: Set VLC window size to match container =====
+            vout.setWindowSize(
+                binding.videoContainer.width,
+                binding.videoContainer.height
+            )
+
             vout.addCallback(this)
 
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
@@ -754,12 +800,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                     textureView?.post {
                         if (!isAdded || textureView == null) return@post
                         applyVlcLayoutAndBaseTransform(
-                            width,
-                            height,
-                            visibleWidth,
-                            visibleHeight,
-                            sarNum,
-                            sarDen
+                            width, height, visibleWidth, visibleHeight, sarNum, sarDen
                         )
                     }
                 }
@@ -779,17 +820,20 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             media.release()
             mediaPlayer?.play()
 
-            binding.tvStatusImage?.text = "RTSP Connected (Enhanced)"
+            mediaPlayer.apply { this?.videoScale = MediaPlayer.ScaleType.SURFACE_FILL }
+
+            binding.tvStatusImage?.text = "RTSP Connected (Full Screen)"
             binding.pbLoadingImage.postDelayed({
                 binding.pbLoadingImage.visibility = View.GONE
                 binding.vShutterImage.visibility = View.GONE
             }, 1500)
             setKeepScreenOn(true)
-            Log.d(TAG, "VLC started with enhanced image quality settings")
+            Log.d(TAG, "VLC started with full-screen mode")
         } catch (e: Exception) {
             Log.e(TAG, "Error starting VLC", e)
         }
     }
+
 
     // [MODIFIED] CORE LOGIC FOR AUTO-CROP IN LANDSCAPE
     private fun applyVlcLayoutAndBaseTransform(
@@ -803,12 +847,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             Log.w(TAG, "Container not ready, retry...")
             binding.videoContainer.postDelayed({
                 applyVlcLayoutAndBaseTransform(
-                    width,
-                    height,
-                    visibleWidth,
-                    visibleHeight,
-                    sarNum,
-                    sarDen
+                    width, height, visibleWidth, visibleHeight, sarNum, sarDen
                 )
             }, 100)
             return
@@ -821,35 +860,34 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             videoW = videoW * sarNum / sarDen
         }
 
-        val videoAspect = videoW / videoH
-        val containerAspect = containerW.toFloat() / containerH.toFloat()
         val isLandscapeMode = isLandscape()
 
         Log.d(
             TAG,
-            "Layout Debug: Container=${containerW}x${containerH}, Video=${videoW.toInt()}x${videoH.toInt()}, Land=$isLandscapeMode"
+            "Layout: Container=${containerW}x${containerH}, Video=${videoW.toInt()}x${videoH.toInt()}, Landscape=$isLandscapeMode"
         )
 
-        val finalW: Int
-        val finalH: Int
-
-        // [MODIFIED] Logic Check: Always CROP (Fill) if in LANDSCAPE
         if (isLandscapeMode) {
-            // === CROP (Fill Screen) Logic for Landscape ===
-            // Zoom video until it covers the whole container
-            if (containerAspect > videoAspect) {
-                // Container is wider than video (e.g. wide phone screen vs 4:3 video)
-                // Fit width, let height be cropped
-                finalW = containerW
-                finalH = (containerW / videoAspect).toInt()
-            } else {
-                // Container is taller (relative to video), fit height, let width be cropped
-                finalH = containerH
-                finalW = (containerH * videoAspect).toInt()
+            // LANDSCAPE: TextureView = Container size (FULL SCREEN)
+            tv.layoutParams = tv.layoutParams.apply {
+                this.width = containerW
+                this.height = containerH
             }
+            baseScaleVlc = 1f
+            baseTxVlc = 0f
+            baseTyVlc = 0f
+
+            mediaPlayer.apply { this?.videoScale = MediaPlayer.ScaleType.SURFACE_FILL }
+
+            Log.d(TAG, "LANDSCAPE: Full screen ${containerW}x${containerH}")
         } else {
-            // === FIT (Letterbox) Logic for Portrait ===
-            // Standard behavior: fit video inside container
+            // PORTRAIT: Fit with aspect ratio
+            val videoAspect = videoW / videoH
+            val containerAspect = containerW.toFloat() / containerH.toFloat()
+
+            val finalW: Int
+            val finalH: Int
+
             if (containerAspect > videoAspect) {
                 finalH = containerH
                 finalW = (containerH * videoAspect).toInt()
@@ -857,32 +895,34 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 finalW = containerW
                 finalH = (containerW / videoAspect).toInt()
             }
-        }
 
-        // Apply size
-        tv.layoutParams = tv.layoutParams.apply {
-            this.width = finalW
-            this.height = finalH
-        }
+            tv.layoutParams = tv.layoutParams.apply {
+                this.width = finalW
+                this.height = finalH
+            }
 
-        // Center the texture view in the container (Base Translation)
-        baseScaleVlc = 1f
-        baseTxVlc = (containerW - finalW) / 2f
-        baseTyVlc = (containerH - finalH) / 2f
+            baseScaleVlc = 1f
+            baseTxVlc = (containerW - finalW) / 2f
+            baseTyVlc = (containerH - finalH) / 2f
+
+            mediaPlayer.apply { this?.videoScale = MediaPlayer.ScaleType.SURFACE_FILL }
+
+            Log.d(TAG, "PORTRAIT: Letterbox ${finalW}x${finalH}")
+        }
 
         panTxVlc = 0f
         panTyVlc = 0f
 
         if (currentScale <= 1.01f) {
-            focusX = finalW / 2f
-            focusY = finalH / 2f
+            focusX = containerW / 2f
+            focusY = containerH / 2f
         }
 
         applyZoomAndPan()
-        Log.d(
-            TAG,
-            "Transform Result: Final=${finalW}x${finalH}, BaseTrans=($baseTxVlc, $baseTyVlc)"
-        )
+
+//        if (isLandscapeMode) {
+//            tv.post { forceFullScreenCrop() }
+//        }
     }
 
     private fun stopVlcStream() {
@@ -897,6 +937,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         setKeepScreenOn(false)
 
         baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
+
+        mediaPlayer.apply { this?.videoScale = MediaPlayer.ScaleType.SURFACE_FILL }
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
     }
 

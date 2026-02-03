@@ -1,11 +1,11 @@
-package com.idn.kmed.cervexa
+package com.idn.kmed.cervexa.live
 
 import android.os.Bundle
-import android.widget.Toast
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
-import com.idn.kmed.cervexa.live.VideoFragment
-import com.idn.kmed.cervexa.utils.PatientUtils
-import com.idn.kmed.cervexa.utils.StorageUtils
+import androidx.fragment.app.Fragment
+import com.idn.kmed.cervexa.R
+import com.idn.kmed.cervexa.utils.DeviceTypeDetector
 
 class VideoActivity : AppCompatActivity() {
 
@@ -13,50 +13,51 @@ class VideoActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_video)
 
-        // ==== Ambil data pasien dari RegistrationActivity ====
-        val nama = intent.getStringExtra("patient_nama").orEmpty()
-        val nik  = intent.getStringExtra("patient_nik").orEmpty()
-        val rs  = intent.getStringExtra("patient_rs").orEmpty()
-        val nrm  = intent.getStringExtra("patient_nrm").orEmpty()
-        val dobUtc = intent.getLongExtra("patient_dob_utc", -1L)
+        // Log device information untuk debugging
+        DeviceTypeDetector.logDeviceInfo(this)
 
-        // ==== Siapkan folder sesi: <Pictures>/Scans/yyyy-MM-dd/NIK_NAMA_USIA ====
-        val dateFolder = StorageUtils.todayDateFolderWIB()
-        val patientFolder = PatientUtils.buildFolderName(nik, nama, dobUtc)
-        val sessionDir = StorageUtils.ensureSessionDir(this, dateFolder, patientFolder)
+        // Deteksi device type
+        val isTvDevice = DeviceTypeDetector.isTvDevice(this)
 
-        // (opsional) tulis metadata
-        val meta = """
-            {
-              "nama": "${nama.replace("\"","\\\"")}",
-              "nik": "$nik",
-              "nrm": "${nrm.replace("\"","\\\"")}",
-              "rs": "${rs.replace("\"","\\\"")}",
-              "dob_utc": $dobUtc,
-              "age": ${PatientUtils.calculateAge(dobUtc)},
-              "date_folder": "$dateFolder",
-              "patient_folder": "$patientFolder",
-              "created_at": "${StorageUtils.timestampWIB()}"
-            }
-        """.trimIndent()
-        runCatching { StorageUtils.writeSessionMetadata(sessionDir, meta) }
+        Log.d(TAG, "Device Type: ${if (isTvDevice) "TV/STB" else "Smartphone/Tablet"}")
 
-//        Toast.makeText(this, "Folder sesi: ${sessionDir.name}", Toast.LENGTH_SHORT).show()
+        // Ambil data dari intent
+        val sessionDirPath = intent.getStringExtra("sessionDirPath")
+        val patientNama = intent.getStringExtra("patient_nama")
+        val patientNik = intent.getStringExtra("patient_nik")
+        val patientRs = intent.getStringExtra("patient_rs")
+        val patientNrm = intent.getStringExtra("patient_nrm")
+        val patientDobUtc = intent.getLongExtra("patient_dob_utc", -1L)
 
+        // Buat Bundle untuk fragment
+        val bundle = Bundle().apply {
+            putString("sessionDirPath", sessionDirPath)
+            putString("patient_nama", patientNama)
+            putString("patient_nik", patientNik)
+            putString("patient_rs", patientRs)
+            putString("patient_nrm", patientNrm)
+            putLong("patient_dob_utc", patientDobUtc)
+        }
+
+        // Pilih fragment berdasarkan device type
+        val fragment: Fragment = if (isTvDevice) {
+            Log.i(TAG, "Loading VideoFragmentTv (VLC with auto-crop)")
+            VideoFragmentTv().apply { arguments = bundle }
+        } else {
+            Log.i(TAG, "Loading VideoFragmentMobile (RTSP)")
+            VideoFragmentTv().apply { arguments = bundle }
+//            VideoFragmentMobile().apply { arguments = bundle }
+        }
+
+        // Load fragment jika belum ada
         if (savedInstanceState == null) {
-            val fragment = VideoFragment().apply {
-                arguments = Bundle().apply {
-                    putString("sessionDirPath", sessionDir.absolutePath)
-                    putString("patient_nama", nama)
-                    putString("patient_nik", nik)
-                    putString("patient_rs", rs)
-                    putString("patient_nrm", nrm)
-                    putLong("patient_dob_utc", dobUtc)
-                }
-            }
             supportFragmentManager.beginTransaction()
                 .replace(R.id.fragment_container, fragment)
                 .commit()
         }
+    }
+
+    companion object {
+        private const val TAG = "VideoActivity"
     }
 }

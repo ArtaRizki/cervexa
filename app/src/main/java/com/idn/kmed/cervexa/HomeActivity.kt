@@ -73,9 +73,9 @@ class HomeActivity : AppCompatActivity() {
         }
 
         // [TV OPTIMIZATION] Setup Fokus Toolbar (Titik Tiga)
-        if (isTvDevice) {
-            setupToolbarForTv(toolbar)
-        }
+//        if (isTvDevice) {
+//            setupToolbarForTv(toolbar)
+//        }
 
         // 4. CEK ONBOARDING
         val prefs = getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
@@ -195,7 +195,7 @@ class HomeActivity : AppCompatActivity() {
     // ==========================================
 
     private fun setupToolbarForTv(toolbar: Toolbar) {
-        toolbar.isFocusable = false
+//        toolbar.isFocusable = false
 
         toolbar.post {
             var overflowButtonFound: View? = null
@@ -219,46 +219,46 @@ class HomeActivity : AppCompatActivity() {
 
             // 2. Setup Tombol jika ketemu
             overflowButtonFound?.let { btn ->
-                btn.isFocusable = true
-                btn.isFocusableInTouchMode = true
+//                btn.isFocusable = true
+//                btn.isFocusableInTouchMode = true
                 btn.setBackgroundResource(R.drawable.bg_btn_remote_selector)
                 val p = 12
                 btn.setPadding(p, p, p, p)
 
                 // --- [FIX NAVIGASI TURUN] ---
-                btn.setOnKeyListener { _, keyCode, event ->
-                    if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                        return@setOnKeyListener moveFocusToFragmentContent()
-                    }
-                    false
-                }
+//                btn.setOnKeyListener { _, keyCode, event ->
+//                    if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+//                        return@setOnKeyListener moveFocusToFragmentContent()
+//                    }
+//                    false
+//                }
             }
         }
     }
 
-    private fun moveFocusToFragmentContent(): Boolean {
-        // A. Cek Home Dashboard
-        val btnConnect = findViewById<View>(R.id.btn_connect)
-        if (btnConnect != null && btnConnect.isShown) {
-            btnConnect.requestFocus()
-            return true
-        }
-
-        // B. Cek Media List
-        val searchView = findViewById<View>(R.id.searchView)
-        if (searchView != null && searchView.isShown) {
-            searchView.requestFocus()
-            return true
-        }
-
-        val rvMedia = findViewById<RecyclerView>(R.id.rv)
-        if (rvMedia != null && rvMedia.isShown) {
-            rvMedia.requestFocus()
-            return true
-        }
-
-        return false
-    }
+//    private fun moveFocusToFragmentContent(): Boolean {
+//        // A. Cek Home Dashboard
+//        val btnConnect = findViewById<View>(R.id.btn_connect)
+//        if (btnConnect != null && btnConnect.isShown) {
+//            btnConnect.requestFocus()
+//            return true
+//        }
+//
+//        // B. Cek Media List
+//        val searchView = findViewById<View>(R.id.searchView)
+//        if (searchView != null && searchView.isShown) {
+//            searchView.requestFocus()
+//            return true
+//        }
+//
+//        val rvMedia = findViewById<RecyclerView>(R.id.rv)
+//        if (rvMedia != null && rvMedia.isShown) {
+//            rvMedia.requestFocus()
+//            return true
+//        }
+//
+//        return false
+//    }
 
     private fun isOverflowButton(view: View): Boolean {
         return view.contentDescription == "More options" ||
@@ -271,53 +271,53 @@ class HomeActivity : AppCompatActivity() {
         var navRunnable: Runnable? = null
 
         menuView?.children?.forEachIndexed { index, child ->
-            child.isFocusable = true
-            child.isFocusableInTouchMode = true
+//            child.isFocusable = true
+//            child.isFocusableInTouchMode = true
             child.setPadding(0, 16, 0, 16)
 
             // 1. Sync Tabs saat Fokus
-            child.setOnFocusChangeListener { view, hasFocus ->
-                if (hasFocus) {
-                    val destinationId = bottomNav.menu.getItem(index).itemId
-
-                    if (bottomNav.selectedItemId != destinationId) {
-                        navRunnable?.let { navHandler.removeCallbacks(it) }
-
-                        navRunnable = Runnable {
-                            bottomNav.selectedItemId = destinationId
-                            view.requestFocus()
-                        }
-                        navHandler.postDelayed(navRunnable!!, 150)
-                    }
-                }
-            }
+//            child.setOnFocusChangeListener { view, hasFocus ->
+//                if (hasFocus) {
+//                    val destinationId = bottomNav.menu.getItem(index).itemId
+//
+//                    if (bottomNav.selectedItemId != destinationId) {
+//                        navRunnable?.let { navHandler.removeCallbacks(it) }
+//
+//                        navRunnable = Runnable {
+//                            bottomNav.selectedItemId = destinationId
+//                            view.requestFocus()
+//                        }
+//                        navHandler.postDelayed(navRunnable!!, 150)
+//                    }
+//                }
+//            }
 
             // 2. Navigasi Tombol ATAS (DPAD_UP)
-            child.setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                    val btnConnect = findViewById<View>(R.id.btn_connect)
-                    if (btnConnect != null && btnConnect.isShown) {
-                        btnConnect.requestFocus()
-                        return@setOnKeyListener true
-                    }
-
-                    val rvMedia = findViewById<RecyclerView>(R.id.rv)
-                    if (rvMedia != null && rvMedia.isShown && rvMedia.adapter != null && rvMedia.adapter!!.itemCount > 0) {
-                        rvMedia.requestFocus()
-                        return@setOnKeyListener true
-                    }
-
-                    val searchView = findViewById<View>(R.id.searchView)
-                    if (searchView != null && searchView.isShown) {
-                        searchView.requestFocus()
-                        return@setOnKeyListener true
-                    }
-
-                    val toolbar = findViewById<Toolbar>(R.id.topAppBar)
-                    toolbar?.requestLayout()
-                }
-                false
-            }
+//            child.setOnKeyListener { _, keyCode, event ->
+//                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+//                    val btnConnect = findViewById<View>(R.id.btn_connect)
+//                    if (btnConnect != null && btnConnect.isShown) {
+//                        btnConnect.requestFocus()
+//                        return@setOnKeyListener true
+//                    }
+//
+//                    val rvMedia = findViewById<RecyclerView>(R.id.rv)
+//                    if (rvMedia != null && rvMedia.isShown && rvMedia.adapter != null && rvMedia.adapter!!.itemCount > 0) {
+//                        rvMedia.requestFocus()
+//                        return@setOnKeyListener true
+//                    }
+//
+//                    val searchView = findViewById<View>(R.id.searchView)
+//                    if (searchView != null && searchView.isShown) {
+//                        searchView.requestFocus()
+//                        return@setOnKeyListener true
+//                    }
+//
+//                    val toolbar = findViewById<Toolbar>(R.id.topAppBar)
+//                    toolbar?.requestLayout()
+//                }
+//                false
+//            }
         }
     }
 

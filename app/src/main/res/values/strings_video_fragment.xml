@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><!-- Add these strings to res/values/strings.xml -->
+<resources>
+    <!-- Video Fragment Strings -->
+    <string name="back">Kembali</string>
+    <string name="record_video">Rekam Video</string>
+    <string name="take_snapshot">Ambil Foto</string>
+    <string name="recording_timer">00:00:00</string>
+    <string name="mode_rtsp">Mode: Alat (RTSP)</string>
+    <string name="mode_phone_camera">Mode: Kamera Smartphone</string>
+    <string name="rtsp_connected">RTSP Connected</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="snapshot_saved">Snapshot Tersimpan</string>
+    <string name="video_saved">Video Tersimpan</string>
+    <string name="recording_failed">Gagal rekam: %s</string>
+    <string name="snapshot_failed">Gagal snapshot: %s</string>
+    <string name="camera_permission_required">Izin kamera diperlukan</string>
+    <string name="camera_failed">Gagal buka kamera HP: %s</string>
+
+    <!-- Dialog Strings -->
+    <string name="confirm_save_title">Konfirmasi</string>
+    <string name="confirm_save_message">Simpan media dan tutup sesi?</string>
+    <string name="save">Simpan</string>
+    <string name="cancel">Batal</string>
+    <string name="delete_items">Hapus %d item?</string>
+    <string name="delete">Hapus</string>
+
+    <!-- Info Strings -->
+    <string name="no_medical_record">Tidak ada nomor rekam medis</string>
+    <string name="items_selected">%d dipilih</string>
+</resources>

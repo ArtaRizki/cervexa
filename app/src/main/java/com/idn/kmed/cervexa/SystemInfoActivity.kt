@@ -1,7 +1,6 @@
 package com.idn.kmed.cervexa
 
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.net.Uri
@@ -11,14 +10,13 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import android.widget.TextView
-import android.widget.Toast
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModelProvider
 import com.alexvas.rtsp.codec.VideoDecodeThread
 import com.idn.kmed.cervexa.SettingsActivity.Companion.KEY_CAMERA_ROTATION_DEG
 import com.idn.kmed.cervexa.SettingsActivity.Companion.KEY_USE_HW_DECODER
 import com.idn.kmed.cervexa.live.LiveViewModel
-import com.idn.kmed.cervexa.live.VideoFragment
+import com.idn.kmed.cervexa.live.VideoFragmentTv
 import com.idn.kmed.cervexa.utils.StorageUtils
 import com.alexvas.rtsp.widget.RtspImageView
 import com.alexvas.rtsp.widget.RtspProcessor.Statistics
@@ -239,7 +237,7 @@ class SystemInfoActivity : AppCompatActivity() {
     }
 
     companion object {
-        private val TAG: String = VideoFragment::class.java.simpleName
+        private val TAG: String = VideoFragmentTv::class.java.simpleName
         private const val DEBUG = true
     }
 }

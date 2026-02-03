@@ -4,19 +4,20 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@android:color/white">
+    android:background="@android:color/white"
+    android:orientation="vertical">
 
+<!--        android:focusable="true"-->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/topAppBar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:background="@color/colorWhite"
+        app:navigationIcon="@drawable/baseline_arrow_back_24"
         app:title="Verifikasi Identitas"
         app:titleCentered="false"
-        app:titleTextAppearance="@style/CustomToolbarTitle"
-        app:navigationIcon="@drawable/baseline_arrow_back_24"
-        android:focusable="true" />
+        app:titleTextAppearance="@style/CustomToolbarTitle" />
+
     <View
         android:id="@+id/toolbarDivider"
         android:layout_width="match_parent"
@@ -29,12 +30,12 @@
         android:layout_weight="1"
         android:fillViewport="true">
 
+        <!--            android:focusable="false"-->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:padding="16dp"
-            android:focusable="false"
             android:descendantFocusability="afterDescendants"
+            android:padding="16dp"
             android:theme="@style/globalTextTheme">
 
             <TextView
@@ -54,9 +55,9 @@
                 android:layout_height="wrap_content"
                 app:counterEnabled="true"
                 app:counterMaxLength="30"
+                app:hintEnabled="false"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:hintEnabled="false"
                 app:layout_constraintTop_toBottomOf="@id/lblNama">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -64,16 +65,16 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="Nama Anda"
-                    android:maxLines="1"
-                    android:maxLength="30"
-                    android:inputType="textPersonName|textCapWords"
-                    android:textColor="@color/colorBlack"
-
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
                     android:imeOptions="actionNext"
-                    android:nextFocusDown="@id/etNik" />
+                    android:inputType="textPersonName|textCapWords"
+                    android:maxLength="30"
+                    android:maxLines="1"
+
+                    android:textColor="@color/colorBlack" />
             </com.google.android.material.textfield.TextInputLayout>
+            <!--                    android:nextFocusDown="@id/etNik" -->
+            <!--                     android:focusable="true"-->
+            <!--                    android:focusableInTouchMode="true"-->
 
             <TextView
                 android:id="@+id/lblNik"
@@ -93,9 +94,9 @@
                 android:layout_height="wrap_content"
                 app:counterEnabled="true"
                 app:counterMaxLength="16"
+                app:hintEnabled="false"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:hintEnabled="false"
                 app:layout_constraintTop_toBottomOf="@id/lblNik">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -103,15 +104,15 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="Masukkan NIK (16 digit)"
-                    android:maxLength="16"
-                    android:inputType="number"
-                    android:textColor="@color/colorBlack"
-
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
                     android:imeOptions="actionNext"
-                    android:nextFocusDown="@id/etDob" />
+                    android:inputType="number"
+                    android:maxLength="16"
+
+                    android:textColor="@color/colorBlack" />
             </com.google.android.material.textfield.TextInputLayout>
+            <!--                     android:focusable="true"-->
+            <!--                    android:focusableInTouchMode="true"-->
+            <!--                android:nextFocusDown="@id/etDob" -->
 
             <TextView
                 android:id="@+id/lblDob"
@@ -131,24 +132,24 @@
                 android:layout_height="wrap_content"
                 app:endIconDrawable="@drawable/calender_24"
                 app:endIconMode="custom"
+                app:hintEnabled="false"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:hintEnabled="false"
                 app:layout_constraintTop_toBottomOf="@id/lblDob">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etDob"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="DD/MM/YYYY"
-                    android:textColor="@color/colorBlack"
-
                     android:cursorVisible="false"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
+                    android:hint="DD/MM/YYYY"
+
                     android:inputType="none"
-                    android:nextFocusDown="@id/etRS" />
+                    android:textColor="@color/colorBlack" />
             </com.google.android.material.textfield.TextInputLayout>
+            <!--                     android:focusable="true"-->
+            <!--                    android:focusableInTouchMode="true"-->
+            <!--                android:nextFocusDown="@id/etRS" -->
 
             <TextView
                 android:id="@+id/lblRS"
@@ -166,9 +167,9 @@
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                app:hintEnabled="false"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:hintEnabled="false"
                 app:layout_constraintTop_toBottomOf="@id/lblRS">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -176,14 +177,14 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="Nama Rumah Sakit"
-                    android:inputType="textCapWords"
-                    android:textColor="@color/colorBlack"
-
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
                     android:imeOptions="actionNext"
-                    android:nextFocusDown="@id/etNrm" />
+                    android:inputType="textCapWords"
+
+                    android:textColor="@color/colorBlack" />
             </com.google.android.material.textfield.TextInputLayout>
+            <!--                     android:focusable="true"-->
+            <!--                    android:focusableInTouchMode="true"-->
+            <!--                android:nextFocusDown="@id/etNrm" -->
 
             <TextView
                 android:id="@+id/lblNrm"
@@ -201,9 +202,9 @@
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                app:hintEnabled="false"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:hintEnabled="false"
                 app:layout_constraintTop_toBottomOf="@id/lblNrm">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -211,31 +212,31 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="Masukan Nomor Rekam Medis"
-                    android:inputType="textCapCharacters"
-                    android:textColor="@color/colorBlack"
-
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
                     android:imeOptions="actionDone"
-                    android:nextFocusDown="@id/btnNext" />
+                    android:inputType="textCapCharacters"
+
+                    android:textColor="@color/colorBlack" />
+                <!--                     android:focusable="true"-->
+                <!--                    android:focusableInTouchMode="true"-->
+                <!--                android:nextFocusDown="@id/btnNext" -->
             </com.google.android.material.textfield.TextInputLayout>
 
+<!--                android:focusable="true"-->
             <Button
                 android:id="@+id/btnNext"
                 android:layout_width="0dp"
                 android:layout_height="52dp"
                 android:layout_marginTop="24dp"
                 android:backgroundTint="@color/colorButton"
+                android:stateListAnimator="@null"
+
                 android:text="Lanjutkan"
                 android:textColor="@color/colorWhite"
-
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:stateListAnimator="@null"
 
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/tilNrm" />
+            <!--                    android:focusableInTouchMode="true"-->
 
             <TextView
                 android:id="@+id/textView"
@@ -243,9 +244,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:gravity="center"
+                android:inputType="textMultiLine"
                 android:text="Semua data disimpan secara lokal di perangkat Anda\nuntuk menjaga kendali dan privasi sepenuhnya."
                 android:textColor="#999999"
-                android:inputType="textMultiLine"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/btnNext" />

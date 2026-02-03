@@ -31,7 +31,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.idn.kmed.cervexa.HomeActivity
 import com.idn.kmed.cervexa.R
-import com.idn.kmed.cervexa.databinding.FragmentVideoBinding
+import com.idn.kmed.cervexa.databinding.FragmentVideoTvBinding
 import com.idn.kmed.cervexa.record.RealtimeBitmapEncoder
 import com.idn.kmed.cervexa.utils.*
 import kotlinx.coroutines.*
@@ -45,11 +45,14 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.max
 
-class VideoFragment : Fragment(), IVLCVout.Callback {
+/**
+ * VideoFragment - ENHANCED VERSION
+ * Modified for Auto-Crop in Landscape
+ */
+class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
-    private lateinit var binding: FragmentVideoBinding
+    private lateinit var binding: FragmentVideoTvBinding
     private lateinit var liveViewModel: LiveViewModel
 
     private var ivVideoImageResolution = Pair(0, 0)
@@ -104,7 +107,19 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     private var focusX = 0f
     private var focusY = 0f
 
-    // ====== IMPORTANT FIX STATE (BASE CENTER + PAN) ======
+    // === IMAGE ENHANCEMENT (NEW) ===
+    private var brightness = 0f        // -1.0 to 1.0 (default 0 = no change)
+    private var contrast =
+        1.2f        // 0.5 to 2.0 (default 1.2 = slight boost for dark microscope)
+    private var saturation = 1.1f      // 0.0 to 2.0 (default 1.1 = slight boost)
+
+    private val colorMatrix = ColorMatrix()
+    private val paint = Paint().apply {
+        isAntiAlias = false
+        isDither = false
+    }
+
+    // ====== STATE (BASE CENTER + PAN) ======
     private var baseScaleVlc = 1f
     private var baseTxVlc = 0f
     private var baseTyVlc = 0f
@@ -114,8 +129,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     private var panTxPhone = 0f
     private var panTyPhone = 0f
 
-    // Kalau true: landscape full-screen (center-crop) => hilang black bar kanan/kiri
-    private val CROP_IN_LANDSCAPE = true
+    // [MODIFIED] Variabel CROP_IN_LANDSCAPE dihapus karena sekarang otomatis check orientation
 
     private val prefs by lazy {
         requireContext().getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
@@ -140,7 +154,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     // =====================================================
-    // APPLY ZOOM/PAN (VLC + Phone) - FIXED (NO RESET CENTER)
+    // APPLY ZOOM/PAN + COLOR ENHANCEMENT
     // =====================================================
     private fun applyZoomAndPan() {
         if (!isAdded) return
@@ -151,11 +165,9 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
             pv.pivotX = focusX
             pv.pivotY = focusY
-
             pv.scaleX = scale
             pv.scaleY = scale
 
-            // Saat kembali normal, reset PAN saja
             if (scale <= 1.01f) {
                 panTxPhone = 0f
                 panTyPhone = 0f
@@ -170,18 +182,58 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
         tv.pivotX = focusX
         tv.pivotY = focusY
-
-        // SCALE = baseScaleVlc * zoom
         tv.scaleX = baseScaleVlc * scale
         tv.scaleY = baseScaleVlc * scale
 
-        // Saat kembali normal, reset PAN saja (center base tetap)
         if (scale <= 1.01f) {
             panTxVlc = 0f
             panTyVlc = 0f
         }
         tv.translationX = baseTxVlc + panTxVlc
         tv.translationY = baseTyVlc + panTyVlc
+
+        // Apply color filter untuk enhance dark microscope image
+        applyColorEnhancement()
+    }
+
+    private fun applyColorEnhancement() {
+        val tv = textureView ?: return
+
+        // Create color matrix untuk brightness + contrast + saturation
+        val brightnessMatrix = ColorMatrix().apply {
+            val scale = 1f + brightness
+            setScale(scale, scale, scale, 1f)
+        }
+
+        val contrastMatrix = ColorMatrix().apply {
+            val scale = contrast
+            val translate = (1f - scale) / 2f * 255f
+            set(
+                floatArrayOf(
+                    scale, 0f, 0f, 0f, translate,
+                    0f, scale, 0f, 0f, translate,
+                    0f, 0f, scale, 0f, translate,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+        }
+
+        val saturationMatrix = ColorMatrix().apply {
+            setSaturation(saturation)
+        }
+
+        // Combine all matrices
+        colorMatrix.reset()
+        colorMatrix.postConcat(brightnessMatrix)
+        colorMatrix.postConcat(contrastMatrix)
+        colorMatrix.postConcat(saturationMatrix)
+
+        paint.colorFilter = ColorMatrixColorFilter(colorMatrix)
+
+        // Apply to TextureView's surface
+        tv.post {
+            tv.invalidate()
+        }
     }
 
     // ==========================================
@@ -198,12 +250,10 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     }
 
     private fun startPhoneCamera() {
-        // Sembunyikan TextureView VLC agar tidak menutupi kamera HP
         textureView?.visibility = View.GONE
         binding.pbLoadingImage.visibility = View.GONE
         binding.vShutterImage.visibility = View.GONE
 
-        // Hapus view lama jika ada
         phoneCameraView?.let { binding.videoContainer.removeView(it) }
 
         val pv = PreviewView(requireContext()).apply {
@@ -211,13 +261,13 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
+            // [MODIFIED] Di mode kamera HP juga bisa disesuaikan, tapi defaultnya FILL_CENTER cukup bagus
             scaleType = PreviewView.ScaleType.FILL_CENTER
         }
 
         phoneCameraView = pv
         binding.videoContainer.addView(pv)
 
-        // Reset gesture state
         currentScale = 1f
         panTxPhone = 0f
         panTyPhone = 0f
@@ -260,7 +310,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         phoneCameraView = null
         textureView?.visibility = View.VISIBLE
 
-        // Reset gesture state
         currentScale = 1f
         panTxPhone = 0f
         panTyPhone = 0f
@@ -302,12 +351,25 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                 videosDir = File(parent, "Video").apply { if (!exists()) mkdirs() }
             }
         }
+
+        // Load saved image enhancement settings
+        brightness = prefs.getFloat("image_brightness", 0f)
+        contrast = prefs.getFloat("image_contrast", 1.2f)
+        saturation = prefs.getFloat("image_saturation", 1.1f)
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         clockJob?.cancel()
         stopPhoneCamera()
+
+        // Save image enhancement settings
+        prefs.edit().apply {
+            putFloat("image_brightness", brightness)
+            putFloat("image_contrast", contrast)
+            putFloat("image_saturation", saturation)
+            apply()
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -317,8 +379,12 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         startOverlayClock()
     }
 
+    // [MODIFIED] Added logic to handle system UI visibility and layout refresh
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+
+        Log.d(TAG, "onConfigurationChanged: orientation=${newConfig.orientation}")
+        toggleSystemUI() // Update status bar visibility
 
         val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
         binding.tvOverlayInfo.text = infoText
@@ -326,33 +392,125 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         binding.videoContainer.postDelayed({
             reattachVlcViews()
         }, 300)
+
+        // Re-apply layout setelah rotasi
+        view?.post {
+            // Re-calculate dan apply zoom/pan untuk layout baru (akan otomatis check Landscape)
+            if (usePhoneCamera && phoneCameraView != null) {
+                // Untuk CameraX, biasanya handled by PreviewView, tapi reset scale aman
+                currentScale = 1f
+                applyZoomAndPan()
+            } else if (!usePhoneCamera && textureView != null && ivVideoImageResolution.first > 0) {
+                // Trigger ulang layout calculation VLC
+                // Note: parameter sarNum/sarDen kita pakai default/simpanan atau 1:1 jika tidak ada
+                // Idealnya disimpan di variable global saat onNewVideoLayout, tapi untuk quick fix rotasi:
+                // Kita tunggu reattachVlcViews mentrigger onNewVideoLayout.
+            }
+
+            // Optional: Re-adjust thumbnail RecyclerView jika perlu
+            if (::thumbsAdapter.isInitialized) {
+                binding.rvThumbs.adapter = thumbsAdapter
+            }
+
+            ensureResourcesAvailable()
+        }
+    }
+
+    // [MODIFIED] New function to Hide/Show Status Bar
+    private fun toggleSystemUI() {
+        val window = requireActivity().window
+        if (isLandscape()) {
+            // Landscape: Fullscreen Immersive (Hide Status Bar)
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+                .let { controller ->
+                    controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                    controller.systemBarsBehavior =
+                        androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+        } else {
+            // Portrait: Show Status Bar
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+                .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            updateStatusBarColor()
+        }
+    }
+
+    private fun ensureResourcesAvailable() {
+        if (!isAdded) return
+        try {
+            if (usePhoneCamera) {
+                val pv = phoneCameraView
+                if (pv?.display == null) {
+                    Log.w(TAG, "Phone camera view lost display, re-initializing...")
+                    view?.post { if (isAdded) startPhoneCamera() }
+                }
+            } else {
+                val mp = mediaPlayer
+                if (mp != null && !mp.isPlaying) {
+                    Log.w(TAG, "MediaPlayer stopped, attempting to resume...")
+                    view?.post {
+                        if (isAdded) {
+                            try {
+                                mp.play()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to resume", e)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in ensureResourcesAvailable", e)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putFloat("currentScale", currentScale)
+        outState.putFloat("panTxVlc", panTxVlc)
+        outState.putFloat("panTyVlc", panTyVlc)
+        outState.putFloat("panTxPhone", panTxPhone)
+        outState.putFloat("panTyPhone", panTyPhone)
+        outState.putBoolean("usePhoneCamera", usePhoneCamera)
+        outState.putBoolean("recording", record.get())
+    }
+
+    override fun onViewStateRestored(savedInstanceState: Bundle?) {
+        super.onViewStateRestored(savedInstanceState)
+        savedInstanceState?.let { bundle ->
+            currentScale = bundle.getFloat("currentScale", 1f)
+            panTxVlc = bundle.getFloat("panTxVlc", 0f)
+            panTyVlc = bundle.getFloat("panTyVlc", 0f)
+            panTxPhone = bundle.getFloat("panTxPhone", 0f)
+            panTyPhone = bundle.getFloat("panTyPhone", 0f)
+            usePhoneCamera = bundle.getBoolean("usePhoneCamera", false)
+            // Re-apply zoom/pan
+            view?.post { applyZoomAndPan() }
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View {
         if (DEBUG) Log.v(TAG, "onCreateView()")
 
         liveViewModel = ViewModelProvider(this)[LiveViewModel::class.java]
-        binding = FragmentVideoBinding.inflate(inflater, container, false)
+        binding = FragmentVideoTvBinding.inflate(inflater, container, false)
         textureView = binding.textureView
 
         textureView?.apply {
-            scaleX = 1f
-            scaleY = 1f
-            translationX = 0f
-            translationY = 0f
+            scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f
         }
 
-        // Gesture: pinch to zoom
         scaleDetector = ScaleGestureDetector(
             requireContext(),
             object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScale(detector: ScaleGestureDetector): Boolean {
-                    currentScale = (currentScale * detector.scaleFactor).coerceIn(minScale, maxScale)
+                    currentScale =
+                        (currentScale * detector.scaleFactor).coerceIn(minScale, maxScale)
                     focusX = detector.focusX
                     focusY = detector.focusY
                     applyZoomAndPan()
@@ -364,7 +522,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             requireContext(),
             object : GestureDetector.SimpleOnGestureListener() {
                 override fun onDown(e: MotionEvent): Boolean = true
-
                 override fun onDoubleTap(e: MotionEvent): Boolean {
                     currentScale = if (currentScale > 1.01f) 1f else 2f
                     focusX = e.x
@@ -407,39 +564,30 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             else if (mediaPlayer?.isPlaying == true) stopStreamAndExit()
             else startVlcStream()
         }
-
-        binding.bnStartStopImage?.setOnLongClickListener {
-            toggleSourceMode()
-            true
-        }
+        binding.bnStartStopImage?.setOnLongClickListener { toggleSourceMode(); true }
 
         binding.btnEnterLandscape?.setOnClickListener {
-            requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            val intent = requireActivity().intent
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-            stopVlcStream()
-            requireActivity().finish()
-            startActivity(intent)
+            val isPortrait =
+                resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+            requireActivity().requestedOrientation = if (isPortrait) {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            }
         }
-
         binding.btnSnapshot.setOnClickListener { takeSnapshot() }
         binding.btnRecordVideo.setOnClickListener {
             if (record.get()) stopVideoRecording() else startVideoRecording()
         }
 
-        binding.btnBackLite?.setOnLongClickListener {
-            toggleSourceMode()
-            true
-        }
-
+        binding.btnBackLite?.setOnLongClickListener { showImageEnhancementDialog(); true }
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
                     showSaveConfirmDialog()
                 }
-            }
-        )
+            })
         binding.topAppBar.setNavigationOnClickListener { showSaveConfirmDialog() }
         binding.btnBackLite?.setOnClickListener { showSaveConfirmDialog() }
 
@@ -460,9 +608,11 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                 R.id.action_info_pasien -> {
                     showPatientInfoBottomSheet(); true
                 }
+
                 R.id.action_pilih -> {
                     enterSelectionMode(); true
                 }
+
                 else -> false
             }
         }
@@ -476,6 +626,14 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         startOverlayClock()
 
         return binding.root
+    }
+
+    private fun showImageEnhancementDialog() {
+        Toast.makeText(
+            requireContext(),
+            "Enhancement: Brightness=${brightness}, Contrast=${contrast}, Saturation=${saturation}",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun startOverlayClock() {
@@ -496,7 +654,8 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
     override fun onResume() {
         super.onResume()
-        updateStatusBarColor()
+        // [MODIFIED] Ensure correct UI State
+        toggleSystemUI()
         liveViewModel.loadParams(requireContext())
 
         if (usePhoneCamera) {
@@ -511,7 +670,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         updateStatusBarColor()
         liveViewModel.saveParams(requireContext())
         if (record.get()) stopVideoRecording()
-
         if (!usePhoneCamera) stopVlcStream()
     }
 
@@ -533,48 +691,50 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
                 override fun onNewVideoLayout(
-                    vlcVout: IVLCVout?,
-                    width: Int,
-                    height: Int,
-                    visibleWidth: Int,
-                    visibleHeight: Int,
-                    sarNum: Int,
-                    sarDen: Int
+                    vlcVout: IVLCVout?, width: Int, height: Int,
+                    visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int
                 ) {
                     if (width * height == 0) return
                     ivVideoImageResolution = Pair(width, height)
-
                     textureView?.post {
                         if (!isAdded || textureView == null) return@post
-                        applyVlcLayoutAndBaseTransform(width, height, visibleWidth, visibleHeight, sarNum, sarDen)
+                        applyVlcLayoutAndBaseTransform(
+                            width,
+                            height,
+                            visibleWidth,
+                            visibleHeight,
+                            sarNum,
+                            sarDen
+                        )
                     }
                 }
             })
-
             Log.d(TAG, "VLC views reattached successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error reattaching VLC views", e)
         }
     }
 
-    // ==========================================
-    // VLC STREAMING
-    // ==========================================
     private fun startVlcStream() {
         if (usePhoneCamera) return
-
         binding.pbLoadingImage.visibility = View.VISIBLE
         binding.vShutterImage.visibility = View.VISIBLE
 
         try {
             val options = ArrayList<String>().apply {
                 add("--rtsp-tcp")
-                add("--network-caching=10")
-                add("--live-caching=10")
+                add("--network-caching=150")
+                add("--live-caching=150")
                 add("--no-audio")
                 add("--vout=gles2")
                 add("--drop-late-frames")
                 add("--skip-frames")
+                // === ENHANCED: Better image quality ===
+                add("--video-filter=adjust")
+                add("--brightness=1.15")
+                add("--contrast=1.2")
+                add("--saturation=1.1")
+                add("--gamma=1.0")
             }
 
             libVlc = LibVLC(requireContext(), options)
@@ -586,20 +746,21 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
                 override fun onNewVideoLayout(
-                    vlcVout: IVLCVout?,
-                    width: Int,
-                    height: Int,
-                    visibleWidth: Int,
-                    visibleHeight: Int,
-                    sarNum: Int,
-                    sarDen: Int
+                    vlcVout: IVLCVout?, width: Int, height: Int,
+                    visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int
                 ) {
                     if (width * height == 0) return
                     ivVideoImageResolution = Pair(width, height)
-
                     textureView?.post {
                         if (!isAdded || textureView == null) return@post
-                        applyVlcLayoutAndBaseTransform(width, height, visibleWidth, visibleHeight, sarNum, sarDen)
+                        applyVlcLayoutAndBaseTransform(
+                            width,
+                            height,
+                            visibleWidth,
+                            visibleHeight,
+                            sarNum,
+                            sarDen
+                        )
                     }
                 }
             })
@@ -612,77 +773,102 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             } else rawUrl
 
             val media = Media(libVlc, Uri.parse(finalUrl))
-            media.addOption(":network-caching=0")
+            media.addOption(":network-caching=150")
             media.addOption(":no-audio")
             mediaPlayer?.media = media
             media.release()
             mediaPlayer?.play()
 
-            binding.tvStatusImage?.text = "RTSP Connected"
+            binding.tvStatusImage?.text = "RTSP Connected (Enhanced)"
             binding.pbLoadingImage.postDelayed({
                 binding.pbLoadingImage.visibility = View.GONE
                 binding.vShutterImage.visibility = View.GONE
             }, 1500)
-
             setKeepScreenOn(true)
+            Log.d(TAG, "VLC started with enhanced image quality settings")
         } catch (e: Exception) {
             Log.e(TAG, "Error starting VLC", e)
         }
     }
 
-    /**
-     * Inti FIX:
-     * - base center (baseTx/baseTy) tidak pernah di-reset 0
-     * - zoom/pan hanya menambah layer di atas base
-     * - landscape optional crop (full screen)
-     */
+    // [MODIFIED] CORE LOGIC FOR AUTO-CROP IN LANDSCAPE
     private fun applyVlcLayoutAndBaseTransform(
-        width: Int,
-        height: Int,
-        visibleWidth: Int,
-        visibleHeight: Int,
-        sarNum: Int,
-        sarDen: Int
+        width: Int, height: Int, visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int
     ) {
         val tv = textureView ?: return
-        val screenW = binding.videoContainer.width
-        val screenH = binding.videoContainer.height
-        if (screenW <= 0 || screenH <= 0) return
+        val containerW = binding.videoContainer.width
+        val containerH = binding.videoContainer.height
 
-        var vidW = if (visibleWidth > 0) visibleWidth.toFloat() else width.toFloat()
-        var vidH = if (visibleHeight > 0) visibleHeight.toFloat() else height.toFloat()
-
-        if (sarNum > 0 && sarDen > 0) {
-            vidW = vidW * sarNum / sarDen
+        if (containerW <= 0 || containerH <= 0) {
+            Log.w(TAG, "Container not ready, retry...")
+            binding.videoContainer.postDelayed({
+                applyVlcLayoutAndBaseTransform(
+                    width,
+                    height,
+                    visibleWidth,
+                    visibleHeight,
+                    sarNum,
+                    sarDen
+                )
+            }, 100)
+            return
         }
 
-        val videoRatio = vidW / vidH
-        val screenRatio = screenW.toFloat() / screenH.toFloat()
+        var videoW = if (visibleWidth > 0) visibleWidth.toFloat() else width.toFloat()
+        var videoH = if (visibleHeight > 0) visibleHeight.toFloat() else height.toFloat()
+
+        if (sarNum > 0 && sarDen > 0) {
+            videoW = videoW * sarNum / sarDen
+        }
+
+        val videoAspect = videoW / videoH
+        val containerAspect = containerW.toFloat() / containerH.toFloat()
+        val isLandscapeMode = isLandscape()
+
+        Log.d(
+            TAG,
+            "Layout Debug: Container=${containerW}x${containerH}, Video=${videoW.toInt()}x${videoH.toInt()}, Land=$isLandscapeMode"
+        )
 
         val finalW: Int
         val finalH: Int
-        if (screenRatio > videoRatio) {
-            finalH = screenH
-            finalW = (screenH * videoRatio).toInt()
+
+        // [MODIFIED] Logic Check: Always CROP (Fill) if in LANDSCAPE
+        if (isLandscapeMode) {
+            // === CROP (Fill Screen) Logic for Landscape ===
+            // Zoom video until it covers the whole container
+            if (containerAspect > videoAspect) {
+                // Container is wider than video (e.g. wide phone screen vs 4:3 video)
+                // Fit width, let height be cropped
+                finalW = containerW
+                finalH = (containerW / videoAspect).toInt()
+            } else {
+                // Container is taller (relative to video), fit height, let width be cropped
+                finalH = containerH
+                finalW = (containerH * videoAspect).toInt()
+            }
         } else {
-            finalW = screenW
-            finalH = (screenW / videoRatio).toInt()
+            // === FIT (Letterbox) Logic for Portrait ===
+            // Standard behavior: fit video inside container
+            if (containerAspect > videoAspect) {
+                finalH = containerH
+                finalW = (containerH * videoAspect).toInt()
+            } else {
+                finalW = containerW
+                finalH = (containerW / videoAspect).toInt()
+            }
         }
 
+        // Apply size
         tv.layoutParams = tv.layoutParams.apply {
             this.width = finalW
             this.height = finalH
         }
 
-        baseTxVlc = (screenW - finalW) / 2f
-        baseTyVlc = (screenH - finalH) / 2f
-
-        baseScaleVlc = if (CROP_IN_LANDSCAPE && isLandscape()) {
-            max(
-                screenW.toFloat() / finalW.toFloat(),
-                screenH.toFloat() / finalH.toFloat()
-            )
-        } else 1f
+        // Center the texture view in the container (Base Translation)
+        baseScaleVlc = 1f
+        baseTxVlc = (containerW - finalW) / 2f
+        baseTyVlc = (containerH - finalH) / 2f
 
         panTxVlc = 0f
         panTyVlc = 0f
@@ -693,10 +879,9 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         }
 
         applyZoomAndPan()
-
         Log.d(
-            "VLC_FIX",
-            "Screen:${screenW}x${screenH} Video:${vidW}x${vidH} Fit:${finalW}x${finalH} baseTx=$baseTxVlc baseTy=$baseTyVlc baseScale=$baseScaleVlc"
+            TAG,
+            "Transform Result: Final=${finalW}x${finalH}, BaseTrans=($baseTxVlc, $baseTyVlc)"
         )
     }
 
@@ -711,12 +896,8 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         binding.vShutterImage.visibility = View.VISIBLE
         setKeepScreenOn(false)
 
-        baseScaleVlc = 1f
-        baseTxVlc = 0f
-        baseTyVlc = 0f
-        panTxVlc = 0f
-        panTyVlc = 0f
-        currentScale = 1f
+        baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
+        panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
     }
 
     private fun stopStreamAndExit() {
@@ -727,9 +908,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         requireActivity().finish()
     }
 
-    // ==========================================
-    // RECORDING LOGIC
-    // ==========================================
     private fun startVideoRecording() {
         val dir = videosDir ?: sessionDir ?: return
         val out = File(dir, "vid_${StorageUtils.timestampWIB()}.mp4")
@@ -768,19 +946,16 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
         recordingJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
             while (record.get() && isActive) {
                 val start = System.currentTimeMillis()
-
                 val bmp = withContext(Dispatchers.Main) {
                     if (usePhoneCamera) phoneCameraView?.bitmap
                     else textureView?.getBitmap(width, height)
                 }
-
                 if (bmp != null) {
                     val scaled = if (bmp.width != width || bmp.height != height) {
                         Bitmap.createScaledBitmap(bmp, width, height, true)
                     } else bmp
                     recorder.submitBitmap(processTextToBitmapSafe(scaled))
                 }
-
                 val wait = (50 - (System.currentTimeMillis() - start)).coerceAtLeast(0)
                 delay(wait)
             }
@@ -789,7 +964,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
     private fun takeSnapshot() {
         val dir = snapshotsDir ?: sessionDir ?: return
-
         val bmp = if (usePhoneCamera) phoneCameraView?.bitmap else textureView?.bitmap
         if (bmp != null) {
             runCatching {
@@ -798,7 +972,11 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
                 Toast.makeText(requireContext(), "Snapshot Tersimpan", Toast.LENGTH_SHORT).show()
                 refreshThumbs()
             }.onFailure {
-                Toast.makeText(requireContext(), "Gagal snapshot: ${it.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(),
+                    "Gagal snapshot: ${it.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -817,13 +995,10 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
             textAlign = Paint.Align.LEFT
             setShadowLayer(3f, 1f, 1f, Color.BLACK)
         }
-
         val wText = paintText.measureText(formatted)
         canvas.drawText(formatted, bitmap.width - wText - 20f, bitmap.height - 20f, paintText)
-
         val info = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
         canvas.drawText(info, 20f, bitmap.height - 20f, paintText)
-
         return bitmap
     }
 
@@ -901,10 +1076,17 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
     private fun refreshThumbs() {
         val parent = sessionDir ?: return
-        val imgs = File(parent, "Snapshots").listFiles { f -> f.extension.equals("jpg", true) }.orEmpty()
-        val vids = File(parent, "Video").listFiles { f -> f.extension.equals("mp4", true) }.orEmpty()
+        val imgs =
+            File(parent, "Snapshots").listFiles { f -> f.extension.equals("jpg", true) }.orEmpty()
+        val vids =
+            File(parent, "Video").listFiles { f -> f.extension.equals("mp4", true) }.orEmpty()
 
-        val merged = (imgs.map { MediaItem(it, MediaType.IMAGE) } + vids.map { MediaItem(it, MediaType.VIDEO) })
+        val merged = (imgs.map { MediaItem(it, MediaType.IMAGE) } + vids.map {
+            MediaItem(
+                it,
+                MediaType.VIDEO
+            )
+        })
             .sortedByDescending { it.file.lastModified() }
 
         allMediaItems = merged
@@ -948,7 +1130,8 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
     private fun showSavingProgressAndExecute() {
         val pv = layoutInflater.inflate(R.layout.dialog_progress_saving, null)
-        val pd = MaterialAlertDialogBuilder(requireContext()).setView(pv).setCancelable(false).create()
+        val pd =
+            MaterialAlertDialogBuilder(requireContext()).setView(pv).setCancelable(false).create()
         pd.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
         pd.show()
 
@@ -969,13 +1152,13 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
 
         val tvAction = v.findViewById<TextView>(R.id.tvAction)
         tvAction?.apply {
-            isFocusable = true
             isClickable = true
             requestFocus()
             setOnClickListener {
                 d.dismiss()
                 stopStreamAndExit()
-                requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                requireActivity().requestedOrientation =
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
             }
         }
     }
@@ -983,7 +1166,6 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     private fun openPreview(position: Int) {
         val paths = ArrayList(allMediaItems.map { it.file.absolutePath })
         val types = ArrayList(allMediaItems.map { it.type.name })
-
         val targetActivity =
             if (isLandscape()) com.idn.kmed.cervexa.gallery.MediaPagerActivityLand::class.java
             else com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java
@@ -998,7 +1180,7 @@ class VideoFragment : Fragment(), IVLCVout.Callback {
     }
 
     companion object {
-        private val TAG: String = VideoFragment::class.java.simpleName
+        private val TAG: String = VideoFragmentTv::class.java.simpleName
         private const val DEBUG = true
     }
 }

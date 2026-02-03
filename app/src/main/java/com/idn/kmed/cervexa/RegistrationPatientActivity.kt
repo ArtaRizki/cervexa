@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import com.idn.kmed.cervexa.live.VideoActivity
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -51,8 +52,8 @@ class RegistrationPatientActivity : AppCompatActivity() {
         toolbar.setNavigationOnClickListener { finish() }
 
         // Agar toolbar bisa difokus remote (opsional, untuk tombol back)
-        toolbar.isFocusable = true
-        toolbar.isFocusableInTouchMode = true
+//        toolbar.isFocusable = true
+//        toolbar.isFocusableInTouchMode = true
 
         // Views
         tilNama = findViewById(R.id.tilNama)

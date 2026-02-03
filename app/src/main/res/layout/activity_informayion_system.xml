@@ -218,10 +218,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:clickable="true"
-                    android:focusable="true"
                     android:text="Lihat hasil tes"
                     android:textColor="?attr/colorPrimary"
                     android:textStyle="bold" />
+<!--                     android:focusable="true"-->
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>

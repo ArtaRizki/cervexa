@@ -6,7 +6,7 @@
 
     <fragment
         android:id="@+id/videoFragment"
-        android:name="com.idn.kmed.cervexa.live.VideoFragment"
+        android:name="com.idn.kmed.cervexa.live.VideoFragmentTv"
         android:label="Video" />
 
 </navigation>

@@ -17,6 +17,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.idn.kmed.cervexa.live.VideoActivity
 import com.idn.kmed.cervexa.media.MediaRepository
 import com.idn.kmed.cervexa.media.PatientListAdapter
 import com.idn.kmed.cervexa.model.PatientItem

@@ -25,6 +25,8 @@
                 android:orientation="horizontal"
                 android:padding="4dp">
 
+                <!--                     android:focusable="true"-->
+                <!--                    android:focusableInTouchMode="true"-->
                 <EditText
                     android:id="@+id/searchView"
                     android:layout_width="0dp"
@@ -32,8 +34,6 @@
                     android:layout_weight="1"
                     android:background="@drawable/bg_search_focus"
                     android:clickable="true"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
                     android:hint="Cari pasien (nama / NIK / RS / tanggal)"
                     android:imeOptions="actionSearch"
                     android:inputType="text"
@@ -56,11 +56,11 @@
                     android:layout_height="44dp"
                     android:layout_marginEnd="8dp"
                     android:background="@drawable/bg_search_button"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:nextFocusLeft="@id/searchView"
-                    android:nextFocusDown="@id/rv">
+                    android:clickable="true">
+                    <!--                     android:focusable="true"-->
+                    <!--                    android:focusableInTouchMode="true"-->
+                    <!--                    android:nextFocusLeft="@id/searchView"-->
+                    <!--                    android:nextFocusDown="@id/rv"-->
 
                     <ImageView
                         android:layout_width="24dp"
@@ -73,7 +73,7 @@
             </LinearLayout>
 
         </androidx.cardview.widget.CardView>
-        <!--            android:focusableInTouchMode="true"-->
+        <!--                                android:focusableInTouchMode="true"-->-->
 
         <!-- Optional: judul lokal, disembunyikan karena pakai Toolbar di Activity -->
         <com.google.android.material.appbar.MaterialToolbar

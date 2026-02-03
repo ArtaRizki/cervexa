@@ -2,19 +2,31 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-    <uses-feature android:name="android.hardware.faketouch" android:required="false" />
-    <uses-feature android:name="android.software.leanback" android:required="false" />
-    <uses-feature android:name="android.hardware.dpad" android:required="false" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.faketouch"
+        android:required="false" />
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.dpad"
+        android:required="false" />
 
-    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
 
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
 
-    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission
+        android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -22,6 +34,7 @@
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
     <uses-permission android:name="android.permission.CAMERA" />
+
     <uses-feature android:name="android.hardware.camera.any" />
 
     <uses-sdk
@@ -34,6 +47,7 @@
         <package android:name="com.whatsapp.w4b" />
         <package android:name="org.telegram.messenger" />
         <package android:name="com.google.android.gm" />
+
         <intent>
             <action android:name="android.intent.action.SEND" />
             <data android:mimeType="image/*" />
@@ -52,9 +66,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
 
-        android:usesCleartextTraffic="true"
+        android:theme="@style/AppTheme.NoActionBar"
 
-        android:theme="@style/AppTheme.NoActionBar">
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".ConfirmPatientActivity"
@@ -98,7 +112,15 @@
             android:theme="@style/AppTheme.NoActionBar" />
 
         <activity android:name=".OnboardingActivity" />
-        <activity android:name=".VideoActivity" />
+
+        <!-- ========================================
+             FIX: Tambah configChanges untuk handle rotasi
+             Tanpa ini, Activity di-recreate setiap rotasi
+             dan Fragment kehilangan state → CRASH
+             ======================================== -->
+        <activity
+            android:name=".live.VideoActivity"/>
+
         <activity android:name=".RegistrationPatientActivity" />
         <activity android:name=".gallery.PreviewActivity" />
         <activity android:name=".gallery.MediaPagerActivity" />

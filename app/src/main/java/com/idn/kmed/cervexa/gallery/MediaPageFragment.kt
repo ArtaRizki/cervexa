@@ -14,6 +14,7 @@ import android.widget.MediaController
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.Fragment
 import com.github.chrisbanes.photoview.PhotoView
 import com.idn.kmed.cervexa.R
@@ -55,11 +56,11 @@ class MediaPageFragment : Fragment() {
         val photo = root.findViewById<PhotoView>(R.id.photoView)
         val video = root.findViewById<VideoView>(R.id.vvPreview)
 
-        val overlayImg = root.findViewById<LinearLayout>(R.id.overlayImage)
-        val overlayVid = root.findViewById<LinearLayout>(R.id.overlayVideo)
+//        val overlayImg = root.findViewById<LinearLayout>(R.id.overlayImage)
+//        val overlayVid = root.findViewById<LinearLayout>(R.id.overlayVideo)
 
-        val tvInfoRight = root.findViewById<TextView>(R.id.tvInfoRight)
-        val tvVidRight = root.findViewById<TextView>(R.id.tvVidRight)
+//        val tvInfoRight = root.findViewById<TextView>(R.id.tvInfoRight)
+//        val tvVidRight = root.findViewById<TextView>(R.id.tvVidRight)
 
         // --- Cek Validitas File ---
         if (!file.exists() || file.length() == 0L) {
@@ -71,8 +72,8 @@ class MediaPageFragment : Fragment() {
             // --- MODE GAMBAR ---
             imageMode.visibility = View.VISIBLE
             videoMode.visibility = View.GONE
-            overlayImg.visibility = View.VISIBLE
-            overlayVid.visibility = View.GONE
+//            overlayImg.visibility = View.VISIBLE
+//            overlayVid.visibility = View.GONE
 
             photo.minimumScale = 1f
             photo.mediumScale = 2.5f
@@ -87,7 +88,7 @@ class MediaPageFragment : Fragment() {
             }
 
             val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("id", "ID"))
-            tvInfoRight.text = dateFormat.format(Date(file.lastModified()))
+//            tvInfoRight.text = dateFormat.format(Date(file.lastModified()))
 
         } else {
             // --- MODE VIDEO ---
@@ -95,12 +96,12 @@ class MediaPageFragment : Fragment() {
             videoMode.visibility = View.VISIBLE
 
             // Default awal: Overlay disembunyikan dulu (nanti muncul kalau dipause)
-            overlayImg.visibility = View.GONE
-            overlayVid.visibility = View.GONE
+//            overlayImg.visibility = View.GONE
+//            overlayVid.visibility = View.GONE
 
             val uri = Uri.fromFile(file)
             val durationStr = getSafeDuration(file)
-            tvVidRight.text = durationStr
+//            tvVidRight.text = durationStr
 
             if (durationStr == "00:00") {
                 Toast.makeText(context, "Video corrupt", Toast.LENGTH_SHORT).show()
@@ -119,12 +120,12 @@ class MediaPageFragment : Fragment() {
                         if (video.isPlaying) {
                             video.pause()
                             // Saat PAUSE: Munculkan overlay info (bar abu-abu)
-                            overlayVid.visibility = View.GONE
+//                            overlayVid.visibility = View.GONE
                             Toast.makeText(context, "Video paused", Toast.LENGTH_SHORT).show()
                         } else {
                             video.start()
                             // Saat PLAY: Sembunyikan overlay info (Layar bersih/Full)
-                            overlayVid.visibility = View.GONE
+//                            overlayVid.visibility = View.GONE
                             Toast.makeText(context, "Video played", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -134,56 +135,24 @@ class MediaPageFragment : Fragment() {
                     videoMode.setOnClickListener { togglePlay() }
 
                     video.setOnPreparedListener { mp ->
-                        val srcW = mp.videoWidth
-                        val srcH = mp.videoHeight
-                        val rot = getVideoRotationDeg(file)
-
-                        mp.isLooping = true
-
-                        // Fit-center video ke dalam parent (tanpa pakai dimensionRatio) agar tidak "miring" di landscape.
-                        video.post {
-                            if (!isAdded) return@post
-
-                            val parent = (video.parent as? View) ?: return@post
-                            val parentW = parent.width
-                            val parentH = parent.height
-                            if (parentW <= 0 || parentH <= 0 || srcW <= 0 || srcH <= 0) return@post
-
-                            // Kalau rotasi 90/270, dimensi tampilan kebalik
-                            val dispW = if (rot == 90 || rot == 270) srcH else srcW
-                            val dispH = if (rot == 90 || rot == 270) srcW else srcH
-
-                            val videoRatio = dispW.toFloat() / dispH.toFloat()
-                            val parentRatio = parentW.toFloat() / parentH.toFloat()
-
-                            val targetW: Int
-                            val targetH: Int
-                            if (parentRatio > videoRatio) {
-                                // Parent lebih lebar -> mentok tinggi
-                                targetH = parentH
-                                targetW = (parentH * videoRatio).toInt()
-                            } else {
-                                // Parent lebih tinggi -> mentok lebar
-                                targetW = parentW
-                                targetH = (parentW / videoRatio).toInt()
-                            }
-
-                            video.layoutParams = video.layoutParams.apply {
-                                width = targetW
-                                height = targetH
-                            }
-
-                            // center di parent
-                            video.translationX = (parentW - targetW) / 2f
-                            video.translationY = (parentH - targetH) / 2f
-
-                            // Terapkan rotasi (kalau ada)
-                            video.rotation = rot.toFloat()
+                        val w = mp.videoWidth
+                        val h = mp.videoHeight
+                        if (w > 0 && h > 0) {
+                            val lp = video.layoutParams as ConstraintLayout.LayoutParams
+                            // Jika video punya metadata rotasi 90/270, ratio harus dibalik.
+                            val rot = getVideoRotationDeg(file)
+                            if (rot == 90 || rot == 270) lp.dimensionRatio = "$h:$w" else lp.dimensionRatio = "$w:$h"
+                            video.layoutParams = lp
                         }
+
+                        // Terapkan rotasi ke view (VideoView adalah View, jadi rotation property bisa dipakai)
+                        val rot = getVideoRotationDeg(file)
+                        if (rot != 0) video.rotation = rot.toFloat()
+                        mp.isLooping = false
 
                         // Mulai video dan sembunyikan overlay agar bersih
                         video.start()
-                        overlayVid.visibility = View.GONE
+//                        overlayVid.visibility = View.GONE
                     }
 
                     video.setOnErrorListener { _, _, _ -> true }

@@ -32,13 +32,13 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
+<!--                android:focusable="true"-->
             <ImageButton
                 android:id="@+id/btnClose"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:background="@drawable/bg_item_focusable"
                 android:clickable="true"
-                android:focusable="true"
                 android:src="@drawable/outline_close_24"
                 app:layout_constraintBottom_toBottomOf="@id/tvTitle"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -59,9 +59,9 @@
             android:layout_marginTop="4dp"
             android:background="@drawable/bg_item_focusable"
             android:clickable="true"
-            android:focusable="true"
             android:gravity="center_vertical"
             android:paddingHorizontal="8dp">
+<!--            android:focusable="true"-->
 
             <ImageView
                 android:layout_width="20dp"
@@ -84,13 +84,13 @@
             android:layout_marginVertical="4dp"
             app:dividerColor="#E3E8EF" />
 
+<!--            android:focusable="true"-->
         <LinearLayout
             android:id="@+id/rowDelete"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:background="@drawable/bg_item_focusable"
             android:clickable="true"
-            android:focusable="true"
             android:gravity="center_vertical"
             android:paddingHorizontal="8dp">
 

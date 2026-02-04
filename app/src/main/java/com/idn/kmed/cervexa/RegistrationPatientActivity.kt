@@ -96,6 +96,7 @@ class RegistrationPatientActivity : AppCompatActivity() {
             inputType = InputType.TYPE_NULL
             keyListener = null
             isCursorVisible = false
+            isFocusableInTouchMode = false
 
             // cegah soft keyboard muncul saat fokus (API 21+)
             showSoftInputOnFocus = false

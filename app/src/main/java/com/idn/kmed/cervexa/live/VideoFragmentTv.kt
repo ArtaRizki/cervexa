@@ -48,13 +48,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * VideoFragment - ENHANCED VERSION
- * Modified for Auto-Crop in Landscape
+ * Modified for Auto-Crop in Landscape + Session.json Creation
  */
 class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
     private lateinit var binding: FragmentVideoTvBinding
     private lateinit var liveViewModel: LiveViewModel
-
     private var ivVideoImageResolution = Pair(0, 0)
 
     // ==== Session / Storage ====
@@ -107,12 +106,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private var focusX = 0f
     private var focusY = 0f
 
-    // === IMAGE ENHANCEMENT (NEW) ===
-    private var brightness = 0f        // -1.0 to 1.0 (default 0 = no change)
-    private var contrast =
-        1.2f        // 0.5 to 2.0 (default 1.2 = slight boost for dark microscope)
-    private var saturation = 1.1f      // 0.0 to 2.0 (default 1.1 = slight boost)
-
+    // === IMAGE ENHANCEMENT ===
+    private var brightness = 0f
+    private var contrast = 1.2f
+    private var saturation = 1.1f
     private val colorMatrix = ColorMatrix()
     private val paint = Paint().apply {
         isAntiAlias = false
@@ -125,11 +122,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private var baseTyVlc = 0f
     private var panTxVlc = 0f
     private var panTyVlc = 0f
-
     private var panTxPhone = 0f
     private var panTyPhone = 0f
-
-    // [MODIFIED] Variabel CROP_IN_LANDSCAPE dihapus karena sekarang otomatis check orientation
 
     private val prefs by lazy {
         requireContext().getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
@@ -138,13 +132,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private lateinit var scaleDetector: ScaleGestureDetector
     private lateinit var gestureDetector: GestureDetector
 
-    // Permission Launcher untuk Kamera HP
     private val requestCameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (isGranted) {
-            startPhoneCamera()
-        } else {
+        if (isGranted) startPhoneCamera()
+        else {
             Toast.makeText(requireContext(), "Izin kamera diperlukan", Toast.LENGTH_SHORT).show()
             usePhoneCamera = false
         }
@@ -153,21 +145,217 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private fun isLandscape(): Boolean =
         resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    // =====================================================
-    // APPLY ZOOM/PAN + COLOR ENHANCEMENT
-    // =====================================================
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Parse arguments
+        arguments?.let { args ->
+            patientNama = args.getString("patient_nama").orEmpty()
+            patientNik = args.getString("patient_nik").orEmpty()
+            patientRs = args.getString("patient_rs").orEmpty()
+            patientNrm = args.getString("patient_nrm").orEmpty()
+            patientDobUtc = args.getLong("patient_dob_utc", -1L)
+            patientAge = PatientUtils.calculateAge(patientDobUtc)
+
+            sessionDir = args.getString("sessionDirPath")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { File(it) }
+
+            Log.d(TAG, "=== ARGUMENTS RECEIVED ===")
+            Log.d(TAG, "sessionDirPath: ${args.getString("sessionDirPath")}")
+            Log.d(TAG, "sessionDir: ${sessionDir?.absolutePath}")
+        }
+
+        // ✅ FALLBACK: Gunakan StorageUtils untuk konsistensi
+        if (sessionDir == null) {
+            Log.w(TAG, "⚠️ sessionDir is NULL! Creating fallback directories...")
+
+            // 1. Buat folder TANGGAL menggunakan StorageUtils
+            val dateFolder = StorageUtils.todayDateFolderWIB()  // "yyyy-MM-dd"
+
+            // 2. Buat folder PASIEN
+            val patientFolder = if (patientNik.isNotBlank()) {
+                "${patientNik}_${patientNama.replace(" ", "_")}"
+            } else {
+                "Patient_Unknown_${System.currentTimeMillis()}"
+            }
+
+            // 3. ✅ Gunakan StorageUtils.ensureSessionDir() untuk konsistensi
+            sessionDir = StorageUtils.ensureSessionDir(
+                requireContext(),
+                dateFolder,
+                patientFolder
+            )
+
+            Log.d(TAG, "✅ Fallback sessionDir created: ${sessionDir?.absolutePath}")
+
+            // Verifikasi dengan base dir
+            val baseDir = StorageUtils.getBaseScanDir(requireContext())
+            Log.d(TAG, "Base scan dir: ${baseDir.absolutePath}")
+            Log.d(TAG, "Session parent: ${sessionDir?.parentFile?.parentFile?.absolutePath}")
+        }
+
+        // Create subdirectories + session.json
+        sessionDir?.let { parent ->
+            Log.d(TAG, "=== CREATING SUBDIRECTORIES ===")
+            Log.d(TAG, "Session dir: ${parent.absolutePath}")
+
+            // ✅ Gunakan StorageUtils.ensureChildDir()
+            snapshotsDir = StorageUtils.ensureChildDir(parent, "Snapshots")
+            videosDir = StorageUtils.ensureChildDir(parent, "Video")
+
+            Log.d(
+                TAG,
+                "Snapshots dir: ${snapshotsDir?.absolutePath} (exists: ${snapshotsDir?.exists()})"
+            )
+            Log.d(TAG, "Video dir: ${videosDir?.absolutePath} (exists: ${videosDir?.exists()})")
+
+            // ========== CREATE session.json FILE ==========
+            val sessionJson = File(parent, "session.json")
+            if (!sessionJson.exists()) {
+                try {
+                    val jsonContent = org.json.JSONObject().apply {
+                        put("nama", patientNama)
+                        put("nik", patientNik)
+                        put("rs", patientRs)
+                        put("nrm", patientNrm)
+                        put("dob_utc", patientDobUtc)
+                        put(
+                            "created_at",
+                            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+                        )
+                        put("session_type", "colposcopy")
+                        put("app_version", "1.0")
+                    }
+
+                    // ✅ Atau gunakan StorageUtils
+                    StorageUtils.writeSessionMetadata(parent, jsonContent.toString(2))
+
+                    Log.d(TAG, "✅ session.json created: ${sessionJson.absolutePath}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Failed to create session.json: ${e.message}", e)
+                }
+            }
+
+            Log.d(TAG, "=== FINAL VERIFICATION ===")
+            Log.d(TAG, "Base: ${StorageUtils.getBaseScanDir(requireContext()).absolutePath}")
+            Log.d(TAG, "Date: ${parent.parentFile?.name}")
+            Log.d(TAG, "Patient: ${parent.name}")
+            Log.d(TAG, "Full path: ${parent.absolutePath}")
+
+        } ?: run {
+            Log.e(TAG, "❌ CRITICAL: sessionDir is still NULL!")
+        }
+
+        // Load image enhancement settings
+        brightness = prefs.getFloat("image_brightness", 0f)
+        contrast = prefs.getFloat("image_contrast", 1.2f)
+        saturation = prefs.getFloat("image_saturation", 1.1f)
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        clockJob?.cancel()
+        stopPhoneCamera()
+
+        // Save settings
+        prefs.edit().apply {
+            putFloat("image_brightness", brightness)
+            putFloat("image_contrast", contrast)
+            putFloat("image_saturation", saturation)
+            apply()
+        }
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
+        binding.tvOverlayInfo.text = infoText
+        startOverlayClock()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        Log.d(TAG, "onConfigurationChanged: orientation=${newConfig.orientation}")
+
+        toggleSystemUI()
+
+        val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
+        binding.tvOverlayInfo.text = infoText
+
+        binding.videoContainer.postDelayed({ reattachVlcViews() }, 300)
+
+        view?.post {
+            if (usePhoneCamera && phoneCameraView != null) {
+                currentScale = 1f
+                applyZoomAndPan()
+            }
+            if (::thumbsAdapter.isInitialized) {
+                binding.rvThumbs.adapter = thumbsAdapter
+            }
+            ensureResourcesAvailable()
+        }
+    }
+
+    private fun toggleSystemUI() {
+        val window = requireActivity().window
+        if (isLandscape()) {
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+                .let { controller ->
+                    controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                    controller.systemBarsBehavior =
+                        androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+        } else {
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+                .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            updateStatusBarColor()
+        }
+    }
+
+    private fun ensureResourcesAvailable() {
+        if (!isAdded) return
+        try {
+            if (usePhoneCamera) {
+                val pv = phoneCameraView
+                if (pv?.display == null) {
+                    Log.w(TAG, "Phone camera lost display, re-initializing...")
+                    view?.post { if (isAdded) startPhoneCamera() }
+                }
+            } else {
+                val mp = mediaPlayer
+                if (mp != null && !mp.isPlaying) {
+                    Log.w(TAG, "MediaPlayer stopped, resuming...")
+                    view?.post {
+                        if (isAdded) {
+                            try {
+                                mp.play()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to resume", e)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in ensureResourcesAvailable", e)
+        }
+    }
+
+    // ===== ZOOM/PAN + COLOR ENHANCEMENT =====
     private fun applyZoomAndPan() {
         if (!isAdded) return
 
         if (usePhoneCamera) {
             val pv = phoneCameraView ?: return
             val scale = currentScale.coerceIn(minScale, maxScale)
-
             pv.pivotX = focusX
             pv.pivotY = focusY
             pv.scaleX = scale
             pv.scaleY = scale
-
             if (scale <= 1.01f) {
                 panTxPhone = 0f
                 panTyPhone = 0f
@@ -179,12 +367,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
         val tv = textureView ?: return
         val scale = currentScale.coerceIn(minScale, maxScale)
-
         tv.pivotX = focusX
         tv.pivotY = focusY
         tv.scaleX = baseScaleVlc * scale
         tv.scaleY = baseScaleVlc * scale
-
         if (scale <= 1.01f) {
             panTxVlc = 0f
             panTyVlc = 0f
@@ -192,14 +378,12 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         tv.translationX = baseTxVlc + panTxVlc
         tv.translationY = baseTyVlc + panTyVlc
 
-        // Apply color filter untuk enhance dark microscope image
         applyColorEnhancement()
     }
 
     private fun applyColorEnhancement() {
         val tv = textureView ?: return
 
-        // Create color matrix untuk brightness + contrast + saturation
         val brightnessMatrix = ColorMatrix().apply {
             val scale = 1f + brightness
             setScale(scale, scale, scale, 1f)
@@ -222,7 +406,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             setSaturation(saturation)
         }
 
-        // Combine all matrices
         colorMatrix.reset()
         colorMatrix.postConcat(brightnessMatrix)
         colorMatrix.postConcat(contrastMatrix)
@@ -230,18 +413,15 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
         paint.colorFilter = ColorMatrixColorFilter(colorMatrix)
 
-        // Apply to TextureView's surface
-        tv.post {
-            tv.invalidate()
-        }
+        tv.post { tv.invalidate() }
     }
 
-    // ==========================================
-    // PHONE CAMERA LOGIC (CAMERAX)
-    // ==========================================
+    // ===== PHONE CAMERA LOGIC =====
     private fun checkAndStartPhoneCamera() {
-        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA)
-            == PackageManager.PERMISSION_GRANTED
+        if (ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
         ) {
             startPhoneCamera()
         } else {
@@ -261,10 +441,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
-            // [MODIFIED] Di mode kamera HP juga bisa disesuaikan, tapi defaultnya FILL_CENTER cukup bagus
             scaleType = PreviewView.ScaleType.FILL_CENTER
         }
-
         phoneCameraView = pv
         binding.videoContainer.addView(pv)
 
@@ -277,12 +455,12 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
         cameraProviderFuture.addListener({
             try {
-                val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+                val cameraProvider = cameraProviderFuture.get()
                 val preview = Preview.Builder().build().also {
                     it.setSurfaceProvider(pv.surfaceProvider)
                 }
-
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(viewLifecycleOwner, cameraSelector, preview)
 
@@ -305,11 +483,9 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             cameraProvider.unbindAll()
         } catch (_: Exception) {
         }
-
         phoneCameraView?.let { binding.videoContainer.removeView(it) }
         phoneCameraView = null
         textureView?.visibility = View.VISIBLE
-
         currentScale = 1f
         panTxPhone = 0f
         panTyPhone = 0f
@@ -326,143 +502,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             stopVlcStream()
             checkAndStartPhoneCamera()
             Toast.makeText(requireContext(), "Mode: Kamera HP", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        arguments?.let { args ->
-            args.getString("sessionDirPath")?.let { p ->
-                if (p.isNotBlank()) sessionDir = File(p)
-            }
-            patientNama = args.getString("patient_nama").orEmpty()
-            patientNik = args.getString("patient_nik").orEmpty()
-            patientRs = args.getString("patient_rs").orEmpty()
-            patientNrm = args.getString("patient_nrm").orEmpty()
-            patientDobUtc = args.getLong("patient_dob_utc", -1L)
-            patientAge = PatientUtils.calculateAge(patientDobUtc)
-
-            sessionDir = args.getString("sessionDirPath")
-                ?.takeIf { it.isNotBlank() }
-                ?.let { File(it) }
-
-            sessionDir?.let { parent ->
-                snapshotsDir = File(parent, "Snapshots").apply { if (!exists()) mkdirs() }
-                videosDir = File(parent, "Video").apply { if (!exists()) mkdirs() }
-            }
-        }
-
-        // Load saved image enhancement settings
-        brightness = prefs.getFloat("image_brightness", 0f)
-        contrast = prefs.getFloat("image_contrast", 1.2f)
-        saturation = prefs.getFloat("image_saturation", 1.1f)
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        clockJob?.cancel()
-        stopPhoneCamera()
-
-        // Save image enhancement settings
-        prefs.edit().apply {
-            putFloat("image_brightness", brightness)
-            putFloat("image_contrast", contrast)
-            putFloat("image_saturation", saturation)
-            apply()
-        }
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
-        binding.tvOverlayInfo.text = infoText
-        startOverlayClock()
-    }
-
-    // [MODIFIED] Added logic to handle system UI visibility and layout refresh
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-
-        Log.d(TAG, "onConfigurationChanged: orientation=${newConfig.orientation}")
-        toggleSystemUI() // Update status bar visibility
-
-        val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
-        binding.tvOverlayInfo.text = infoText
-
-        binding.videoContainer.postDelayed({
-            reattachVlcViews()
-        }, 300)
-
-        // Re-apply layout setelah rotasi
-        view?.post {
-            // Re-calculate dan apply zoom/pan untuk layout baru (akan otomatis check Landscape)
-            if (usePhoneCamera && phoneCameraView != null) {
-                // Untuk CameraX, biasanya handled by PreviewView, tapi reset scale aman
-                currentScale = 1f
-                applyZoomAndPan()
-            } else if (!usePhoneCamera && textureView != null && ivVideoImageResolution.first > 0) {
-                // Trigger ulang layout calculation VLC
-                // Note: parameter sarNum/sarDen kita pakai default/simpanan atau 1:1 jika tidak ada
-                // Idealnya disimpan di variable global saat onNewVideoLayout, tapi untuk quick fix rotasi:
-                // Kita tunggu reattachVlcViews mentrigger onNewVideoLayout.
-            }
-
-            // Optional: Re-adjust thumbnail RecyclerView jika perlu
-            if (::thumbsAdapter.isInitialized) {
-                binding.rvThumbs.adapter = thumbsAdapter
-            }
-
-            ensureResourcesAvailable()
-        }
-    }
-
-    // [MODIFIED] New function to Hide/Show Status Bar
-    private fun toggleSystemUI() {
-        val window = requireActivity().window
-        if (isLandscape()) {
-            // Landscape: Fullscreen Immersive (Hide Status Bar)
-            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
-            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
-                .let { controller ->
-                    controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-                    controller.systemBarsBehavior =
-                        androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                }
-        } else {
-            // Portrait: Show Status Bar
-            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
-            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
-                .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            updateStatusBarColor()
-        }
-    }
-
-    private fun ensureResourcesAvailable() {
-        if (!isAdded) return
-        try {
-            if (usePhoneCamera) {
-                val pv = phoneCameraView
-                if (pv?.display == null) {
-                    Log.w(TAG, "Phone camera view lost display, re-initializing...")
-                    view?.post { if (isAdded) startPhoneCamera() }
-                }
-            } else {
-                val mp = mediaPlayer
-                if (mp != null && !mp.isPlaying) {
-                    Log.w(TAG, "MediaPlayer stopped, attempting to resume...")
-                    view?.post {
-                        if (isAdded) {
-                            try {
-                                mp.play()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to resume", e)
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in ensureResourcesAvailable", e)
         }
     }
 
@@ -486,21 +525,23 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             panTxPhone = bundle.getFloat("panTxPhone", 0f)
             panTyPhone = bundle.getFloat("panTyPhone", 0f)
             usePhoneCamera = bundle.getBoolean("usePhoneCamera", false)
-            // Re-apply zoom/pan
+
             view?.post { applyZoomAndPan() }
         }
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
     ): View {
         if (DEBUG) Log.v(TAG, "onCreateView()")
 
         liveViewModel = ViewModelProvider(this)[LiveViewModel::class.java]
         binding = FragmentVideoTvBinding.inflate(inflater, container, false)
-        textureView = binding.textureView
 
+        textureView = binding.textureView
         textureView?.apply {
             scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f
         }
@@ -522,6 +563,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             requireContext(),
             object : GestureDetector.SimpleOnGestureListener() {
                 override fun onDown(e: MotionEvent): Boolean = true
+
                 override fun onDoubleTap(e: MotionEvent): Boolean {
                     currentScale = if (currentScale > 1.01f) 1f else 2f
                     focusX = e.x
@@ -556,6 +598,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             gestureDetector.onTouchEvent(ev)
             true
         }
+
         textureView?.setOnTouchListener(touchListener)
         binding.videoContainer.setOnTouchListener(touchListener)
 
@@ -564,7 +607,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             else if (mediaPlayer?.isPlaying == true) stopStreamAndExit()
             else startVlcStream()
         }
-        binding.bnStartStopImage?.setOnLongClickListener { toggleSourceMode(); true }
+
+        binding.bnStartStopImage?.setOnLongClickListener {
+            toggleSourceMode(); true
+        }
 
         binding.btnEnterLandscape?.setOnClickListener {
             val isPortrait =
@@ -575,12 +621,22 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
             }
         }
-        binding.btnSnapshot.setOnClickListener { takeSnapshot() }
-        binding.btnRecordVideo.setOnClickListener {
-            if (record.get()) stopVideoRecording() else startVideoRecording()
+
+        binding.btnSnapshot.setOnClickListener {
+            Log.d(TAG, ">>> Snapshot button CLICKED <<<")
+            takeSnapshot()
         }
 
-        binding.btnBackLite?.setOnLongClickListener { showImageEnhancementDialog(); true }
+        binding.btnRecordVideo.setOnClickListener {
+            Log.d(TAG, ">>> Record button CLICKED - state: ${record.get()} <<<")
+            if (record.get()) stopVideoRecording()
+            else startVideoRecording()
+        }
+
+        binding.btnBackLite?.setOnLongClickListener {
+            showImageEnhancementDialog(); true
+        }
+
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(true) {
@@ -588,18 +644,28 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                     showSaveConfirmDialog()
                 }
             })
-        binding.topAppBar.setNavigationOnClickListener { showSaveConfirmDialog() }
-        binding.btnBackLite?.setOnClickListener { showSaveConfirmDialog() }
+
+        binding.topAppBar.setNavigationOnClickListener {
+            showSaveConfirmDialog()
+        }
+
+        binding.btnBackLite?.setOnClickListener {
+            showSaveConfirmDialog()
+        }
 
         binding.rvThumbs.apply {
             layoutManager = androidx.recyclerview.widget.GridLayoutManager(requireContext(), 4)
-            thumbsAdapter = ThumbAdapter { _, position -> openPreview(position) }
+            thumbsAdapter = ThumbAdapter { _, position ->
+                openPreview(position)
+            }
             thumbsAdapter.selectionListener = object : ThumbAdapter.SelectionListener {
                 override fun onSelectionChanged(count: Int) {
                     if (selectionMode) binding.topAppBar.title = "$count dipilih"
                 }
             }
-            thumbsAdapter.onStartSelectionRequested = { if (!selectionMode) enterSelectionMode() }
+            thumbsAdapter.onStartSelectionRequested = {
+                if (!selectionMode) enterSelectionMode()
+            }
             adapter = thumbsAdapter
         }
 
@@ -617,8 +683,12 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             }
         }
 
-        binding.btnSimpanCase.setOnClickListener { showSaveConfirmDialog() }
+        binding.btnSimpanCase.setOnClickListener {
+            showSaveConfirmDialog()
+        }
+
         binding.tvMediaTgl?.text = formattedDate
+
         refreshThumbs()
 
         val infoText = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
@@ -631,7 +701,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private fun showImageEnhancementDialog() {
         Toast.makeText(
             requireContext(),
-            "Enhancement: Brightness=${brightness}, Contrast=${contrast}, Saturation=${saturation}",
+            "Enhancement: Brightness=$brightness, Contrast=$contrast, Saturation=$saturation",
             Toast.LENGTH_LONG
         ).show()
     }
@@ -642,7 +712,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
             while (isActive) {
                 val now = if (android.os.Build.VERSION.SDK_INT >= 26) {
-                    ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
+                    ZonedDateTime.now()
+                        .format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
                 } else {
                     SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
                 }
@@ -654,10 +725,9 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
     override fun onResume() {
         super.onResume()
-        // [MODIFIED] Ensure correct UI State
         toggleSystemUI()
-        liveViewModel.loadParams(requireContext())
 
+        liveViewModel.loadParams(requireContext())
         if (usePhoneCamera) {
             checkAndStartPhoneCamera()
         } else if (mediaPlayer == null || mediaPlayer?.isPlaying == false) {
@@ -668,6 +738,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     override fun onPause() {
         super.onPause()
         updateStatusBarColor()
+
         liveViewModel.saveParams(requireContext())
         if (record.get()) stopVideoRecording()
         if (!usePhoneCamera) stopVlcStream()
@@ -675,31 +746,32 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
     private fun updateStatusBarColor() {
         val color = if (isLandscape()) R.color.colorBlack else R.color.colorButton
-        requireActivity().window.statusBarColor = ContextCompat.getColor(requireContext(), color)
+        requireActivity().window.statusBarColor =
+            ContextCompat.getColor(requireContext(), color)
     }
 
     private fun reattachVlcViews() {
         if (usePhoneCamera) return
-
         val player = mediaPlayer ?: return
         val vout = player.vlcVout
 
         try {
             vout.detachViews()
             vout.setVideoView(textureView)
-
-            // ===== KEY: Set window size sesuai container =====
             vout.setWindowSize(
                 binding.videoContainer.width,
                 binding.videoContainer.height
             )
-
             vout.addCallback(this)
-
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
                 override fun onNewVideoLayout(
-                    vlcVout: IVLCVout?, width: Int, height: Int,
-                    visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int
+                    vlcVout: IVLCVout?,
+                    width: Int,
+                    height: Int,
+                    visibleWidth: Int,
+                    visibleHeight: Int,
+                    sarNum: Int,
+                    sarDen: Int
                 ) {
                     if (width * height == 0) return
                     ivVideoImageResolution = Pair(width, height)
@@ -711,44 +783,15 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                     }
                 }
             })
+
             Log.d(
                 TAG,
-                "VLC views reattached with window size: ${binding.videoContainer.width}x${binding.videoContainer.height}"
+                "VLC reattached: ${binding.videoContainer.width}x${binding.videoContainer.height}"
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error reattaching VLC views", e)
+            Log.e(TAG, "Error reattaching VLC", e)
         }
     }
-
-    private fun forceFullScreenCrop() {
-        val tv = textureView ?: return
-        val containerW = binding.videoContainer.width.toFloat()
-        val containerH = binding.videoContainer.height.toFloat()
-
-        if (containerW <= 0 || containerH <= 0) return
-
-        val tvW = tv.width.toFloat()
-        val tvH = tv.height.toFloat()
-
-        if (tvW <= 0 || tvH <= 0) return
-
-        // Calculate scale to fill container
-        val scaleX = containerW / tvW
-        val scaleY = containerH / tvH
-        val scale = Math.max(scaleX, scaleY) // Use max to ensure filling
-
-        // Center and scale
-        tv.scaleX = scale
-        tv.scaleY = scale
-        tv.translationX = (containerW - tvW * scale) / 2f
-        tv.translationY = (containerH - tvH * scale) / 2f
-
-        Log.d(
-            TAG,
-            "Force crop: scale=$scale, container=${containerW}x${containerH}, texture=${tvW}x${tvH}"
-        )
-    }
-
 
     private fun startVlcStream() {
         if (usePhoneCamera) return
@@ -772,28 +815,26 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             }
 
             libVlc = LibVLC(requireContext(), options)
-            mediaPlayer = MediaPlayer(libVlc)
-
             mediaPlayer = MediaPlayer(libVlc).apply {
-                videoScale =
-                    MediaPlayer.ScaleType.SURFACE_FILL  // 0 = SURFACE_FILL (ignore aspect ratio)
+                videoScale = MediaPlayer.ScaleType.SURFACE_FILL
             }
 
             val vout = mediaPlayer!!.vlcVout
             vout.setVideoView(textureView)
-
-            // ===== KEY FIX: Set VLC window size to match container =====
             vout.setWindowSize(
                 binding.videoContainer.width,
                 binding.videoContainer.height
             )
-
             vout.addCallback(this)
-
             vout.attachViews(object : IVLCVout.OnNewVideoLayoutListener {
                 override fun onNewVideoLayout(
-                    vlcVout: IVLCVout?, width: Int, height: Int,
-                    visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int
+                    vlcVout: IVLCVout?,
+                    width: Int,
+                    height: Int,
+                    visibleWidth: Int,
+                    visibleHeight: Int,
+                    sarNum: Int,
+                    sarDen: Int
                 ) {
                     if (width * height == 0) return
                     ivVideoImageResolution = Pair(width, height)
@@ -820,24 +861,27 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             media.release()
             mediaPlayer?.play()
 
-            mediaPlayer.apply { this?.videoScale = MediaPlayer.ScaleType.SURFACE_FILL }
+            binding.tvStatusImage?.text = "RTSP Connected"
 
-            binding.tvStatusImage?.text = "RTSP Connected (Full Screen)"
             binding.pbLoadingImage.postDelayed({
                 binding.pbLoadingImage.visibility = View.GONE
                 binding.vShutterImage.visibility = View.GONE
             }, 1500)
+
             setKeepScreenOn(true)
-            Log.d(TAG, "VLC started with full-screen mode")
+            Log.d(TAG, "VLC started")
         } catch (e: Exception) {
             Log.e(TAG, "Error starting VLC", e)
         }
     }
 
-
-    // [MODIFIED] CORE LOGIC FOR AUTO-CROP IN LANDSCAPE
     private fun applyVlcLayoutAndBaseTransform(
-        width: Int, height: Int, visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int
+        width: Int,
+        height: Int,
+        visibleWidth: Int,
+        visibleHeight: Int,
+        sarNum: Int,
+        sarDen: Int
     ) {
         val tv = textureView ?: return
         val containerW = binding.videoContainer.width
@@ -864,11 +908,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
         Log.d(
             TAG,
-            "Layout: Container=${containerW}x${containerH}, Video=${videoW.toInt()}x${videoH.toInt()}, Landscape=$isLandscapeMode"
+            "Layout: Container=$containerW x $containerH, Video=${videoW.toInt()}x${videoH.toInt()}, Landscape=$isLandscapeMode"
         )
 
         if (isLandscapeMode) {
-            // LANDSCAPE: TextureView = Container size (FULL SCREEN)
+            // LANDSCAPE: Full screen
             tv.layoutParams = tv.layoutParams.apply {
                 this.width = containerW
                 this.height = containerH
@@ -877,11 +921,9 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             baseTxVlc = 0f
             baseTyVlc = 0f
 
-            mediaPlayer.apply { this?.videoScale = MediaPlayer.ScaleType.SURFACE_FILL }
-
-            Log.d(TAG, "LANDSCAPE: Full screen ${containerW}x${containerH}")
+            Log.d(TAG, "LANDSCAPE: Full screen $containerW x $containerH")
         } else {
-            // PORTRAIT: Fit with aspect ratio
+            // PORTRAIT: Letterbox
             val videoAspect = videoW / videoH
             val containerAspect = containerW.toFloat() / containerH.toFloat()
 
@@ -905,9 +947,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             baseTxVlc = (containerW - finalW) / 2f
             baseTyVlc = (containerH - finalH) / 2f
 
-            mediaPlayer.apply { this?.videoScale = MediaPlayer.ScaleType.SURFACE_FILL }
-
-            Log.d(TAG, "PORTRAIT: Letterbox ${finalW}x${finalH}")
+            Log.d(TAG, "PORTRAIT: Letterbox $finalW x $finalH")
         }
 
         panTxVlc = 0f
@@ -919,10 +959,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }
 
         applyZoomAndPan()
-
-//        if (isLandscapeMode) {
-//            tv.post { forceFullScreenCrop() }
-//        }
     }
 
     private fun stopVlcStream() {
@@ -932,14 +968,17 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         libVlc?.release()
         mediaPlayer = null
         libVlc = null
+
         binding.tvStatusImage?.text = "Disconnected"
         binding.vShutterImage.visibility = View.VISIBLE
         setKeepScreenOn(false)
 
-        baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
-
-        mediaPlayer.apply { this?.videoScale = MediaPlayer.ScaleType.SURFACE_FILL }
-        panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
+        baseScaleVlc = 1f
+        baseTxVlc = 0f
+        baseTyVlc = 0f
+        panTxVlc = 0f
+        panTyVlc = 0f
+        currentScale = 1f
     }
 
     private fun stopStreamAndExit() {
@@ -951,37 +990,170 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     }
 
     private fun startVideoRecording() {
-        val dir = videosDir ?: sessionDir ?: return
+        Log.d(TAG, "=== startVideoRecording() ===")
+
+        // ✅ PERBAIKAN: Pastikan menggunakan subdirectory Video yang benar
+        val dir = videosDir
+        if (dir == null || !dir.exists()) {
+            Log.e(TAG, "❌ Video directory not available!")
+            Log.e(TAG, "   videosDir=$videosDir")
+            Log.e(TAG, "   sessionDir=$sessionDir")
+
+            requireActivity().runOnUiThread {
+                Toast.makeText(
+                    requireContext(),
+                    "❌ ERROR: Direktori video tidak tersedia!",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            return
+        }
+
+        Log.d(TAG, "✅ Recording to: ${dir.absolutePath}")
+
         val out = File(dir, "vid_${StorageUtils.timestampWIB()}.mp4")
         videoOutputFile = out
         val recWidth = 1280
         val recHeight = 720
 
         try {
+            Log.d(TAG, "Creating encoder...")
             recorder = RealtimeBitmapEncoder(requireContext(), recWidth, recHeight, out)
             recorder.start()
+
             record.set(true)
             recordStartElapsedMs = android.os.SystemClock.elapsedRealtime()
+
+            startFrameGrabber(recWidth, recHeight)
+
+            // Visual feedback
             binding.recordHud.visibility = View.VISIBLE
             hudHandler.post(hudTick)
-            binding.btnRecordVideo.setImageResource(R.drawable.btn_stop)
-            startFrameGrabber(recWidth, recHeight)
+
+            binding.btnRecordVideo.imageTintList =
+                android.content.res.ColorStateList.valueOf(Color.RED)
+
+            requireActivity().runOnUiThread {
+                Toast.makeText(
+                    requireContext(),
+                    "⏺️ MULAI MEREKAM",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+            Log.d(TAG, "✅ Recording started to: ${out.absolutePath}")
+
         } catch (e: Exception) {
+            Log.e(TAG, "❌ Recording ERROR: ${e.message}", e)
             record.set(false)
-            Toast.makeText(requireContext(), "Gagal rekam: ${e.message}", Toast.LENGTH_SHORT).show()
+            requireActivity().runOnUiThread {
+                Toast.makeText(
+                    requireContext(),
+                    "❌ Gagal merekam: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun takeSnapshot() {
+        Log.d(TAG, "=== takeSnapshot() ===")
+
+        // ✅ PERBAIKAN: Pastikan menggunakan subdirectory Snapshots yang benar
+        val dir = snapshotsDir
+        if (dir == null || !dir.exists()) {
+            Log.e(TAG, "❌ Snapshot directory not available!")
+            Log.e(TAG, "   snapshotsDir=$snapshotsDir")
+            Log.e(TAG, "   sessionDir=$sessionDir")
+
+            requireActivity().runOnUiThread {
+                Toast.makeText(
+                    requireContext(),
+                    "❌ Direktori snapshot tidak tersedia",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            return
+        }
+
+        Log.d(TAG, "✅ Snapshot dir: ${dir.absolutePath}")
+
+        val bmp = if (usePhoneCamera) {
+            Log.d(TAG, "Capturing from phone camera")
+            phoneCameraView?.bitmap
+        } else {
+            Log.d(TAG, "Capturing from texture view")
+            textureView?.bitmap
+        }
+
+        if (bmp != null) {
+            Log.d(TAG, "Bitmap captured: ${bmp.width}x${bmp.height}")
+
+            runCatching {
+                StorageUtils.saveJpegWithPrefix(dir, processTextToBitmapSafe(bmp), prefix = "ss")
+            }.onSuccess { savedFile ->
+                Log.d(TAG, "✅ Snapshot saved: ${savedFile.absolutePath}")
+
+                requireActivity().runOnUiThread {
+                    Toast.makeText(
+                        requireContext(),
+                        "📸 SNAPSHOT TERSIMPAN!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                refreshThumbs()
+            }.onFailure { error ->
+                Log.e(TAG, "❌ Save failed: ${error.message}", error)
+
+                requireActivity().runOnUiThread {
+                    Toast.makeText(
+                        requireContext(),
+                        "❌ Gagal menyimpan: ${error.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        } else {
+            Log.e(TAG, "❌ Bitmap is null!")
+
+            requireActivity().runOnUiThread {
+                Toast.makeText(
+                    requireContext(),
+                    "⚠️ GAGAL CAPTURE",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
     }
 
     private fun stopVideoRecording() {
-        if (!record.get()) return
+        Log.d(TAG, "=== stopVideoRecording() ===")
+
+        if (!record.get()) {
+            Log.w(TAG, "Not recording")
+            return
+        }
+
         recordingJob?.cancel()
         runCatching { recorder.stop() }
         record.set(false)
         hudHandler.removeCallbacks(hudTick)
+
         binding.recordHud.visibility = View.GONE
-        binding.btnRecordVideo.setImageResource(R.drawable.majesticons_video)
+        binding.btnRecordVideo.imageTintList =
+            android.content.res.ColorStateList.valueOf(Color.WHITE)
+
+        requireActivity().runOnUiThread {
+            Toast.makeText(
+                requireContext(),
+                "✅ VIDEO TERSIMPAN!",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
         binding.rvThumbs.postDelayed({ refreshThumbs() }, 300)
-        Toast.makeText(requireContext(), "Video Tersimpan", Toast.LENGTH_SHORT).show()
+        Log.d(TAG, "✅ Recording stopped")
     }
 
     private fun startFrameGrabber(width: Int, height: Int) {
@@ -992,39 +1164,24 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                     if (usePhoneCamera) phoneCameraView?.bitmap
                     else textureView?.getBitmap(width, height)
                 }
+
                 if (bmp != null) {
                     val scaled = if (bmp.width != width || bmp.height != height) {
                         Bitmap.createScaledBitmap(bmp, width, height, true)
                     } else bmp
+
                     recorder.submitBitmap(processTextToBitmapSafe(scaled))
                 }
+
                 val wait = (50 - (System.currentTimeMillis() - start)).coerceAtLeast(0)
                 delay(wait)
             }
         }
     }
 
-    private fun takeSnapshot() {
-        val dir = snapshotsDir ?: sessionDir ?: return
-        val bmp = if (usePhoneCamera) phoneCameraView?.bitmap else textureView?.bitmap
-        if (bmp != null) {
-            runCatching {
-                StorageUtils.saveJpegWithPrefix(dir, processTextToBitmapSafe(bmp), prefix = "ss")
-            }.onSuccess {
-                Toast.makeText(requireContext(), "Snapshot Tersimpan", Toast.LENGTH_SHORT).show()
-                refreshThumbs()
-            }.onFailure {
-                Toast.makeText(
-                    requireContext(),
-                    "Gagal snapshot: ${it.message}",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-        }
-    }
-
     private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
+
         val formatted = if (android.os.Build.VERSION.SDK_INT >= 26)
             ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
@@ -1037,10 +1194,13 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             textAlign = Paint.Align.LEFT
             setShadowLayer(3f, 1f, 1f, Color.BLACK)
         }
+
         val wText = paintText.measureText(formatted)
         canvas.drawText(formatted, bitmap.width - wText - 20f, bitmap.height - 20f, paintText)
+
         val info = if (patientNrm.isEmpty()) "$patientRs" else "$patientRs/$patientNrm"
         canvas.drawText(info, 20f, bitmap.height - 20f, paintText)
+
         return bitmap
     }
 
@@ -1066,13 +1226,16 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     }
 
     override fun onSurfacesCreated(vlcVout: IVLCVout?) {}
+
     override fun onSurfacesDestroyed(vlcVout: IVLCVout?) {}
 
     private fun showSaveConfirmDialog() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Konfirmasi")
             .setMessage("Simpan media dan tutup sesi?")
-            .setPositiveButton("Simpan") { _, _ -> showSavingProgressAndExecute() }
+            .setPositiveButton("Simpan") { _, _ ->
+                showSavingProgressAndExecute()
+            }
             .setNegativeButton("Batal", null)
             .show()
     }
@@ -1093,6 +1256,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private fun confirmDeleteSelected() {
         val files = thumbsAdapter.getSelectedItems()
         if (files.isEmpty()) return
+
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Hapus ${files.size} item?")
             .setPositiveButton("Hapus") { _, _ ->
@@ -1118,22 +1282,20 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
     private fun refreshThumbs() {
         val parent = sessionDir ?: return
-        val imgs =
-            File(parent, "Snapshots").listFiles { f -> f.extension.equals("jpg", true) }.orEmpty()
-        val vids =
-            File(parent, "Video").listFiles { f -> f.extension.equals("mp4", true) }.orEmpty()
+        val imgs = File(parent, "Snapshots").listFiles { f ->
+            f.extension.equals("jpg", true)
+        }.orEmpty()
+        val vids = File(parent, "Video").listFiles { f ->
+            f.extension.equals("mp4", true)
+        }.orEmpty()
 
-        val merged = (imgs.map { MediaItem(it, MediaType.IMAGE) } + vids.map {
-            MediaItem(
-                it,
-                MediaType.VIDEO
-            )
-        })
+        val merged = (imgs.map { MediaItem(it, MediaType.IMAGE) } +
+                vids.map { MediaItem(it, MediaType.VIDEO) })
             .sortedByDescending { it.file.lastModified() }
 
         allMediaItems = merged
-        val isEmpty = merged.isEmpty()
 
+        val isEmpty = merged.isEmpty()
         binding.tvEmptyThumbs?.visibility = if (isEmpty) View.VISIBLE else View.GONE
         binding.tvImgNoMedia?.visibility = if (isEmpty) View.VISIBLE else View.GONE
         binding.tvImgSubtitleNoMedia?.visibility = if (isEmpty) View.VISIBLE else View.GONE
@@ -1146,6 +1308,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private fun showPatientInfoBottomSheet() {
         val dialog = BottomSheetDialog(requireContext())
         dialog.setContentView(layoutInflater.inflate(R.layout.bs_patient_info, null))
+
         val btnClose = dialog.findViewById<ImageButton>(R.id.btnClose)
         val tvNama = dialog.findViewById<TextView>(R.id.tvNama)
         val tvNik = dialog.findViewById<TextView>(R.id.tvNik)
@@ -1157,6 +1320,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             timeZone = TimeZone.getTimeZone("Asia/Jakarta")
         }
         tvTanggal?.text = sdfNow.format(Date())
+
         val namaSafe = patientNama.ifBlank { "-" }
         tvNama?.text = if (patientAge > 0) "$namaSafe ($patientRs)" else namaSafe
         tvNik?.text = patientNik.ifBlank { "-" }
@@ -1172,14 +1336,16 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
     private fun showSavingProgressAndExecute() {
         val pv = layoutInflater.inflate(R.layout.dialog_progress_saving, null)
-        val pd =
-            MaterialAlertDialogBuilder(requireContext()).setView(pv).setCancelable(false).create()
+        val pd = MaterialAlertDialogBuilder(requireContext()).setView(pv).setCancelable(false)
+            .create()
         pd.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
         pd.show()
 
         val bar = pv.findViewById<LinearProgressIndicator>(R.id.progress)
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
-            repeat(10) { bar.setProgressCompat((it + 1) * 10, true); delay(50) }
+            repeat(10) {
+                bar.setProgressCompat((it + 1) * 10, true); delay(50)
+            }
             withContext(Dispatchers.IO) { delay(500) }
             pd.dismiss()
             showSaveSuccessDialog()
@@ -1208,9 +1374,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private fun openPreview(position: Int) {
         val paths = ArrayList(allMediaItems.map { it.file.absolutePath })
         val types = ArrayList(allMediaItems.map { it.type.name })
-        val targetActivity =
-            if (isLandscape()) com.idn.kmed.cervexa.gallery.MediaPagerActivityLand::class.java
-            else com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java
+
+        val targetActivity = if (isLandscape())
+            com.idn.kmed.cervexa.gallery.MediaPagerActivityLand::class.java
+        else
+            com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java
 
         val intent = Intent(requireContext(), targetActivity).apply {
             putStringArrayListExtra("paths", paths)

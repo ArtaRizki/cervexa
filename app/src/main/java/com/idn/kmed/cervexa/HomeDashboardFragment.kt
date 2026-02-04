@@ -164,138 +164,138 @@ class HomeDashboardFragment : Fragment() {
     }
 
     private fun handleStartClickHome() {
-        val ctx = requireContext()
-
-        // ========================================================================
-        // 1. DIAGNOSA PERMISSION (Penyebab utama "SSID tidak terbaca")
-        // ========================================================================
-        if (Build.VERSION.SDK_INT >= 33) {
-            // Android 13+: Wajib NEARBY_WIFI_DEVICES
-            if (ContextCompat.checkSelfPermission(
-                    ctx,
-                    Manifest.permission.NEARBY_WIFI_DEVICES
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Toast.makeText(
-                    ctx,
-                    "Izin 'Nearby Devices' diperlukan untuk deteksi Wi-Fi.",
-                    Toast.LENGTH_LONG
-                ).show()
-                WifiMonitor.handlePermissionResult(
-                    2201,
-                    intArrayOf(),
-                    ctx
-                ) // Trigger request permission logic di WifiMonitor
-                // Atau bisa direct requestPermissions(arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES), 2201)
-                return
-            }
-            if (ContextCompat.checkSelfPermission(
-                    ctx,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Toast.makeText(
-                    ctx,
-                    "Izin Lokasi (Fine Location) diperlukan untuk membaca nama Wi-Fi.",
-                    Toast.LENGTH_LONG
-                ).show()
-                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 2201)
-                return
-            }
-        } else {
-            // Android < 13: Wajib FINE LOCATION
-            if (ContextCompat.checkSelfPermission(
-                    ctx,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Toast.makeText(
-                    ctx,
-                    "Izin Lokasi (Fine Location) diperlukan untuk membaca nama Wi-Fi.",
-                    Toast.LENGTH_LONG
-                ).show()
-                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 2201)
-                return
-            }
-        }
-
-        // ========================================================================
-        // 2. CEK STATUS KONEKSI & DIAGNOSA LANJUTAN
-        // ========================================================================
-        val status = WifiMonitor.statusFlow.value
-
-        if (!status.isCamera) {
-            val ssid = status.ssid ?: "Null"
-
-            // Jika SSID tidak terbaca / unknown -> Masalah GPS atau Mode Permission
-            if (ssid == "Null" || ssid.contains("unknown", ignoreCase = true)) {
-
-                // Cek apakah GPS Hardware nyala
-                val lm =
-                    ctx.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-                val isGpsOn = try {
-                    lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
-                } catch (e: Exception) {
-                    true
-                } // Fallback true jika error cek provider
-
-                if (!isGpsOn) {
-                    Toast.makeText(
-                        ctx,
-                        "GPS Mati. Harap nyalakan GPS/Lokasi untuk deteksi Wi-Fi.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                } else {
-                    // GPS Nyala tapi tetap Unknown -> Kemungkinan Izinnya "Approximate" (bukan Precise)
-                    Toast.makeText(
-                        ctx,
-                        "SSID tidak terbaca. Pastikan izin lokasi diset ke 'PRECISE' (Akurat).",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    // Buka App Info agar user bisa ubah permission manual
-                    try {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                        val uri = Uri.fromParts("package", ctx.packageName, null)
-                        intent.data = uri
-                        startActivity(intent)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            } else {
-                // SSID terbaca tapi bukan kamera
-                Toast.makeText(
-                    ctx,
-                    "Terhubung ke: $ssid.\nSilakan pindah ke Wi-Fi Kamera.",
-                    Toast.LENGTH_LONG
-                ).show()
-                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-            }
-            return
-        }
-
-        // ========================================================================
-        // 3. KONEKSI SUKSES -> BINDING NETWORK
-        // ========================================================================
-
-        // Cari object Network yang valid untuk kamera
-        val camNet = findCameraWifiNetworkStrict() ?: run {
-            // Fallback desperate: Jarang terjadi jika status.isCamera = true
-            Toast.makeText(
-                requireContext(),
-                "Network error. Coba matikan/hidupkan Wi-Fi.",
-                Toast.LENGTH_SHORT
-            ).show()
-            return
-        }
-
-        val cm =
-            requireContext().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-        // [KUNCI UTAMA] Bind process agar traffic HTTP/RTSP lewat Wi-Fi ini, bukan 4G
-        runCatching { cm.bindProcessToNetwork(camNet) }
+//        val ctx = requireContext()
+//
+//        // ========================================================================
+//        // 1. DIAGNOSA PERMISSION (Penyebab utama "SSID tidak terbaca")
+//        // ========================================================================
+//        if (Build.VERSION.SDK_INT >= 33) {
+//            // Android 13+: Wajib NEARBY_WIFI_DEVICES
+//            if (ContextCompat.checkSelfPermission(
+//                    ctx,
+//                    Manifest.permission.NEARBY_WIFI_DEVICES
+//                ) != PackageManager.PERMISSION_GRANTED
+//            ) {
+//                Toast.makeText(
+//                    ctx,
+//                    "Izin 'Nearby Devices' diperlukan untuk deteksi Wi-Fi.",
+//                    Toast.LENGTH_LONG
+//                ).show()
+//                WifiMonitor.handlePermissionResult(
+//                    2201,
+//                    intArrayOf(),
+//                    ctx
+//                ) // Trigger request permission logic di WifiMonitor
+//                // Atau bisa direct requestPermissions(arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES), 2201)
+//                return
+//            }
+//            if (ContextCompat.checkSelfPermission(
+//                    ctx,
+//                    Manifest.permission.ACCESS_FINE_LOCATION
+//                ) != PackageManager.PERMISSION_GRANTED
+//            ) {
+//                Toast.makeText(
+//                    ctx,
+//                    "Izin Lokasi (Fine Location) diperlukan untuk membaca nama Wi-Fi.",
+//                    Toast.LENGTH_LONG
+//                ).show()
+//                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 2201)
+//                return
+//            }
+//        } else {
+//            // Android < 13: Wajib FINE LOCATION
+//            if (ContextCompat.checkSelfPermission(
+//                    ctx,
+//                    Manifest.permission.ACCESS_FINE_LOCATION
+//                ) != PackageManager.PERMISSION_GRANTED
+//            ) {
+//                Toast.makeText(
+//                    ctx,
+//                    "Izin Lokasi (Fine Location) diperlukan untuk membaca nama Wi-Fi.",
+//                    Toast.LENGTH_LONG
+//                ).show()
+//                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 2201)
+//                return
+//            }
+//        }
+//
+//        // ========================================================================
+//        // 2. CEK STATUS KONEKSI & DIAGNOSA LANJUTAN
+//        // ========================================================================
+//        val status = WifiMonitor.statusFlow.value
+//
+//        if (!status.isCamera) {
+//            val ssid = status.ssid ?: "Null"
+//
+//            // Jika SSID tidak terbaca / unknown -> Masalah GPS atau Mode Permission
+//            if (ssid == "Null" || ssid.contains("unknown", ignoreCase = true)) {
+//
+//                // Cek apakah GPS Hardware nyala
+//                val lm =
+//                    ctx.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+//                val isGpsOn = try {
+//                    lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
+//                } catch (e: Exception) {
+//                    true
+//                } // Fallback true jika error cek provider
+//
+//                if (!isGpsOn) {
+//                    Toast.makeText(
+//                        ctx,
+//                        "GPS Mati. Harap nyalakan GPS/Lokasi untuk deteksi Wi-Fi.",
+//                        Toast.LENGTH_LONG
+//                    ).show()
+//                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+//                } else {
+//                    // GPS Nyala tapi tetap Unknown -> Kemungkinan Izinnya "Approximate" (bukan Precise)
+//                    Toast.makeText(
+//                        ctx,
+//                        "SSID tidak terbaca. Pastikan izin lokasi diset ke 'PRECISE' (Akurat).",
+//                        Toast.LENGTH_LONG
+//                    ).show()
+//
+//                    // Buka App Info agar user bisa ubah permission manual
+//                    try {
+//                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+//                        val uri = Uri.fromParts("package", ctx.packageName, null)
+//                        intent.data = uri
+//                        startActivity(intent)
+//                    } catch (e: Exception) {
+//                        e.printStackTrace()
+//                    }
+//                }
+//            } else {
+//                // SSID terbaca tapi bukan kamera
+//                Toast.makeText(
+//                    ctx,
+//                    "Terhubung ke: $ssid.\nSilakan pindah ke Wi-Fi Kamera.",
+//                    Toast.LENGTH_LONG
+//                ).show()
+//                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+//            }
+//            return
+//        }
+//
+//        // ========================================================================
+//        // 3. KONEKSI SUKSES -> BINDING NETWORK
+//        // ========================================================================
+//
+//        // Cari object Network yang valid untuk kamera
+//        val camNet = findCameraWifiNetworkStrict() ?: run {
+//            // Fallback desperate: Jarang terjadi jika status.isCamera = true
+//            Toast.makeText(
+//                requireContext(),
+//                "Network error. Coba matikan/hidupkan Wi-Fi.",
+//                Toast.LENGTH_SHORT
+//            ).show()
+//            return
+//        }
+//
+//        val cm =
+//            requireContext().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+//
+//        // [KUNCI UTAMA] Bind process agar traffic HTTP/RTSP lewat Wi-Fi ini, bukan 4G
+//        runCatching { cm.bindProcessToNetwork(camNet) }
 
         // Pindah activity
         try {

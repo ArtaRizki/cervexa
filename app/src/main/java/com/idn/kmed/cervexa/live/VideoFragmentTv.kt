@@ -992,17 +992,27 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private fun startVideoRecording() {
         Log.d(TAG, "=== startVideoRecording() ===")
 
-        // ✅ PERBAIKAN: Pastikan menggunakan subdirectory Video yang benar
-        val dir = videosDir
+        // ✅ BUAT DIREKTORI jika tidak ada
+        var dir = videosDir
         if (dir == null || !dir.exists()) {
-            Log.e(TAG, "❌ Video directory not available!")
+            Log.w(TAG, "⚠️ Video dir unavailable, creating...")
+            sessionDir?.let { parent ->
+                dir = StorageUtils.ensureChildDir(parent, "Video")
+                videosDir = dir
+                Log.d(TAG, "✅ Video dir created: ${dir?.absolutePath}")
+            }
+        }
+
+        // Jika masih null setelah dicoba create, baru return
+        if (dir == null || !dir.exists()) {
+            Log.e(TAG, "❌ Failed to create video directory!")
             Log.e(TAG, "   videosDir=$videosDir")
             Log.e(TAG, "   sessionDir=$sessionDir")
 
             requireActivity().runOnUiThread {
                 Toast.makeText(
                     requireContext(),
-                    "❌ ERROR: Direktori video tidak tersedia!",
+                    "❌ Gagal membuat direktori video",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -1059,17 +1069,24 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private fun takeSnapshot() {
         Log.d(TAG, "=== takeSnapshot() ===")
 
-        // ✅ PERBAIKAN: Pastikan menggunakan subdirectory Snapshots yang benar
-        val dir = snapshotsDir
+        // ✅ BUAT DIREKTORI jika tidak ada
+        var dir = snapshotsDir
         if (dir == null || !dir.exists()) {
-            Log.e(TAG, "❌ Snapshot directory not available!")
-            Log.e(TAG, "   snapshotsDir=$snapshotsDir")
-            Log.e(TAG, "   sessionDir=$sessionDir")
+            Log.w(TAG, "⚠️ Snapshots dir unavailable, creating...")
+            sessionDir?.let { parent ->
+                dir = StorageUtils.ensureChildDir(parent, "Snapshots")
+                snapshotsDir = dir
+                Log.d(TAG, "✅ Snapshots dir created: ${dir?.absolutePath}")
+            }
+        }
 
+        // Jika masih null setelah dicoba create, baru return
+        if (dir == null || !dir.exists()) {
+            Log.e(TAG, "❌ Failed to create snapshot directory!")
             requireActivity().runOnUiThread {
                 Toast.makeText(
                     requireContext(),
-                    "❌ Direktori snapshot tidak tersedia",
+                    "❌ Gagal membuat direktori snapshot",
                     Toast.LENGTH_LONG
                 ).show()
             }

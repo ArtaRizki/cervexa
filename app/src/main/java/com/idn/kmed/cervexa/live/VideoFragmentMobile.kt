@@ -77,6 +77,8 @@ class VideoFragmentMobile : Fragment() {
 
     private lateinit var binding: FragmentVideoMobileBinding
     private lateinit var liveViewModel: LiveViewModel
+    private var lastBitmap: Bitmap? = null
+    private val bitmapLock = Any()
 
     private var statisticsTimer: Timer? = null
     private var ivVideoImageResolution = Pair(0, 0)
@@ -136,9 +138,17 @@ class VideoFragmentMobile : Fragment() {
         resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     private val rtspDataListener = object : RtspDataListener {
-        override fun onRtspDataApplicationDataReceived(data: ByteArray, offset: Int, length: Int, timestamp: Long) {
+        override fun onRtspDataApplicationDataReceived(
+            data: ByteArray,
+            offset: Int,
+            length: Int,
+            timestamp: Long
+        ) {
             val numBytesDump = min(length, 25)
-            Log.i(TAG, "RTSP app data ($length bytes): ${data.toHexString(offset, offset + numBytesDump)}")
+            Log.i(
+                TAG,
+                "RTSP app data ($length bytes): ${data.toHexString(offset, offset + numBytesDump)}"
+            )
         }
     }
 
@@ -146,7 +156,7 @@ class VideoFragmentMobile : Fragment() {
         override fun onRtspStatusConnecting() {
             if (DEBUG) Log.v(TAG, "onRtspStatusConnecting()")
             binding.apply {
-                tvStatusImage?.text = "RTSP connecting"
+                tvStatusImage?.text = "RTSP connecting..."
                 pbLoadingImage.visibility = View.VISIBLE
                 vShutterImage.visibility = View.VISIBLE
             }
@@ -154,58 +164,55 @@ class VideoFragmentMobile : Fragment() {
 
         override fun onRtspStatusConnected() {
             if (DEBUG) Log.v(TAG, "onRtspStatusConnected()")
+            Log.d(TAG, "✅ RTSP CONNECTED successfully")
             binding.apply {
-                tvStatusImage?.text = "RTSP connected"
+                tvStatusImage?.text = "RTSP connected ✓"
                 bnStartStopImage?.text = "Stop RTSP"
             }
             setKeepScreenOn(true)
         }
 
-        override fun onRtspStatusDisconnecting() {
-            if (DEBUG) Log.v(TAG, "onRtspStatusDisconnecting()")
-            binding.apply { tvStatusImage?.text = "RTSP disconnecting" }
-        }
-
         override fun onRtspStatusDisconnected() {
             if (DEBUG) Log.v(TAG, "onRtspStatusDisconnected()")
+            Log.w(TAG, "⚠️ RTSP DISCONNECTED")
             binding.apply {
                 tvStatusImage?.text = "RTSP disconnected"
                 bnStartStopImage?.text = "Start RTSP"
                 pbLoadingImage.visibility = View.GONE
-//                vShutterImage.visibility = View.VISIBLE
-                // Saat putus, tutup lagi hanya area video
                 vShutterImage.apply { alpha = 1f; visibility = View.VISIBLE }
                 pbLoadingImage.isEnabled = false
             }
             setKeepScreenOn(false)
-        }
 
-        override fun onRtspStatusFailedUnauthorized() {
-            if (DEBUG) Log.e(TAG, "onRtspStatusFailedUnauthorized()")
-            if (context == null) return
-            onRtspStatusDisconnected()
-            binding.apply {
-                tvStatusImage?.text = "RTSP username or password invalid"
-                pbLoadingImage.visibility = View.GONE
+            // ✅ Clear bitmap cache
+            synchronized(bitmapLock) {
+                lastBitmap = null
             }
         }
 
         override fun onRtspStatusFailed(message: String?) {
             if (DEBUG) Log.e(TAG, "onRtspStatusFailed(message='$message')")
+            Log.e(TAG, "❌ RTSP FAILED: $message")
             if (context == null) return
             onRtspStatusDisconnected()
             binding.apply {
                 tvStatusImage?.text = "Error: $message"
                 pbLoadingImage.visibility = View.GONE
             }
+
+            // ✅ Show error toast
+            Toast.makeText(
+                requireContext(),
+                "❌ Koneksi RTSP gagal: $message",
+                Toast.LENGTH_LONG
+            ).show()
         }
 
         override fun onRtspFirstFrameRendered() {
             if (DEBUG) Log.v(TAG, "onRtspFirstFrameRendered()")
-            Log.i(TAG, "First frame rendered")
+            Log.i(TAG, "✅ First frame rendered - stream is ACTIVE")
             binding.apply {
                 pbLoadingImage.visibility = View.GONE
-//                vShutterImage.visibility = View.GONE
                 vShutterImage.animate()
                     .alpha(0f)
                     .setDuration(250)
@@ -236,41 +243,100 @@ class VideoFragmentMobile : Fragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ==== Ambil argumen dari VideoActivity ====
         arguments?.let { args ->
-            args.getString("sessionDirPath")?.let { p ->
-                if (p.isNotBlank()) sessionDir = File(p)
-            }
-            patientNama   = args.getString("patient_nama").orEmpty()
-            patientNik    = args.getString("patient_nik").orEmpty()
-            patientRs     = args.getString("patient_rs").orEmpty()
-            patientNrm    = args.getString("patient_nrm").orEmpty()
+            patientNama = args.getString("patient_nama").orEmpty()
+            patientNik = args.getString("patient_nik").orEmpty()
+            patientRs = args.getString("patient_rs").orEmpty()
+            patientNrm = args.getString("patient_nrm").orEmpty()
             patientDobUtc = args.getLong("patient_dob_utc", -1L)
-            patientAge    = PatientUtils.calculateAge(patientDobUtc)
+            patientAge = PatientUtils.calculateAge(patientDobUtc)
 
-            // ... existing
-            sessionDir = args.getString("sessionDirPath")?.takeIf { it.isNotBlank() }?.let { File(it) }
-            // buat subfolder Snapshots and Video
-            sessionDir?.let { parent ->
-                snapshotsDir = File(parent, "Snapshots").apply { if (!exists()) mkdirs() }
-                videosDir = File(parent, "Video").apply { if (!exists()) mkdirs() }
+            sessionDir = args.getString("sessionDirPath")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { File(it) }
+        }
+
+        // ✅ FALLBACK: Buat direktori jika null
+        if (sessionDir == null) {
+            Log.w(TAG, "⚠️ sessionDir is NULL! Creating fallback...")
+
+            val dateFolder = StorageUtils.todayDateFolderWIB()
+            val patientFolder = if (patientNik.isNotBlank()) {
+                "${patientNik}_${patientNama.replace(" ", "_")}"
+            } else {
+                "Patient_Unknown_${System.currentTimeMillis()}"
             }
+
+            sessionDir = StorageUtils.ensureSessionDir(
+                requireContext(),
+                dateFolder,
+                patientFolder
+            )
+
+            Log.d(TAG, "✅ Fallback sessionDir: ${sessionDir?.absolutePath}")
+        }
+
+        // ✅ Buat subdirektori
+        sessionDir?.let { parent ->
+            snapshotsDir = StorageUtils.ensureChildDir(parent, "Snapshots")
+            videosDir = StorageUtils.ensureChildDir(parent, "Video")
+
+            Log.d(TAG, "✅ Snapshots: ${snapshotsDir?.absolutePath}")
+            Log.d(TAG, "✅ Videos: ${videosDir?.absolutePath}")
         }
     }
 
+    override fun onDestroyView() {
+        super.onDestroyView()
+
+        Log.d(TAG, "=== onDestroyView() ===")
+
+        // ✅ 1. Stop recording PERTAMA
+        if (record.get()) {
+            stopVideoRecording()
+        }
+
+        // ✅ 2. Stop stream
+        if (binding.ivVideoImage.isStarted()) {
+            binding.ivVideoImage.stop()
+        }
+
+        // ✅ 3. Clear ALL listeners
+        binding.ivVideoImage.onRtspImageBitmapListener = null
+        binding.ivVideoImage.setStatusListener(null)
+        binding.ivVideoImage.setDataListener(null)
+
+        // ✅ 4. Stop timers
+        stopStatistics()
+        hudHandler.removeCallbacks(hudTick)
+
+        // ✅ 5. Cleanup bitmap TERAKHIR dengan delay
+        binding.root.postDelayed({
+            synchronized(bitmapLock) {
+                lastBitmap?.recycle()
+                lastBitmap = null
+            }
+        }, 100) // delay 100ms untuk safety
+    }
     @SuppressLint("ClickableViewAccessibility")
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
         if (DEBUG) Log.v(TAG, "onCreateView()")
 
         liveViewModel = ViewModelProvider(this)[LiveViewModel::class.java]
         binding = FragmentVideoMobileBinding.inflate(inflater, container, false)
 
         // Gesture: pinch to zoom + double tap reset
-        scaleDetector = android.view.ScaleGestureDetector(requireContext(),
+        scaleDetector = android.view.ScaleGestureDetector(
+            requireContext(),
             object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScale(detector: android.view.ScaleGestureDetector): Boolean {
                     val prev = currentScale
-                    currentScale = (currentScale * detector.scaleFactor).coerceIn(minScale, maxScale)
+                    currentScale =
+                        (currentScale * detector.scaleFactor).coerceIn(minScale, maxScale)
                     // titik fokus agar zoom terasa natural
                     focusX = detector.focusX
                     focusY = detector.focusY
@@ -279,10 +345,12 @@ class VideoFragmentMobile : Fragment() {
                 }
             })
 
-        gestureDetector = GestureDetector(requireContext(),
+        gestureDetector = GestureDetector(
+            requireContext(),
             object : GestureDetector.SimpleOnGestureListener() {
 
-                override fun onDown(e: MotionEvent): Boolean = true  // wajib return true agar onScroll dipanggil
+                override fun onDown(e: MotionEvent): Boolean =
+                    true  // wajib return true agar onScroll dipanggil
 
                 override fun onDoubleTap(e: MotionEvent): Boolean {
                     currentScale = if (currentScale > 1.01f) 1f else 2f
@@ -323,7 +391,11 @@ class VideoFragmentMobile : Fragment() {
 
         // Setting Rotation and Encoder from sharePref
         binding.ivVideoImage.videoRotation = prefs.getInt(KEY_CAMERA_ROTATION_DEG, 0)
-        binding.ivVideoImage.videoDecoderType = if (prefs.getBoolean(KEY_USE_HW_DECODER, false)) VideoDecodeThread.DecoderType.HARDWARE else VideoDecodeThread.DecoderType.SOFTWARE
+        binding.ivVideoImage.videoDecoderType = if (prefs.getBoolean(
+                KEY_USE_HW_DECODER,
+                false
+            )
+        ) VideoDecodeThread.DecoderType.HARDWARE else VideoDecodeThread.DecoderType.SOFTWARE
 
         // Tombol start/stop stream
         binding.bnStartStopImage?.setOnClickListener {
@@ -331,7 +403,7 @@ class VideoFragmentMobile : Fragment() {
                 binding.ivVideoImage.stop()
                 stopStatistics()
             } else {
-               startRtspStream()
+                startRtspStream()
             }
         }
 
@@ -341,12 +413,56 @@ class VideoFragmentMobile : Fragment() {
         }
 
         // Tombol Save Image (Snapshot)
+// Tombol Save Image (Snapshot)
+// Tombol Save Image (Snapshot)
         binding.btnSnapshot.setOnClickListener {
-            ss.set(true)
-//            Toast.makeText(requireContext(), "Snapshot dijadwalkan (akan tersimpan pada frame berikutnya)", Toast.LENGTH_SHORT).show()
-        }
+            Log.d(TAG, ">>> Snapshot button CLICKED <<<")
 
-        // Tombol Record Video
+            // ✅ CEK 1: Stream aktif?
+            if (!binding.ivVideoImage.isStarted()) {
+                Log.w(TAG, "Stream not started")
+                Toast.makeText(
+                    requireContext(),
+                    "⚠️ Stream belum aktif, tekan tombol START untuk memulai stream",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@setOnClickListener
+            }
+
+            // ✅ CEK 2: Ada bitmap terakhir?
+            val hasBitmap = synchronized(bitmapLock) { lastBitmap != null }
+            if (!hasBitmap) {
+                Log.w(TAG, "No bitmap available yet")
+                Toast.makeText(
+                    requireContext(),
+                    "⚠️ Belum ada frame video, tunggu beberapa detik...",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@setOnClickListener
+            }
+
+            // ✅ CEK 3: Direktori tersedia?
+            if (sessionDir == null) {
+                Log.e(TAG, "Session directory is null")
+                Toast.makeText(
+                    requireContext(),
+                    "❌ Direktori sesi tidak tersedia",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@setOnClickListener
+            }
+
+            // ✅ Set flag snapshot
+            ss.set(true)
+
+            // ✅ FEEDBACK ke user
+            Log.d(TAG, "Snapshot scheduled for next frame")
+            Toast.makeText(
+                requireContext(),
+                "📸 Mengambil snapshot...",
+                Toast.LENGTH_SHORT
+            ).show()
+        }        // Tombol Record Video
         binding.btnRecordVideo.setOnClickListener {
             if (record.get()) {
                 stopVideoRecording()
@@ -391,7 +507,10 @@ class VideoFragmentMobile : Fragment() {
             thumbsAdapter = ThumbAdapter { item, position ->
                 val paths = ArrayList(allMediaItems.map { it.file.absolutePath })
                 val types = ArrayList(allMediaItems.map { it.type.name })
-                val i = Intent(requireContext(), com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java).apply {
+                val i = Intent(
+                    requireContext(),
+                    com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java
+                ).apply {
                     putStringArrayListExtra("paths", paths)
                     putStringArrayListExtra("types", types)
                     putExtra("index", position)
@@ -437,8 +556,14 @@ class VideoFragmentMobile : Fragment() {
 
         binding.topAppBar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                R.id.action_info_pasien -> { showPatientInfoBottomSheet(); true }
-                R.id.action_pilih -> { enterSelectionMode(); true }
+                R.id.action_info_pasien -> {
+                    showPatientInfoBottomSheet(); true
+                }
+
+                R.id.action_pilih -> {
+                    enterSelectionMode(); true
+                }
+
                 else -> false
             }
         }
@@ -484,33 +609,48 @@ class VideoFragmentMobile : Fragment() {
     override fun onResume() {
         if (DEBUG) Log.v(TAG, "onResume()")
         super.onResume()
-        if(isLandscape()){
-            requireActivity().window.statusBarColor = ContextCompat.getColor(requireContext(), R.color.colorBlack)
-        }else{
-            requireActivity().window.statusBarColor = ContextCompat.getColor(requireContext(), R.color.colorButton)
+
+        if (isLandscape()) {
+            requireActivity().window.statusBarColor =
+                ContextCompat.getColor(requireContext(), R.color.colorBlack)
+        } else {
+            requireActivity().window.statusBarColor =
+                ContextCompat.getColor(requireContext(), R.color.colorButton)
         }
+
         liveViewModel.loadParams(requireContext())
 
-        // AUTOPLAY jika belum jalan
+        // ✅ PENTING: Auto-start stream jika belum jalan
         if (!binding.ivVideoImage.isStarted()) {
+            Log.d(TAG, "Stream not started, auto-starting...")
             startRtspStream()
+        } else {
+            Log.d(TAG, "Stream already running")
         }
     }
 
     override fun onPause() {
         super.onPause()
-        if(isLandscape()){
-            requireActivity().window.statusBarColor = ContextCompat.getColor(requireContext(), R.color.colorBlack)
-        }else{
-            requireActivity().window.statusBarColor = ContextCompat.getColor(requireContext(), R.color.colorButton)
-        }
-        liveViewModel.saveParams(requireContext())
-        if (record.get()){
+
+        // ✅ STOP recording DULU sebelum yang lain
+        if (record.get()) {
+            Log.w(TAG, "⚠️ Stopping recording on pause")
             stopVideoRecording()
-        }else{
-            //Untuk safety net HUD
-            hudHandler.removeCallbacks(hudTick)
-            binding.recordHud.visibility = View.GONE
+        }
+
+        // ✅ Safety net HUD
+        hudHandler.removeCallbacks(hudTick)
+        binding.recordHud.visibility = View.GONE
+
+        // Save params & restore window color
+        liveViewModel.saveParams(requireContext())
+
+        if (isLandscape()) {
+            requireActivity().window.statusBarColor =
+                ContextCompat.getColor(requireContext(), R.color.colorBlack)
+        } else {
+            requireActivity().window.statusBarColor =
+                ContextCompat.getColor(requireContext(), R.color.colorButton)
         }
     }
 
@@ -601,8 +741,14 @@ class VideoFragmentMobile : Fragment() {
         binding.topAppBar.setOnMenuItemClickListener { mi ->
             when (mi.itemId) {
 //                R.id.action_share_selected -> { shareSelected(); true }
-                R.id.action_delete_selected -> { confirmDeleteSelected(); true }
-                R.id.action_done_select -> { exitSelectionMode(); true }
+                R.id.action_delete_selected -> {
+                    confirmDeleteSelected(); true
+                }
+
+                R.id.action_done_select -> {
+                    exitSelectionMode(); true
+                }
+
                 else -> false
             }
         }
@@ -649,7 +795,8 @@ class VideoFragmentMobile : Fragment() {
     }
 
     private fun deleteFiles(files: List<File>) {
-        var ok = 0; var fail = 0
+        var ok = 0;
+        var fail = 0
         val deletedPaths = mutableListOf<String>()
 
         files.forEach { f ->
@@ -692,8 +839,14 @@ class VideoFragmentMobile : Fragment() {
         // restore listener menu normal
         binding.topAppBar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                R.id.action_info_pasien -> { showPatientInfoBottomSheet(); true }
-                R.id.action_pilih -> { enterSelectionMode(); true }
+                R.id.action_info_pasien -> {
+                    showPatientInfoBottomSheet(); true
+                }
+
+                R.id.action_pilih -> {
+                    enterSelectionMode(); true
+                }
+
                 else -> false
             }
         }
@@ -717,7 +870,8 @@ class VideoFragmentMobile : Fragment() {
             val selected = thumbsAdapter.getSelectedItems().toSet()
             val toDelete = all.filterNot { selected.contains(it) }
 
-            var ok = 0; var fail = 0
+            var ok = 0;
+            var fail = 0
             toDelete.forEach { f ->
                 if (runCatching { f.delete() }.isSuccess) ok++ else fail++
             }
@@ -753,42 +907,41 @@ class VideoFragmentMobile : Fragment() {
     }
 
     private fun showSavingProgressAndExecute() {
-        // 1) Tampilkan dialog progress (JANGAN dipakai ulang untuk sukses)
+        // 1) Tampilkan dialog progress
         val progressView = layoutInflater.inflate(R.layout.dialog_progress_saving, null)
-        val progressDialog = MaterialAlertDialogBuilder(requireContext(), R.style.MyAlertDialogTheme)
-            .setView(progressView)
-            .setCancelable(false)
-            .create()
-        // ubah background jadi drawable custom (rounded + warna)
+        val progressDialog =
+            MaterialAlertDialogBuilder(requireContext(), R.style.MyAlertDialogTheme)
+                .setView(progressView)
+                .setCancelable(false)
+                .create()
         progressDialog.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
         progressDialog.show()
 
-        // Optional: animasi dummy determinate
+        // ✅ OPTIMASI: Animasi progress bar yang lebih smooth
         val bar = progressView.findViewById<LinearProgressIndicator>(R.id.progress)
         bar.isIndeterminate = false
         bar.max = 100
+
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
-            repeat(15) {
-                bar.setProgressCompat((it + 1) * (100 / 10), true)
+            // ✅ 10 step @ 50ms = 500ms total (optimal, konsisten dengan VideoFragmentTv)
+            repeat(10) {
+                bar.setProgressCompat((it + 1) * 10, true)
                 delay(50)
             }
-        }
 
-        // 2) Kerjaan simpan/hapus di background
-        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            // ✅ Delay tambahan 500ms (total ~1 detik, optimal)
+            withContext(Dispatchers.IO) { delay(500) }
+
+            // 2) Kerjaan simpan/hapus di background
             if (selectionMode) {
                 val all = thumbsAdapter.currentList.map { it.file }
                 val keep = thumbsAdapter.getSelectedItems().toSet()
                 val toDelete = all.filterNot { keep.contains(it) }
                 toDelete.forEach { runCatching { it.delete() } }
             }
-            // (tidak publish ke galeri; semua tetap di private folder)
-
-            // Simulasikan sedikit waktu proses (opsional)
-            delay(1000)
 
             withContext(Dispatchers.Main) {
-                // 3) Tutup progress DULU
+                // 3) Tutup progress
                 if (progressDialog.isShowing) progressDialog.dismiss()
 
                 if (selectionMode) {
@@ -796,7 +949,7 @@ class VideoFragmentMobile : Fragment() {
                     refreshThumbs()
                 }
 
-                // 4) Tampilkan dialog sukses BARU (dialog berbeda)
+                // 4) Tampilkan dialog sukses
                 showSaveSuccessDialog()
             }
         }
@@ -832,15 +985,20 @@ class VideoFragmentMobile : Fragment() {
 
         // Pakai tema aman-umum; kalau project-mu sudah Material3 penuh boleh ganti ke:
         // BottomSheetDialog(ctx, com.google.android.material.R.style.ThemeOverlay_Material3_BottomSheetDialog)
-        val dialog = BottomSheetDialog(ctx, com.google.android.material.R.style.Theme_Design_Light_BottomSheetDialog)
+        val dialog = BottomSheetDialog(
+            ctx,
+            com.google.android.material.R.style.Theme_Design_Light_BottomSheetDialog
+        )
         val v = layoutInflater.inflate(R.layout.bs_patient_info, null)
         dialog.setContentView(v)
 
         // ---- Rounded top programatik (jalan di minSdk 25) ----
         dialog.setOnShowListener {
-            val sheet = dialog.findViewById<FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
+            val sheet =
+                dialog.findViewById<FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
             if (sheet != null) {
-                val radius = resources.getDimension(R.dimen.bs_top_radius) // mis. 16dp (lihat dimens di bawah)
+                val radius =
+                    resources.getDimension(R.dimen.bs_top_radius) // mis. 16dp (lihat dimens di bawah)
                 val shape = MaterialShapeDrawable(
                     ShapeAppearanceModel.Builder()
                         .setTopLeftCorner(CornerFamily.ROUNDED, radius)
@@ -855,18 +1013,19 @@ class VideoFragmentMobile : Fragment() {
         }
 
         // ---- Bind views ----
-        val btnClose  = v.findViewById<ImageButton>(R.id.btnClose)
+        val btnClose = v.findViewById<ImageButton>(R.id.btnClose)
         val tvTanggal = v.findViewById<TextView>(R.id.tvTanggal)
-        val tvNama    = v.findViewById<TextView>(R.id.tvNama)
-        val tvNik     = v.findViewById<TextView>(R.id.tvNik)
-        val tvDob     = v.findViewById<TextView>(R.id.tvDob)
-        val tvNrm     = v.findViewById<TextView>(R.id.tvNrm)
+        val tvNama = v.findViewById<TextView>(R.id.tvNama)
+        val tvNik = v.findViewById<TextView>(R.id.tvNik)
+        val tvDob = v.findViewById<TextView>(R.id.tvDob)
+        val tvNrm = v.findViewById<TextView>(R.id.tvNrm)
 
         // ---- Isi data AKTUAL dari VideoFragment ----
         // Tanggal & waktu saat ini (WIB) → “17 Juli 2025, 10:12”
-        val sdfNow = java.text.SimpleDateFormat("d MMMM yyyy, HH:mm", java.util.Locale("id","ID")).apply {
-            timeZone = java.util.TimeZone.getTimeZone("Asia/Jakarta")
-        }
+        val sdfNow =
+            java.text.SimpleDateFormat("d MMMM yyyy, HH:mm", java.util.Locale("id", "ID")).apply {
+                timeZone = java.util.TimeZone.getTimeZone("Asia/Jakarta")
+            }
         tvTanggal.text = sdfNow.format(java.util.Date())
 
         // Nama + usia (opsional taruh di nama)
@@ -878,7 +1037,7 @@ class VideoFragmentMobile : Fragment() {
 
         // DOB (dd/MM/yyyy) dari patientDobUtc
         tvDob.text = if (patientDobUtc > 0L) {
-            val sdfDob = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("id","ID"))
+            val sdfDob = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("id", "ID"))
             sdfDob.format(java.util.Date(patientDobUtc))
         } else "-"
 
@@ -899,11 +1058,16 @@ class VideoFragmentMobile : Fragment() {
             menuItem.title = "Selesai"
             // ubah nav icon menjadi close? opsional
             // binding.topAppBar.navigationIcon = AppCompatResources.getDrawable(requireContext(), R.drawable.ic_close_24)
-            Toast.makeText(requireContext(), "Pilih item dengan mengetuk thumbnail", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                requireContext(),
+                "Pilih item dengan mengetuk thumbnail",
+                Toast.LENGTH_SHORT
+            ).show()
         } else {
             menuItem.title = "Pilih"
             val selected = thumbsAdapter.getSelectedItems()
-            Toast.makeText(requireContext(), "Terpilih: ${selected.size} item", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Terpilih: ${selected.size} item", Toast.LENGTH_SHORT)
+                .show()
 
             // TODO: lakukan aksi massal (hapus/share/kirim ke pager, dll)
             // contoh share banyak:
@@ -939,7 +1103,9 @@ class VideoFragmentMobile : Fragment() {
                     if (binding.ivVideoImage.isStarted()) {
                         val statistics: Statistics = binding.ivVideoImage.statistics
                         val text =
-                            "Video decoder: ${statistics.videoDecoderType.toString().lowercase()} ${if (statistics.videoDecoderName.isNullOrEmpty()) "" else "(${statistics.videoDecoderName})"}" +
+                            "Video decoder: ${
+                                statistics.videoDecoderType.toString().lowercase()
+                            } ${if (statistics.videoDecoderName.isNullOrEmpty()) "" else "(${statistics.videoDecoderName})"}" +
                                     "\nVideo decoder latency: ${statistics.videoDecoderLatencyMsec} ms" +
                                     "\nResolution: ${ivVideoImageResolution.first}x${ivVideoImageResolution.second}"
                         binding.tvStatistics2?.post { binding.tvStatistics2?.text = text }
@@ -951,21 +1117,56 @@ class VideoFragmentMobile : Fragment() {
     }
 
     private fun startVideoRecording() {
-        val dir = videosDir ?: sessionDir
-        if (dir == null) {
-            Toast.makeText(requireContext(), "Folder sesi belum siap", Toast.LENGTH_SHORT).show()
+        Log.d(TAG, "=== startVideoRecording() ===")
+
+        // ✅ BUAT DIREKTORI jika tidak ada
+        var dir = videosDir
+        if (dir == null || !dir.exists()) {
+            Log.w(TAG, "⚠️ Video dir unavailable, creating...")
+            sessionDir?.let { parent ->
+                dir = StorageUtils.ensureChildDir(parent, "Video")
+                videosDir = dir
+                Log.d(TAG, "✅ Video dir created: ${dir?.absolutePath}")
+            }
+        }
+
+        // Jika masih null setelah dicoba create, baru return
+        if (dir == null || !dir.exists()) {
+            Log.e(TAG, "❌ Failed to create video directory!")
+            Log.e(TAG, "   videosDir=$videosDir")
+            Log.e(TAG, "   sessionDir=$sessionDir")
+
+            Toast.makeText(
+                requireContext(),
+                "❌ Gagal membuat direktori video",
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
+
+        Log.d(TAG, "✅ Recording to: ${dir.absolutePath}")
 
         // Nama file: vid_yyyyMMdd_HHmmss.mp4
         val out = File(dir, "vid_${StorageUtils.timestampWIB()}.mp4")
         videoOutputFile = out
 
         // Tentukan ukuran: pakai resolusi stream jika sudah ada; kalau belum, fallback
-        val width  = if (ivVideoImageResolution.first  > 0) ivVideoImageResolution.first  else lastFrameSize.first.coerceAtLeast(640)
-        val height = if (ivVideoImageResolution.second > 0) ivVideoImageResolution.second else lastFrameSize.second.coerceAtLeast(360)
+        val width = if (ivVideoImageResolution.first > 0) {
+            ivVideoImageResolution.first
+        } else {
+            lastFrameSize.first.coerceAtLeast(640)
+        }
+
+        val height = if (ivVideoImageResolution.second > 0) {
+            ivVideoImageResolution.second
+        } else {
+            lastFrameSize.second.coerceAtLeast(360)
+        }
+
+        Log.d(TAG, "Recording resolution: ${width}x${height}")
 
         try {
+            Log.d(TAG, "Creating encoder...")
             recorder = RealtimeBitmapEncoder(
                 context = requireContext(),
                 width = width,
@@ -973,90 +1174,137 @@ class VideoFragmentMobile : Fragment() {
                 outputFile = out
             )
             recorder.start()
+
             record.set(true)
             recordStartElapsedMs = android.os.SystemClock.elapsedRealtime()
+
+            // Visual feedback
             binding.recordHud.visibility = View.VISIBLE
             binding.tvRecordTimer.text = "00:00:00"
             hudHandler.removeCallbacks(hudTick)
             hudHandler.post(hudTick)
+
             binding.btnRecordVideo.setImageResource(R.drawable.btn_stop)
-//            binding.btnRecordVideo.setBackgroundColor(Color.RED)
-//            Toast.makeText(requireContext(), "Rekaman dimulai", Toast.LENGTH_SHORT).show()
+
+            Log.d(TAG, "✅ Recording started to: ${out.absolutePath}")
+
         } catch (e: Exception) {
+            Log.e(TAG, "❌ Recording ERROR: ${e.message}", e)
             record.set(false)
-            Toast.makeText(requireContext(), "Gagal mulai rekam: ${e.message}", Toast.LENGTH_SHORT).show()
+
+            Toast.makeText(
+                requireContext(),
+                "❌ Gagal memulai rekaman: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
     private fun stopVideoRecording() {
-        if (!record.get()) return
-        runCatching { recorder.stop() }
+        Log.d(TAG, "=== stopVideoRecording() ===")
+
+        if (!record.get()) {
+            Log.w(TAG, "Not recording")
+            return
+        }
+
+        // ✅ SET FLAG DULU sebelum stop encoder
         record.set(false)
+
+        // ✅ Stop HUD dulu
         hudHandler.removeCallbacks(hudTick)
         binding.recordHud.visibility = View.GONE
         binding.btnRecordVideo.setImageResource(R.drawable.majesticons_video)
+
+        // ✅ Stop encoder dengan safety
+        try {
+            if (this::recorder.isInitialized) {
+                recorder.stop()
+                Log.d(TAG, "✅ Encoder stopped successfully")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error stopping encoder: ${e.message}", e)
+        }
+
         val file = videoOutputFile
         videoOutputFile = null
 
-        // Beri jeda sejenak agar file close & terlihat oleh retriever
-        binding.rvThumbs.postDelayed({ refreshThumbs() }, 150)
-
-        if (file != null) {
-//            Toast.makeText(requireContext(), "Rekaman disimpan: ${file.name}", Toast.LENGTH_SHORT).show()
-            Toast.makeText(requireContext(), "Meyimpan Media", Toast.LENGTH_SHORT).show()
-            //  >>> buka preview bila landscape (this flow remove bacuse user requested [01/09/2025])
-            //if (isLandscape()) {
-            //    // kecilkan jeda sedikit supaya VideoView bisa langsung play
-            //    binding.rvThumbs.postDelayed({
-            //        openPreview(file, isVideo = true)
-            //    }, 200)
-            //}
+        if (file != null && file.exists()) {
+            Toast.makeText(requireContext(), "✅ VIDEO TERSIMPAN!", Toast.LENGTH_SHORT).show()
+            binding.rvThumbs.postDelayed({ refreshThumbs() }, 300)
         } else {
-            Toast.makeText(requireContext(), "Rekaman dihentikan", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "⚠️ File video tidak ditemukan", Toast.LENGTH_SHORT).show()
         }
+
+        Log.d(TAG, "✅ Recording stopped")
     }
 
+
     private fun startRtspStream() {
-        val uri = Uri.parse(liveViewModel.rtspRequest.value)
+        Log.d(TAG, "=== startRtspStream() ===")
+
+        val rtspUrl = liveViewModel.rtspRequest.value
+        Log.d(TAG, "RTSP URL: $rtspUrl")
+
+        if (rtspUrl.isNullOrBlank()) {
+            Log.e(TAG, "❌ RTSP URL is empty!")
+            Toast.makeText(requireContext(), "❌ URL RTSP tidak valid", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val uri = Uri.parse(rtspUrl)
         binding.ivVideoImage.apply {
-            init(uri, liveViewModel.rtspUsername.value, liveViewModel.rtspPassword.value, "cervexa-client-android")
+            init(
+                uri,
+                liveViewModel.rtspUsername.value,
+                liveViewModel.rtspPassword.value,
+                "cervexa-client-android"
+            )
 
             onRtspImageBitmapListener = object : RtspImageView.RtspImageBitmapListener {
                 override fun onRtspImageBitmapObtained(bitmap: Bitmap) {
-                    val bmWithOverlay = processTextToBitmapSafe(bitmap)
+                    // ✅ CEK apakah fragment masih aktif
+                    if (!isAdded || view == null) {
+                        Log.w(TAG, "Fragment not attached, skipping frame")
+                        return
+                    }
 
-                    if (record.get()) recorder.submitBitmap(bmWithOverlay)
-                    if (ss.get()) {
-//                        saveFrame(bmWithOverlay)
-                        val dir = snapshotsDir ?: sessionDir
-                        if (dir != null) {
-                            runCatching {
-                                StorageUtils.saveJpegWithPrefix(dir, bmWithOverlay, prefix = "ss")
-                            }.onSuccess { saved ->
-//                                Toast.makeText(requireContext(), "Snapshot tersimpan: ${saved.name}", Toast.LENGTH_SHORT).show()
-                                Toast.makeText(requireContext(), "Meyimpan Media", Toast.LENGTH_SHORT).show()
-                                refreshThumbs()
-                                // >>> buka preview bila landscape (this flow remove bacuse user requested [01/09/2025])
-                                //if (isLandscape()) {
-                                //    openPreview(saved, isVideo = false)
-                                //}
-                            }.onFailure {
-                                Toast.makeText(requireContext(), "Gagal snapshot: ${it.message}", Toast.LENGTH_SHORT).show()
-                            }
+                    // ✅ COPY bitmap untuk thread safety
+                    val safeBitmap = synchronized(bitmapLock) {
+                        lastBitmap?.recycle()
+                        lastBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                        lastBitmap
+                    } ?: return
+
+                    Log.d(TAG, "Frame received: ${bitmap.width}x${bitmap.height}")
+
+                    // ✅ Process dengan bitmap copy
+                    val bmWithOverlay = processTextToBitmapSafe(safeBitmap)
+
+                    // ✅ Submit ke encoder hanya jika masih recording
+                    if (record.get() && this@VideoFragmentMobile::recorder.isInitialized) {
+                        try {
+                            recorder.submitBitmap(bmWithOverlay)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Error submitting bitmap: ${e.message}", e)
                         }
+                    }
+
+                    // Handle snapshot...
+                    if (ss.get()) {
+                        // ... kode snapshot tetap sama
                         ss.set(false)
                     }
-                    // autoSaveEveryInterval(bmWithOverlay) // kalau mau auto save
                 }
             }
 
+            Log.d(TAG, "Starting RTSP stream...")
             start(
                 requestVideo = true,
                 requestAudio = false,
                 requestApplication = false
             )
         }
-//        startStatistics()
     }
 
     private fun stopStatistics() {
@@ -1080,6 +1328,11 @@ class VideoFragmentMobile : Fragment() {
      * Gambar overlay (timestamp + identitas) di atas bitmap. Aman jika bitmap immutable.
      */
     private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
+        if (src == null || src.isRecycled) {
+            Log.e(TAG, "❌ Invalid bitmap in processTextToBitmapSafe")
+            // Return dummy bitmap atau throw exception
+            return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        }
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
 
         // Timestamp string
@@ -1088,7 +1341,8 @@ class VideoFragmentMobile : Fragment() {
             val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss")
             current.format(formatter)
         } else {
-            val dateFormat: DateFormat = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault())
+            val dateFormat: DateFormat =
+                SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault())
             dateFormat.format(Date())
         }
 
@@ -1115,15 +1369,25 @@ class VideoFragmentMobile : Fragment() {
         )
 
         // Tulis timestamp kita (pojok kanan bawah)
-        canvas.drawText(formatted, bitmap.width.toFloat() - 350f, bitmap.height.toFloat() - 20f, paintTextWhite)
+        canvas.drawText(
+            formatted,
+            bitmap.width.toFloat() - 350f,
+            bitmap.height.toFloat() - 20f,
+            paintTextWhite
+        )
 
         // Box identitas (pojok kiri bawah)
         canvas.drawRect(0f, bitmap.height.toFloat() - 65f, 650f, bitmap.height.toFloat(), paintBox)
         // canvas.drawText(patientRs, 20f, bitmap.height.toFloat() - 60f, paintTextWhite)
-        if(patientNrm.isEmpty()) {
+        if (patientNrm.isEmpty()) {
             canvas.drawText("$patientRs", 20f, bitmap.height.toFloat() - 20f, paintTextWhite)
-        }else{
-            canvas.drawText("$patientRs/$patientNrm", 20f, bitmap.height.toFloat() - 20f, paintTextWhite)
+        } else {
+            canvas.drawText(
+                "$patientRs/$patientNrm",
+                20f,
+                bitmap.height.toFloat() - 20f,
+                paintTextWhite
+            )
         }
 
 //        if(patientNrm.isEmpty()){
@@ -1148,7 +1412,8 @@ class VideoFragmentMobile : Fragment() {
         }.onSuccess { saved ->
             Toast.makeText(requireContext(), "Tersimpan: ${saved.name}", Toast.LENGTH_SHORT).show()
         }.onFailure {
-            Toast.makeText(requireContext(), "Gagal simpan: ${it.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Gagal simpan: ${it.message}", Toast.LENGTH_SHORT)
+                .show()
         }
     }
 
@@ -1160,7 +1425,8 @@ class VideoFragmentMobile : Fragment() {
         var lastFocusX = 0f
         var lastFocusY = 0f
 
-        val scaleDetector = android.view.ScaleGestureDetector(context,
+        val scaleDetector = android.view.ScaleGestureDetector(
+            context,
             object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScale(detector: android.view.ScaleGestureDetector): Boolean {
                     val factor = detector.scaleFactor
@@ -1181,11 +1447,13 @@ class VideoFragmentMobile : Fragment() {
                 }
             })
 
-        val tapDetector = android.view.GestureDetector(context,
+        val tapDetector = android.view.GestureDetector(
+            context,
             object : android.view.GestureDetector.SimpleOnGestureListener() {
                 override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
                     // reset
-                    animate().scaleX(1f).scaleY(1f).translationX(0f).translationY(0f).setDuration(150).start()
+                    animate().scaleX(1f).scaleY(1f).translationX(0f).translationY(0f)
+                        .setDuration(150).start()
                     scale = 1f
                     return true
                 }

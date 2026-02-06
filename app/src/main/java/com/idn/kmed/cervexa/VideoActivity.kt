@@ -45,8 +45,8 @@ class VideoActivity : AppCompatActivity() {
             VideoFragmentTv().apply { arguments = bundle }
         } else {
             Log.i(TAG, "Loading VideoFragmentMobile (RTSP)")
-            VideoFragmentTv().apply { arguments = bundle }
-//            VideoFragmentMobile().apply { arguments = bundle }
+//            VideoFragmentTv().apply { arguments = bundle }
+            VideoFragmentMobile().apply { arguments = bundle }
         }
 
         // Load fragment jika belum ada

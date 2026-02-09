@@ -297,7 +297,8 @@ class HomeDashboardFragment : Fragment() {
         // [KUNCI UTAMA] Bind process agar traffic HTTP/RTSP lewat Wi-Fi ini, bukan 4G
         runCatching { cm.bindProcessToNetwork(camNet) }
 
-        // Pindah activity
+        // Pindah activitycls
+
         try {
             startActivity(Intent(requireContext(), ConfirmPatientActivity::class.java))
         } catch (e: Exception) {

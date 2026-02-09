@@ -9,12 +9,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
-import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SearchView
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.idn.kmed.cervexa.live.VideoActivity
@@ -61,20 +56,6 @@ class SelectExistingPatientActivity : AppCompatActivity() {
             } else false
         }
 
-//        etSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
-//            v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f)
-//                .setDuration(80).start()
-//        }
-//
-//        btnSearch.onFocusChangeListener = View.OnFocusChangeListener { v, hasFocus ->
-//            v.animate()
-//                .scaleX(if (hasFocus) 1.08f else 1f)
-//                .scaleY(if (hasFocus) 1.08f else 1f)
-//                .setDuration(80)
-//                .start()
-//        }
-
-
         adapter = PatientListAdapter { patient ->
             openVideoForPatient(patient)
         }
@@ -82,27 +63,24 @@ class SelectExistingPatientActivity : AppCompatActivity() {
         rv.layoutManager = LinearLayoutManager(this)
         rv.adapter = adapter
 
-        // load data pasien dari session yang sudah ada
         loadPatients()
     }
 
     private fun loadPatients() {
-        // ambil semua session
-        val sessions = repo.collectAllSessions()  // kalau belum public, bisa bikin helper di repo
+        // ✅ Ambil semua session dari MediaRepository
+        val sessions = repo.collectAllSessions()
 
-        // group by NIK (atau kombinasi lain sesuai kebutuhanmu)
+        // ✅ Group by NIK untuk menampilkan unique patients
         val map = linkedMapOf<String, PatientItem>()
 
         for (s in sessions) {
             val nik = s.nik ?: continue
-            // kalau sudah ada, bisa skip / override sesuai kebutuhan (misal ambil terakhir)
             if (!map.containsKey(nik)) {
                 map[nik] = PatientItem(
                     nama = s.nama.orEmpty(),
                     nik = nik,
                     rs = s.rs,
                     nrm = s.nrm,
-//                    dobUtcMs = s.lastTs ?: 0L
                     dobUtcMs = s.dobUtc ?: 0L
                 )
             }
@@ -129,14 +107,26 @@ class SelectExistingPatientActivity : AppCompatActivity() {
     }
 
     private fun openVideoForPatient(p: PatientItem) {
+        // ✅ Cari session terakhir pasien ini
+        val allSessions = repo.collectAllSessions()
+        val matchingSession = allSessions
+            .filter { it.nik == p.nik }
+            .maxByOrNull { it.lastTs }
+
         val intent = Intent(this, VideoActivity::class.java).apply {
             putExtra("patient_nama", p.nama)
             putExtra("patient_nik", p.nik)
             putExtra("patient_rs", p.rs)
-            putExtra("patient_nrm", p.nrm)        // kalau mau pakai, bisa diisi dari SessionItem
+            putExtra("patient_nrm", p.nrm)
             putExtra("patient_dob_utc", p.dobUtcMs)
             putExtra("is_existing_patient", true)
+
+            // ✅ KIRIM PATH SESSION YANG SUDAH ADA
+            matchingSession?.patientDir?.let { patientDir ->
+                putExtra("sessionDirPath", patientDir.absolutePath)
+            }
         }
+
         startActivity(intent)
         finish()
     }

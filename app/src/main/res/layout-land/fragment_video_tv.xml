@@ -9,6 +9,7 @@
     android:background="@android:color/black"
     android:theme="@style/AppTheme.Land.NoActionBar">
 
+    <!-- ✅ VIDEO CONTAINER - FULL SCREEN -->
     <FrameLayout
         android:id="@+id/videoContainer"
         android:layout_width="0dp"
@@ -24,59 +25,63 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <TextView
-            android:id="@+id/tvOverlayInfo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|start"
-            android:layout_marginStart="20dp"
-            android:layout_marginBottom="20dp"
-            android:background="#CC000000"
-            android:elevation="4dp"
-            android:fontFamily="sans-serif-medium"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="6dp"
-            android:text="Nama RS / NRM"
-            android:textColor="@android:color/white"
-            android:textSize="15sp"
-            android:visibility="visible"
-            tools:ignore="HardcodedText" />
-
-        <TextView
-            android:id="@+id/tvOverlayClock"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:layout_marginEnd="20dp"
-            android:layout_marginBottom="20dp"
-            android:background="#CC000000"
-            android:elevation="4dp"
-            android:fontFamily="monospace"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="6dp"
-            android:text="0000-00-00 00:00:00"
-            android:textColor="@android:color/white"
-            android:textSize="15sp"
-            android:visibility="visible"
-            tools:ignore="HardcodedText" />
-
     </FrameLayout>
 
+    <!-- ✅ OVERLAY INFO - CONSTRAINT KE PARENT (bukan videoContainer) -->
+    <TextView
+        android:id="@+id/tvOverlayInfo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginBottom="20dp"
+        android:background="#CC000000"
+        android:elevation="10dp"
+        android:fontFamily="sans-serif-medium"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:text="Nama RS / NRM"
+        android:textColor="@android:color/white"
+        android:textSize="15sp"
+        android:visibility="visible"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- ✅ OVERLAY CLOCK - CONSTRAINT KE PARENT (bukan videoContainer) -->
+    <TextView
+        android:id="@+id/tvOverlayClock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="20dp"
+        android:background="#CC000000"
+        android:elevation="10dp"
+        android:fontFamily="monospace"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:text="0000-00-00 00:00:00"
+        android:textColor="@android:color/white"
+        android:textSize="15sp"
+        android:visibility="visible"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- ✅ SHUTTER VIEW -->
     <View
         android:id="@+id/vShutterImage"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@android:color/black"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="@id/videoContainer"
-        app:layout_constraintEnd_toEndOf="@id/videoContainer"
-        app:layout_constraintStart_toStartOf="@id/videoContainer"
-        app:layout_constraintTop_toTopOf="@id/videoContainer" />
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- ✅ LOADING INDICATOR -->
     <ProgressBar
         android:id="@+id/pbLoadingImage"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:indeterminateTint="@android:color/white"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -84,14 +89,15 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- ✅ TOMBOL BACK -->
     <ImageButton
         android:id="@+id/btnBackLite"
         android:layout_width="64dp"
         android:layout_height="64dp"
         android:layout_margin="20dp"
         android:background="@drawable/bg_btn_remote_selector"
-        android:contentDescription="@string/back"
-        android:elevation="4dp"
+        android:contentDescription="Kembali"
+        android:elevation="10dp"
         android:padding="14dp"
         android:scaleType="centerInside"
         android:src="@drawable/baseline_arrow_back_24"
@@ -99,13 +105,14 @@
         app:layout_constraintTop_toTopOf="parent"
         app:tint="@android:color/white" />
 
+    <!-- ✅ HUD RECORDING -->
     <LinearLayout
         android:id="@+id/recordHud"
         android:layout_width="wrap_content"
         android:layout_height="48dp"
         android:layout_marginTop="20dp"
         android:background="@drawable/bg_record_hud"
-        android:elevation="4dp"
+        android:elevation="10dp"
         android:gravity="center"
         android:orientation="horizontal"
         android:paddingHorizontal="24dp"
@@ -133,16 +140,18 @@
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
+    <!-- ✅ SIDE CONTROLS (Record + Snapshot) -->
     <LinearLayout
         android:id="@+id/sideControls"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="20dp"
         android:background="#B3000000"
-        android:elevation="4dp"
+        android:elevation="10dp"
         android:gravity="center"
         android:orientation="vertical"
         android:padding="12dp"
+        android:visibility="visible"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -154,7 +163,7 @@
             android:layout_marginBottom="20dp"
             android:background="@drawable/bg_btn_remote_selector"
             android:clickable="true"
-            android:contentDescription="@string/record_video"
+            android:contentDescription="Record Video"
             android:padding="18dp"
             android:scaleType="centerInside"
             android:src="@drawable/majesticons_video"
@@ -166,29 +175,38 @@
             android:layout_height="72dp"
             android:background="@drawable/bg_btn_remote_selector"
             android:clickable="true"
-            android:contentDescription="@string/take_snapshot"
+            android:contentDescription="Snapshot"
             android:padding="18dp"
             android:scaleType="centerInside"
             android:src="@drawable/mage_camera_fill"
             app:tint="@android:color/white" />
-
     </LinearLayout>
+
+    <!-- ========================================== -->
+    <!-- HIDDEN ELEMENTS (untuk compatibility)     -->
+    <!-- ========================================== -->
+
+    <ImageButton
+        android:id="@+id/bnStartStopImage"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:saveEnabled="false"
+        android:visibility="gone"
+        tools:ignore="MissingConstraints" />
+
+    <ImageButton
+        android:id="@+id/btnEnterLandscape"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        tools:ignore="MissingConstraints" />
 
     <TextView
         android:id="@+id/tvStamp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="24dp"
-        android:background="@drawable/bg_overlay_chip"
-        android:elevation="2dp"
-        android:padding="8dp"
-        android:text="17/06/2025"
-        android:textColor="@android:color/white"
-        android:textSize="14sp"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        tools:ignore="HardcodedText" />
+        tools:ignore="MissingConstraints" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvThumbs"
@@ -211,35 +229,12 @@
         android:visibility="gone"
         tools:ignore="MissingConstraints" />
 
-    <ImageButton
-        android:id="@+id/btnEnterLandscape"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone"
-        tools:ignore="MissingConstraints" />
-
-    <ImageButton
-        android:id="@+id/bnStartStopImage"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:saveEnabled="false"
-        android:visibility="gone"
-        tools:ignore="MissingConstraints" />
-
     <TextView
         android:id="@+id/tvStatusImage"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="#CC000000"
-        android:elevation="4dp"
-        android:padding="8dp"
-        android:text="Status"
-        android:textColor="@android:color/white"
-        android:textSize="12sp"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:ignore="HardcodedText" />
+        tools:ignore="MissingConstraints" />
 
     <TextView
         android:id="@+id/tvMediaTgl"

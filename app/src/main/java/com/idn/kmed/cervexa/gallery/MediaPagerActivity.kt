@@ -32,31 +32,49 @@ open class MediaPagerActivity : AppCompatActivity() {
     private lateinit var btnBackLite: View
 
     private lateinit var paths: ArrayList<String>
-    private lateinit var types: ArrayList<String> // "IMAGE" / "VIDEO"
+    private lateinit var types: ArrayList<String>
     private var startIndex = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (intent.getBooleanExtra("forceLandscape", false)) {
+
+        val forceLandscape = intent.getBooleanExtra("forceLandscape", false)
+
+        if (forceLandscape) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
-            // biarkan default (boleh portrait)
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
         }
+
         setContentView(R.layout.activity_media_pager)
 
         toolbar = findViewById(R.id.toolbar)
         pager = findViewById(R.id.pager)
         chipIndex = findViewById(R.id.chipIndex)
         bottomShare = findViewById(R.id.bottomShare)
-        //Landscap
+
         findViewById<View>(R.id.bottomShare)?.setOnClickListener { onShareClick() }
-        findViewById<View>(R.id.btnBackLite)?.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        findViewById<View>(R.id.btnExitLandscap)?.setOnClickListener {
-            this.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+
+        // ============================================================
+        // btnBackLite dan btnExitLandscap:
+        // - Di TV (forceLandscape = true): GONE — tidak ada back stack
+        //   yang benar di TV, dan tombol ini tidak relevan
+        // - Di phone/tablet (forceLandscape = false): VISIBLE — normal
+        // ============================================================
+        val navVisibility = if (forceLandscape) View.GONE else View.VISIBLE
+
+        findViewById<View>(R.id.btnBackLite)?.let { btn ->
+            btn.visibility = navVisibility
+            btn.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
         }
 
-        toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
+//        findViewById<View>(R.id.btnExitLandscap)?.let { btn ->
+//            btn.visibility = navVisibility
+//            btn.setOnClickListener {
+//                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+//            }
+//        }
 
         paths = intent.getStringArrayListExtra("paths") ?: arrayListOf()
         types = intent.getStringArrayListExtra("types") ?: arrayListOf()
@@ -90,42 +108,12 @@ open class MediaPagerActivity : AppCompatActivity() {
         if (idx !in paths.indices) return
         val f = File(paths[idx])
         val mime = if (types[idx] == "IMAGE") "image/jpeg" else "video/mp4"
-        showShareSheet(f, mime)   // fungsi di bawah
+        showShareSheet(f, mime)
     }
 
     private fun updateUiForPosition(position: Int) {
         chipIndex?.text = "${position + 1}/${paths.size}"
         toolbar.title = File(paths[position]).name
-    }
-
-    private fun shareCurrent() {
-        val pos = pager.currentItem
-        if (pos !in paths.indices) return
-
-        val file = File(paths[pos])
-        if (!file.exists()) {
-            Toast.makeText(this, "File tidak ditemukan", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val type = types.getOrNull(pos) ?: "IMAGE"
-        val mime = if (type == "VIDEO") "video/mp4" else "image/jpeg"
-
-        val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
-
-        val send = Intent(Intent.ACTION_SEND).apply {
-            this.type = mime
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            clipData = android.content.ClipData.newRawUri("shared", uri)
-        }
-
-        val chooser = Intent.createChooser(send, "Bagiiiikan").apply {
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            // (opsional) bawa clipData juga
-            clipData = android.content.ClipData.newRawUri("shared", uri)
-        }
-
-        startActivity(chooser)
     }
 
     private fun showShareSheet(file: File, mime: String) {
@@ -138,10 +126,11 @@ open class MediaPagerActivity : AppCompatActivity() {
         dialog.behavior.state =
             com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
         dialog.behavior.skipCollapsed = true
-        // rounded top
+
         dialog.setOnShowListener {
-            val sheet =
-                dialog.findViewById<android.widget.FrameLayout>(com.google.android.material.R.id.design_bottom_sheet)
+            val sheet = dialog.findViewById<android.widget.FrameLayout>(
+                com.google.android.material.R.id.design_bottom_sheet
+            )
             sheet?.background = MaterialShapeDrawable(
                 ShapeAppearanceModel.Builder()
                     .setTopLeftCorner(
@@ -154,42 +143,28 @@ open class MediaPagerActivity : AppCompatActivity() {
                     )
                     .build()
             ).apply {
-                this?.fillColor =
-                    android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+                fillColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
             }
         }
 
         v.findViewById<ImageButton>(R.id.btnClose).setOnClickListener { dialog.dismiss() }
 
-        // actions
         v.findViewById<LinearLayout>(R.id.itemWa).setOnClickListener {
             shareToAppOrToast(
-                packages = arrayOf("com.whatsapp", "com.whatsapp.w4b"),
-                appLabel = "WhatsApp",
-                file = file,
-                mime = mime,
-                loosenMediaMime = true
-            );
+                arrayOf("com.whatsapp", "com.whatsapp.w4b"),
+                "WhatsApp",
+                file,
+                mime,
+                true
+            )
             dialog.dismiss()
         }
         v.findViewById<LinearLayout>(R.id.itemTg).setOnClickListener {
-            shareToAppOrToast(
-                packages = arrayOf("org.telegram.messenger"),
-                appLabel = "Telegram",
-                file = file,
-                mime = mime,
-                loosenMediaMime = true
-            );
+            shareToAppOrToast(arrayOf("org.telegram.messenger"), "Telegram", file, mime, true)
             dialog.dismiss()
         }
         v.findViewById<LinearLayout>(R.id.itemEmail).setOnClickListener {
-            shareToAppOrToast(
-                packages = arrayOf("com.google.android.gm"),
-                appLabel = "Gmail",
-                file = file,
-                mime = mime,
-                loosenMediaMime = false // biarkan mime asli; Gmail okay
-            );
+            shareToAppOrToast(arrayOf("com.google.android.gm"), "Gmail", file, mime, false)
             dialog.dismiss()
         }
         v.findViewById<LinearLayout>(R.id.itemCloud).setOnClickListener {
@@ -197,7 +172,7 @@ open class MediaPagerActivity : AppCompatActivity() {
             dialog.dismiss()
         }
         v.findViewById<LinearLayout>(R.id.itemSave).setOnClickListener {
-            exportToGallery(file, mime) // kalau kamu ingin simpan ke Galeri
+            exportToGallery(file, mime)
             dialog.dismiss()
         }
 
@@ -205,65 +180,12 @@ open class MediaPagerActivity : AppCompatActivity() {
     }
 
     private fun fileUriForShare(f: File): Uri =
-        androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+        FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
 
-    private fun shareToPackage(
-        file: File,
-        mime: String,
-        vararg packages: String,
-        fallbackChooser: Boolean = true
-    ) {
-        val uri = fileUriForShare(file)
-        val send = Intent(Intent.ACTION_SEND).apply {
-            type = mime
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        // pilih paket pertama yang terpasang
-        val pm = packageManager
-        val pkg = packages.firstOrNull { p ->
-            try {
-                pm.getPackageInfo(p, 0); true
-            } catch (_: Exception) {
-                false
-            }
-        }
-        if (pkg != null) {
-            send.`package` = pkg
-            startActivity(send)
-        } else if (fallbackChooser) {
-            startActivity(Intent.createChooser(send, "Bagikan via"))
-        } else {
-            Toast.makeText(this, "Aplikasi tidak terpasang", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun shareToEmail(file: File, mime: String) {
-        val uri = fileUriForShare(file)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = mime
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, file.name)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        startActivity(Intent.createChooser(intent, "Kirim email"))
-    }
-
-    /** Cek paket yang terpasang pertama dari daftar */
     private fun resolveFirstInstalled(vararg pkgs: String): String? {
         val pm = packageManager
         return pkgs.firstOrNull { p -> runCatching { pm.getPackageInfo(p, 0) }.isSuccess }
     }
-
-// **
-// * Share ke app tertentu (by package). Kalau tidak terpasang → Toast "X belum terpasang".
-// *
-// * @param packages daftar kandidat package (urutkan dari prioritas tertinggi)
-// * @param appLabel label untuk toast (mis. "WhatsApp", "Telegram", "Gmail")
-// * @param file file yang akan dibagikan
-// * @param mime mime asli (mis. image/jpeg atau video/mp4)
-// * @param loosenMediaMime jika true dan mime image/video → pakai wildcard image/* / video/* (lebih kompatibel)
-// **
 
     private fun shareToAppOrToast(
         packages: Array<String>,
@@ -279,7 +201,6 @@ open class MediaPagerActivity : AppCompatActivity() {
         }
 
         val uri = fileUriForShare(file)
-
         val finalMime =
             if (loosenMediaMime && (mime.startsWith("image") || mime.startsWith("video"))) {
                 if (mime.startsWith("image")) "image/*" else "video/*"
@@ -289,15 +210,12 @@ open class MediaPagerActivity : AppCompatActivity() {
             type = finalMime
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            // beberapa OEM butuh ClipData supaya izin ikut
             clipData = ClipData.newUri(contentResolver, "media", uri)
             `package` = targetPkg
         }
 
-        // Grant eksplisit (beberapa device wajib)
         runCatching { grantUriPermission(targetPkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
 
-        // Pastikan memang ada activity yang handle
         val canHandle = packageManager.queryIntentActivities(intent, 0).isNotEmpty()
         if (!canHandle) {
             Toast.makeText(this, "Tidak dapat membuka $appLabel", Toast.LENGTH_SHORT).show()
@@ -306,120 +224,16 @@ open class MediaPagerActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-//    /** Intent share standar ke package tertentu */
-//    private fun shareToSpecificApp(file: File, mime: String, targetPackage: String): Boolean {
-//        val uri = fileUriForShare(file)
-//        val intent = Intent(Intent.ACTION_SEND).apply {
-//            type = mime
-//            putExtra(Intent.EXTRA_STREAM, uri)
-//            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-//            // tambahkan ClipData agar permission ikut untuk beberapa OEM
-//            clipData = android.content.ClipData.newRawUri(file.name, uri)
-//            `package` = targetPackage
-//        }
-//        return runCatching { startActivity(intent) }.isSuccess
-//    }
-//
-//    /** WhatsApp (consumer / business) */
-//    private fun shareToWhatsApp(file: File, mime: String) {
-//        val uri = fileUriForShare(file)
-//
-//        // Prioritaskan WA personal lalu WA Business
-//        val targetPkg = resolveFirstInstalled("com.whatsapp", "com.whatsapp.w4b")
-//            ?: return Toast.makeText(this, "WhatsApp tidak terpasang", Toast.LENGTH_SHORT).show()
-//
-//        // WA lebih toleran kalau type = image/* atau video/* (bukan fixed jpeg/mp4)
-//        val waMime = when {
-//            mime.startsWith("image") -> "image/*"
-//            mime.startsWith("video") -> "video/*"
-//            else -> mime
-//        }
-//
-//        val send = Intent(Intent.ACTION_SEND).apply {
-//            type = waMime
-//            putExtra(Intent.EXTRA_STREAM, uri)
-//            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-//            // beberapa OEM butuh ClipData agar permission benar-benar ikut
-//            clipData = android.content.ClipData.newUri(contentResolver, "media", uri)
-//            `package` = targetPkg
-//        }
-//
-//        // Pastikan ada activity yang bisa handle intent ini
-//        val canHandle = packageManager.queryIntentActivities(send, 0).isNotEmpty()
-//        if (!canHandle) {
-//            Toast.makeText(this, "Tidak dapat membuka WhatsApp", Toast.LENGTH_SHORT).show()
-//            return
-//        }
-//
-//        // Grant permission eksplisit ke paket tujuan (beberapa device wajib)
-//        try {
-//            grantUriPermission(targetPkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-//        } catch (_: Exception) { /* aman diabaikan */ }
-//
-//        try {
-//            startActivity(send)
-//        } catch (_: Exception) {
-//            // fallback chooser kalau ada constraint aneh di device
-//            startActivity(Intent.createChooser(send, "Bagikan via"))
-//        }
-//    }
-//
-//    /** Telegram */
-//    private fun shareToTelegram(file: File, mime: String) {
-//        val pkg = resolveFirstInstalled("org.telegram.messenger")
-//        if (pkg != null && shareToSpecificApp(file, mime, pkg)) return
-//        startActivity(Intent.createChooser(
-//            Intent(Intent.ACTION_SEND).apply {
-//                type = mime; putExtra(Intent.EXTRA_STREAM, fileUriForShare(file))
-//                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-//            }, "Bagikan via"))
-//    }
-//
-//    /** Email → prioritaskan Gmail; kalau tidak ada, batasi ke app email saja */
-//    private fun shareToGmail(file: File, mime: String) {
-//        val uri = fileUriForShare(file)
-//        val gmail = resolveFirstInstalled("com.google.android.gm")
-//        if (gmail != null) {
-//            val i = Intent(Intent.ACTION_SEND).apply {
-//                type = mime
-//                putExtra(Intent.EXTRA_STREAM, uri)
-//                putExtra(Intent.EXTRA_SUBJECT, File(uri.path ?: "").name)
-//                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-//                clipData = android.content.ClipData.newRawUri("attachment", uri)
-//                `package` = gmail
-//            }
-//            runCatching { startActivity(i) }.onFailure {
-//                // fallback ke selector email-only
-//                shareEmailWithSelector(uri, mime)
-//            }
-//        } else {
-//            shareEmailWithSelector(uri, mime)
-//        }
-//    }
-//
-//    /** Selector email-only (membatasi agar hanya aplikasi email yang muncul) */
-//    private fun shareEmailWithSelector(uri: Uri, mime: String) {
-//        val selector = Intent(Intent.ACTION_SENDTO).apply { data = Uri.parse("mailto:") }
-//        val i = Intent(Intent.ACTION_SEND).apply {
-//            type = mime
-//            putExtra(Intent.EXTRA_STREAM, uri)
-//            putExtra(Intent.EXTRA_SUBJECT, File(uri.path ?: "").name)
-//            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-//            clipData = android.content.ClipData.newRawUri("attachment", uri)
-//            setSelector(selector)
-//        }
-//        startActivity(i)
-//    }
-
-
     private fun exportToGallery(src: File, mime: String) {
         if (android.os.Build.VERSION.SDK_INT >= 29) {
             val isVideo = mime.startsWith("video")
             val rel = if (isVideo) android.os.Environment.DIRECTORY_MOVIES + "/Cervexa"
             else android.os.Environment.DIRECTORY_PICTURES + "/Cervexa"
-            val coll =
-                if (isVideo) android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                else android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            val coll = if (isVideo)
+                android.provider.MediaStore.Video.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            else
+                android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+
             val cv = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, src.name)
                 put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
@@ -432,10 +246,10 @@ open class MediaPagerActivity : AppCompatActivity() {
                     java.io.FileInputStream(src).use { it.copyTo(out) }
                 }
             } finally {
-                cv.clear(); cv.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                cv.clear()
+                cv.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
                 contentResolver.update(uri, cv, null, null)
             }
-            Toast.makeText(this, "Disimpan ke galeri", Toast.LENGTH_SHORT).show()
         } else {
             val base = if (mime.startsWith("video"))
                 android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES)
@@ -451,7 +265,7 @@ open class MediaPagerActivity : AppCompatActivity() {
                 arrayOf(mime),
                 null
             )
-            Toast.makeText(this, "Disimpan ke galeri", Toast.LENGTH_SHORT).show()
         }
+        Toast.makeText(this, "Disimpan ke galeri", Toast.LENGTH_SHORT).show()
     }
 }

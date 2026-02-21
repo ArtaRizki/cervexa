@@ -56,7 +56,7 @@
             android:background="@android:color/transparent"
             android:elevation="2dp"
             android:text="5/6"
-            android:textColor="@color/colorWhite" />
+            android:textColor="@color/colorBlack" />
 
         <ImageView
             android:id="@id/bottomShare"
@@ -72,6 +72,7 @@
             android:id="@+id/btnExitLandscap"
             android:layout_width="32dp"
             android:layout_height="32dp"
+            android:visibility="gone"
             android:contentDescription="Exit Landscape"
             android:src="@drawable/mingcute_fullscreen_exit_2_line"
             android:layout_gravity="bottom|end"

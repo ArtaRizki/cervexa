@@ -1106,17 +1106,23 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         Log.d(TAG, "Recording stopped")
     }
 
+// ================================================================
+    // Ganti fungsi startFrameGrabber() di VideoFragmentTv dengan ini
+    //
+    // Sekarang lebih simpel: tidak perlu tracking PTS di sini
+    // karena encoder pakai counter-based PTS (frame ke-N = N*40ms)
+    // ================================================================
+
     private fun startFrameGrabber(width: Int, height: Int) {
         recordingJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
 
-            val ENCODER_FPS = 25
-            val frameIntervalNs = 1_000_000_000L / ENCODER_FPS // 40_000_000 ns = 40ms
+            val ENCODER_FPS =
+                25                               // harus sama dengan frameRate di RealtimeBitmapEncoder
+            val frameIntervalNs = 1_000_000_000L / ENCODER_FPS // 40ms dalam nanoseconds
             var nextFrameNs = System.nanoTime()
 
             while (record.get() && isActive) {
 
-                // Catat waktu SEBELUM getBitmap (termasuk Main dispatcher overhead)
-                // nextFrameNs sudah di-set di awal atau di akhir loop sebelumnya
                 val bmp = withContext(Dispatchers.Main) {
                     if (usePhoneCamera) phoneCameraView?.bitmap
                     else textureView?.getBitmap(width, height)
@@ -1129,25 +1135,16 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                         s
                     } else bmp
 
-                    // PTS distamp di dalam submitBitmap() (waktu capture tepat)
+                    // submitBitmap — encoder assign PTS otomatis via counter
                     recorder.submitBitmap(processTextToBitmapSafe(scaled))
                 }
 
-                // Hitung sleep: dari nextFrameNs (sudah di-set SEBELUM getBitmap di iterasi ini)
-                // sehingga waktu getBitmap + processing sudah ter-absorb
+                // Timing: nanoTime presisi sub-ms
                 nextFrameNs += frameIntervalNs
                 val sleepNs = nextFrameNs - System.nanoTime()
                 when {
-                    sleepNs > 1_000_000L -> {
-                        // Sleep presisi: ms + sisa ns
-                        delay(sleepNs / 1_000_000L)
-                    }
-
-                    sleepNs < -frameIntervalNs -> {
-                        // Terlalu jauh tertinggal: reset timer
-                        nextFrameNs = System.nanoTime()
-                    }
-                    // else: sedikit terlambat, langsung lanjut tanpa sleep
+                    sleepNs > 1_000_000L -> delay(sleepNs / 1_000_000L)
+                    sleepNs < -frameIntervalNs -> nextFrameNs = System.nanoTime()
                 }
             }
         }

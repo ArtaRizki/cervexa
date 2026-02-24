@@ -15,38 +15,43 @@ import java.io.File
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
- * RealtimeBitmapEncoder — SMOOTH FINAL
+ * RealtimeBitmapEncoder — WALL-CLOCK BASED PTS (fix video duration)
  *
- * Fix kecepatan: PTS distamp di submitBitmap() (waktu capture),
- *   bukan di drainEncoder() yang bisa delay.
+ * Root cause bug durasi pendek:
+ *   Counter-based PTS mengasumsikan frame datang tepat setiap 1/fps detik.
+ *   Tapi withContext(Dispatchers.Main) untuk grab bitmap bisa lambat ~200ms
+ *   saat main thread sibuk render VLC → hanya ~5fps frame yang masuk.
+ *   500 frame yang diharapkan → hanya 100 frame → PTS 0..3960ms = 4 detik!
  *
- * Fix smooth motion:
- *   - VBR bitrate: encoder pakai bitrate lebih saat ada gerakan
- *   - KEY_PRIORITY non-realtime: encoder lebih agresif dalam motion estimation
- *   - Thread priority MAX-1: timing konsisten
- *   - iFrameInterval 2s: lebih banyak P-frame = transisi lebih mulus
+ * Fix: WALL-CLOCK BASED PTS
+ *   ptsUs = (System.nanoTime() - recordingStartNs) / 1000
+ *   PTS mencerminkan waktu nyata kapan frame di-submit.
+ *   Jika record 20 detik → durasi video 20 detik, terlepas dari berapa fps aktual.
  *
- * Catatan: frameRate HARUS sama dengan ENCODER_FPS di startFrameGrabber()
+ * Frame rate dideklarasikan ke encoder sebagai "target", tapi PTS pakai waktu nyata.
+ * Ini standar industri untuk variable frame rate / realtime capture.
  */
 class RealtimeBitmapEncoder(
     private val context: Context,
     private val width: Int,
     private val height: Int,
     private val outputFile: File,
-    private val frameRate: Int = 25,         // HARUS sama dengan ENCODER_FPS di startFrameGrabber
-    private val bitRate: Int = 4_000_000,    // 4Mbps VBR — naik saat ada gerakan
-    private val iFrameIntervalSec: Int = 2,  // 2s = lebih banyak P-frame = lebih smooth
-    private val queueCapacity: Int = 4,
+    private val frameRate: Int = 25,
+    private val bitRate: Int = 4_000_000,
+    private val iFrameIntervalSec: Int = 2,
+    private val queueCapacity: Int = 8,
 ) {
     companion object {
         private const val TAG = "RealtimeBitmapEncoder"
     }
 
-    private data class TimestampedBitmap(val bitmap: Bitmap, val captureNs: Long)
+    /** Wrapper bitmap + timestamp wall clock saat submit */
+    private data class TimedBitmap(val bitmap: Bitmap, val ptsUs: Long)
 
-    private val bitmapQueue = ArrayBlockingQueue<TimestampedBitmap>(queueCapacity)
+    private val bitmapQueue = ArrayBlockingQueue<TimedBitmap>(queueCapacity)
     private var encoderThread: Thread? = null
     private val running = AtomicBoolean(false)
 
@@ -61,13 +66,18 @@ class RealtimeBitmapEncoder(
     private val bufferInfo = MediaCodec.BufferInfo()
     private val destRect = Rect(0, 0, width, height)
 
+    /** Timestamp mulai recording (nanoseconds) */
     @Volatile
-    private var startCaptureNs = -1L
-    @Volatile
-    private var lastPtsUs = 0L
+    private var recordingStartNs = 0L
+
+    /** Counter hanya untuk logging */
+    private val frameCount = AtomicLong(0L)
 
     fun start() {
         if (running.getAndSet(true)) return
+        frameCount.set(0L)
+        recordingStartNs = System.nanoTime()
+
         try {
             initEncoder()
         } catch (e: Exception) {
@@ -76,34 +86,20 @@ class RealtimeBitmapEncoder(
             return
         }
 
-        startCaptureNs = -1L
-        lastPtsUs = 0L
-
         encoderThread = Thread {
             try {
-                val frameIntervalNs = 1_000_000_000L / frameRate
-                var nextFrameNs = System.nanoTime()
-
                 while (running.get()) {
-                    val item = bitmapQueue.poll(50, TimeUnit.MILLISECONDS)
+                    val timedBm = bitmapQueue.poll(50, TimeUnit.MILLISECONDS)
 
-                    if (item != null) {
-                        val ptsUs = computePtsUs(item.captureNs)
-                        drawBitmapToSurface(item.bitmap)
-                        drainEncoder(ptsUs)
-                        if (!item.bitmap.isRecycled) item.bitmap.recycle()
+                    if (timedBm != null) {
+                        drawBitmapToSurface(timedBm.bitmap)
+                        drainEncoder(timedBm.ptsUs)
+                        frameCount.incrementAndGet()
+                        if (!timedBm.bitmap.isRecycled) timedBm.bitmap.recycle()
                     } else {
-                        drainEncoder(lastPtsUs)
-                    }
-
-                    nextFrameNs += frameIntervalNs
-                    val sleepNs = nextFrameNs - System.nanoTime()
-                    when {
-                        sleepNs > 1_000_000L ->
-                            Thread.sleep(sleepNs / 1_000_000L, (sleepNs % 1_000_000L).toInt())
-
-                        sleepNs < -frameIntervalNs ->
-                            nextFrameNs = System.nanoTime()
+                        // Drain tanpa frame baru — pakai waktu sekarang
+                        val nowUs = (System.nanoTime() - recordingStartNs) / 1000L
+                        drainEncoder(nowUs)
                     }
                 }
             } catch (t: Throwable) {
@@ -118,40 +114,41 @@ class RealtimeBitmapEncoder(
             priority = Thread.MAX_PRIORITY - 1
             start()
         }
+
+        Log.d(TAG, "Started: ${width}x${height} @ ${frameRate}fps ${bitRate / 1000}kbps")
     }
 
     /**
-     * Dipanggil dari startFrameGrabber().
-     * PTS distamp DISINI — tepat saat frame di-capture.
+     * Submit bitmap ke encoder queue.
+     * PTS dihitung saat ini (wall clock), bukan saat frame diproses encoder.
+     * Ini memastikan durasi video = durasi recording nyata.
      */
     fun submitBitmap(bitmap: Bitmap) {
         if (!running.get()) {
             if (!bitmap.isRecycled) bitmap.recycle()
             return
         }
-        val captureNs = System.nanoTime()
-        if (startCaptureNs == -1L) startCaptureNs = captureNs
 
-        val item = TimestampedBitmap(bitmap, captureNs)
-        if (!bitmapQueue.offer(item)) {
+        // PTS = waktu nyata sejak recording mulai
+        val ptsUs = (System.nanoTime() - recordingStartNs) / 1000L
+
+        val timedBm = TimedBitmap(bitmap, ptsUs)
+
+        if (!bitmapQueue.offer(timedBm)) {
+            // Queue penuh — buang frame lama (oldest), masukkan frame baru
             val old = bitmapQueue.poll()
             old?.let { if (!it.bitmap.isRecycled) it.bitmap.recycle() }
-            bitmapQueue.offer(item)
+            bitmapQueue.offer(timedBm)
         }
     }
 
     fun stop() {
         running.set(false)
         try {
-            encoderThread?.join(2000)
+            encoderThread?.join(3000)
         } catch (_: Throwable) {
         }
         encoderThread = null
-    }
-
-    private fun computePtsUs(captureNs: Long): Long {
-        val baseline = if (startCaptureNs == -1L) captureNs else startCaptureNs
-        return ((captureNs - baseline) / 1000L).coerceAtLeast(lastPtsUs + 1)
     }
 
     private fun initEncoder() {
@@ -166,11 +163,9 @@ class RealtimeBitmapEncoder(
             setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameIntervalSec)
 
-            // Non-realtime: encoder lebih agresif dalam motion estimation
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                 setInteger(MediaFormat.KEY_PRIORITY, 1)
             }
-            // VBR: alokasi bitrate dinamis sesuai kompleksitas frame
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                 setInteger(
                     MediaFormat.KEY_BITRATE_MODE,
@@ -187,10 +182,6 @@ class RealtimeBitmapEncoder(
         muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         muxerStarted = false
         trackIndex = -1
-        Log.d(
-            TAG,
-            "Encoder: ${width}x${height} @ ${frameRate}fps ${bitRate / 1000}kbps VBR iFrame=${iFrameIntervalSec}s"
-        )
     }
 
     private fun drawBitmapToSurface(bitmap: Bitmap) {
@@ -234,8 +225,8 @@ class RealtimeBitmapEncoder(
                         val isConfig = bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
 
                         if (bufferInfo.size > 0 && muxerStarted && buf != null && !isConfig) {
+                            // Wall-clock PTS — durasi video = durasi recording nyata
                             bufferInfo.presentationTimeUs = ptsUs
-                            lastPtsUs = ptsUs
                             buf.position(bufferInfo.offset)
                             buf.limit(bufferInfo.offset + bufferInfo.size)
                             muxer.writeSampleData(trackIndex, buf, bufferInfo)
@@ -251,10 +242,14 @@ class RealtimeBitmapEncoder(
     }
 
     private fun finishEncoding() {
+        val totalFrames = frameCount.get()
+        val durationSec = (System.nanoTime() - recordingStartNs) / 1_000_000_000.0
+
         try {
             if (::encoder.isInitialized) {
                 runCatching { encoder.signalEndOfInputStream() }
-                drainEncoder(lastPtsUs)
+                val finalPtsUs = (System.nanoTime() - recordingStartNs) / 1000L
+                drainEncoder(finalPtsUs)
             }
         } catch (e: Exception) {
             Log.e(TAG, "finishEncoding error", e)
@@ -266,7 +261,16 @@ class RealtimeBitmapEncoder(
         if (muxerStarted) runCatching { muxer.stop() }
         runCatching { muxer.release() }
 
-        muxerStarted = false; trackIndex = -1; startCaptureNs = -1L; lastPtsUs = 0L
-        Log.d(TAG, "Finished: ${outputFile.name}")
+        muxerStarted = false
+        trackIndex = -1
+        Log.d(
+            TAG,
+            "Finished: ${outputFile.name} | $totalFrames frames | ${
+                String.format(
+                    "%.1f",
+                    durationSec
+                )
+            }s | actual ${String.format("%.1f", totalFrames / durationSec)}fps"
+        )
     }
 }

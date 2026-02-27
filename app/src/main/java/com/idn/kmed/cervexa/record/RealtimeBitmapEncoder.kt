@@ -51,7 +51,7 @@ class RealtimeBitmapEncoder(
     /** Wrapper bitmap + timestamp wall clock saat submit */
     private data class TimedBitmap(val bitmap: Bitmap, val ptsUs: Long)
 
-    private val bitmapQueue = ArrayBlockingQueue<TimedBitmap>(queueCapacity)
+    private val bitmapQueue = ArrayBlockingQueue<Bitmap>(queueCapacity)
     private var encoderThread: Thread? = null
     private val running = AtomicBoolean(false)
 
@@ -65,6 +65,8 @@ class RealtimeBitmapEncoder(
 
     private val bufferInfo = MediaCodec.BufferInfo()
     private val destRect = Rect(0, 0, width, height)
+    private var startPtsUs = -1L
+    private var lastPtsUs = -1L
 
     /** Timestamp mulai recording (nanoseconds) */
     @Volatile
@@ -87,27 +89,46 @@ class RealtimeBitmapEncoder(
         }
 
         encoderThread = Thread {
+            val frameIntervalMs = 1000L / frameRate
+            var lastBitmap: Bitmap? = null // Simpan memori frame terakhir
+
             try {
                 while (running.get()) {
-                    val timedBm = bitmapQueue.poll(50, TimeUnit.MILLISECONDS)
+                    val loopStartMs = System.currentTimeMillis()
 
-                    if (timedBm != null) {
-                        drawBitmapToSurface(timedBm.bitmap)
-                        drainEncoder(timedBm.ptsUs)
-                        frameCount.incrementAndGet()
-                        if (!timedBm.bitmap.isRecycled) timedBm.bitmap.recycle()
-                    } else {
-                        // Drain tanpa frame baru — pakai waktu sekarang
-                        val nowUs = (System.nanoTime() - recordingStartNs) / 1000L
-                        drainEncoder(nowUs)
+                    // 1. Cek secara singkat apakah ada frame baru di antrean
+                    val newBm = bitmapQueue.poll(10, TimeUnit.MILLISECONDS)
+                    if (newBm != null) {
+                        lastBitmap?.recycle() // Hapus frame lama
+                        lastBitmap = newBm    // Perbarui dengan frame baru
+                    }
+
+                    // 2. SELALU GAMBAR FRAME! Jika tidak ada frame baru,
+                    // ini otomatis menduplikasi frame terakhir ke video agar FPS konstan.
+                    lastBitmap?.let { bmp ->
+                        if (!bmp.isRecycled) {
+                            drawBitmapToSurface(bmp)
+                            drainEncoder()
+                            frameCount.incrementAndGet()
+                        }
+                    }
+
+                    // 3. Tidur sebentar untuk menjaga ritme ketat 25 FPS (~40ms per siklus)
+                    val elapsedMs = System.currentTimeMillis() - loopStartMs
+                    val sleepMs = frameIntervalMs - elapsedMs
+                    if (sleepMs > 0) {
+                        Thread.sleep(sleepMs)
                     }
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "Encoder thread crashed", t)
             } finally {
                 finishEncoding()
-                bitmapQueue.forEach { if (!it.bitmap.isRecycled) it.bitmap.recycle() }
+                lastBitmap?.recycle()
+                bitmapQueue.forEach { if (!it.isRecycled) it.recycle() }
                 bitmapQueue.clear()
+                startPtsUs = -1L
+                lastPtsUs = -1L
             }
         }.apply {
             name = "BitmapEncoderThread"
@@ -129,16 +150,11 @@ class RealtimeBitmapEncoder(
             return
         }
 
-        // PTS = waktu nyata sejak recording mulai
-        val ptsUs = (System.nanoTime() - recordingStartNs) / 1000L
-
-        val timedBm = TimedBitmap(bitmap, ptsUs)
-
-        if (!bitmapQueue.offer(timedBm)) {
+        if (!bitmapQueue.offer(bitmap)) {
             // Queue penuh — buang frame lama (oldest), masukkan frame baru
             val old = bitmapQueue.poll()
-            old?.let { if (!it.bitmap.isRecycled) it.bitmap.recycle() }
-            bitmapQueue.offer(timedBm)
+            old?.let { if (!it.isRecycled) it.recycle() }
+            bitmapQueue.offer(bitmap)
         }
     }
 
@@ -205,7 +221,7 @@ class RealtimeBitmapEncoder(
         }
     }
 
-    private fun drainEncoder(ptsUs: Long) {
+    private fun drainEncoder() { // Hapus parameter (ptsUs: Long)
         try {
             while (true) {
                 val idx = encoder.dequeueOutputBuffer(bufferInfo, 0)
@@ -225,8 +241,20 @@ class RealtimeBitmapEncoder(
                         val isConfig = bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
 
                         if (bufferInfo.size > 0 && muxerStarted && buf != null && !isConfig) {
-                            // Wall-clock PTS — durasi video = durasi recording nyata
-                            bufferInfo.presentationTimeUs = ptsUs
+                            // Normalisasi PTS otomatis bawaan Surface agar mulai dari 0
+                            if (startPtsUs == -1L) {
+                                startPtsUs = bufferInfo.presentationTimeUs
+                            }
+                            var currentPtsUs = bufferInfo.presentationTimeUs - startPtsUs
+
+                            // Keamanan ekstra: Cegah timestamp mundur atau kembar
+                            // yang bisa membuat pemutar video bingung / muxer crash
+                            if (currentPtsUs <= lastPtsUs) {
+                                currentPtsUs = lastPtsUs + 1000L
+                            }
+                            lastPtsUs = currentPtsUs
+                            bufferInfo.presentationTimeUs = currentPtsUs
+
                             buf.position(bufferInfo.offset)
                             buf.limit(bufferInfo.offset + bufferInfo.size)
                             muxer.writeSampleData(trackIndex, buf, bufferInfo)
@@ -249,7 +277,7 @@ class RealtimeBitmapEncoder(
             if (::encoder.isInitialized) {
                 runCatching { encoder.signalEndOfInputStream() }
                 val finalPtsUs = (System.nanoTime() - recordingStartNs) / 1000L
-                drainEncoder(finalPtsUs)
+                drainEncoder()
             }
         } catch (e: Exception) {
             Log.e(TAG, "finishEncoding error", e)

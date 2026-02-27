@@ -1115,36 +1115,42 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
     private fun startFrameGrabber(width: Int, height: Int) {
         recordingJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
-
-            val ENCODER_FPS =
-                25                               // harus sama dengan frameRate di RealtimeBitmapEncoder
-            val frameIntervalNs = 1_000_000_000L / ENCODER_FPS // 40ms dalam nanoseconds
+            val ENCODER_FPS = 25
+            val frameIntervalNs = 1_000_000_000L / ENCODER_FPS
             var nextFrameNs = System.nanoTime()
 
             while (record.get() && isActive) {
-
-                val bmp = withContext(Dispatchers.Main) {
+                val sourceBmp = withContext(Dispatchers.Main) {
                     if (usePhoneCamera) phoneCameraView?.bitmap
                     else textureView?.getBitmap(width, height)
                 }
 
-                if (bmp != null) {
-                    val scaled = if (bmp.width != width || bmp.height != height) {
-                        val s = Bitmap.createScaledBitmap(bmp, width, height, true)
-                        bmp.recycle()
+                if (sourceBmp != null) {
+                    // 1. Scale jika perlu, dan langsung recycle source lama
+                    val scaledBmp = if (sourceBmp.width != width || sourceBmp.height != height) {
+                        val s = Bitmap.createScaledBitmap(sourceBmp, width, height, true)
+                        sourceBmp.recycle()
                         s
-                    } else bmp
+                    } else sourceBmp
 
-                    // submitBitmap — encoder assign PTS otomatis via counter
-                    recorder.submitBitmap(processTextToBitmapSafe(scaled))
+                    // 2. Gambar teks
+                    val finalBmp = processTextToBitmapSafe(scaledBmp)
+
+                    // 3. Jika processText menghasilkan Bitmap baru, recycle scaledBmp
+                    if (finalBmp !== scaledBmp && !scaledBmp.isRecycled) {
+                        scaledBmp.recycle()
+                    }
+
+                    // 4. Submit ke encoder (encoder akan me-recycle finalBmp nantinya)
+                    recorder.submitBitmap(finalBmp)
                 }
 
-                // Timing: nanoTime presisi sub-ms
                 nextFrameNs += frameIntervalNs
                 val sleepNs = nextFrameNs - System.nanoTime()
-                when {
-                    sleepNs > 1_000_000L -> delay(sleepNs / 1_000_000L)
-                    sleepNs < -frameIntervalNs -> nextFrameNs = System.nanoTime()
+                if (sleepNs > 0) {
+                    delay(sleepNs / 1_000_000L)
+                } else {
+                    nextFrameNs = System.nanoTime()
                 }
             }
         }

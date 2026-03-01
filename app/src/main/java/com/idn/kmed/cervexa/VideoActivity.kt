@@ -42,7 +42,8 @@ class VideoActivity : AppCompatActivity() {
         // Pilih fragment berdasarkan device type
         val fragment: Fragment = if (isTvDevice) {
             Log.i(TAG, "Loading VideoFragmentTv (VLC with auto-crop)")
-            VideoFragmentTv().apply { arguments = bundle }
+//            VideoFragmentTv().apply { arguments = bundle }
+            VideoFragmentMobile().apply { arguments = bundle }
         } else {
             Log.i(TAG, "Loading VideoFragmentMobile (RTSP)")
 //            VideoFragmentTv().apply { arguments = bundle }

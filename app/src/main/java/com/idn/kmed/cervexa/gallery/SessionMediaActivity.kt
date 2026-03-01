@@ -56,7 +56,6 @@ class SessionMediaActivity : AppCompatActivity() {
 
     private lateinit var rv: RecyclerView
     private lateinit var toolbar: MaterialToolbar
-    private lateinit var tvDate: TextView
 
     // ← GANTI: pakai SectionedThumbAdapter
     private lateinit var adapter: SectionedThumbAdapter
@@ -98,7 +97,6 @@ class SessionMediaActivity : AppCompatActivity() {
 
         toolbar = findViewById(R.id.toolbar)
         rv = findViewById(R.id.rvSessionMedia)
-        tvDate = findViewById(R.id.tvDate)
 
         bottomBar = findViewById(R.id.bottomActionBar)
         btnDeleteBottom = findViewById(R.id.btnDeleteBottom)
@@ -129,7 +127,6 @@ class SessionMediaActivity : AppCompatActivity() {
         sessionDir = File(p)
         toolbar.title = patientName.ifBlank { sessionDir.name }
         titleNormal = toolbar.title?.toString().orEmpty()
-        tvDate.text = dateStr.ifBlank { sessionDir.parentFile?.name ?: "" }
 
         // ─── Adapter (SectionedThumbAdapter) ───────────────────────────
         adapter = SectionedThumbAdapter(spanCount = SPAN) { item, index ->
@@ -184,7 +181,27 @@ class SessionMediaActivity : AppCompatActivity() {
     // =====================================================================
 
     /**
-     * Kelompokkan [items] berdasarkan tanggal lastModified,
+     * Ambil tanggal efektif dari MediaItem.
+     *
+     * Prioritas:
+     *  1. Parse timestamp dari nama file  → pola yyyyMMdd_HHmmss di mana saja dalam nama
+     *  2. Fallback: file.lastModified()   → bisa tidak akurat jika file dicopy
+     */
+    private fun effectiveDateMs(item: MediaItem): Long {
+        // Nama file contoh: ss_20250625_181943.jpg  /  vid_20260225_110500.mp4
+        val pattern = Regex("""(\d{8})_(\d{6})""")
+        val match = pattern.find(item.file.nameWithoutExtension)
+        if (match != null) {
+            return runCatching {
+                SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+                    .parse("${match.groupValues[1]}_${match.groupValues[2]}")!!.time
+            }.getOrElse { item.file.lastModified() }
+        }
+        return item.file.lastModified()
+    }
+
+    /**
+     * Kelompokkan [items] berdasarkan tanggal efektif dari nama file,
      * urutkan grup terbaru dulu, lalu sisipkan [SectionedMediaItem.Header]
      * sebelum setiap kelompok.
      */
@@ -194,20 +211,21 @@ class SessionMediaActivity : AppCompatActivity() {
         val sdfKey = SimpleDateFormat("yyyyMMdd", Locale.US)
         val sdfLabel = SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID"))
 
-        // Kelompokkan: linkedMap supaya urutan terjaga (sudah sort descending)
+        // Sort ulang berdasarkan tanggal efektif (bukan lastModified)
+        val sorted = items.sortedByDescending { effectiveDateMs(it) }
+
+        // Kelompokkan ke LinkedHashMap supaya urutan terjaga
         val grouped = LinkedHashMap<String, MutableList<MediaItem>>()
-        for (item in items) {
-            val key = sdfKey.format(Date(item.file.lastModified()))
+        for (item in sorted) {
+            val key = sdfKey.format(Date(effectiveDateMs(item)))
             grouped.getOrPut(key) { mutableListOf() }.add(item)
         }
 
         val result = mutableListOf<SectionedMediaItem>()
         for ((key, group) in grouped) {
-            // Format label tanggal
             val date = sdfKey.parse(key) ?: Date()
             val label = sdfLabel.format(date)
-                .replaceFirstChar { it.uppercase() }   // kapital huruf pertama
-
+                .replaceFirstChar { it.uppercase() }
             result.add(SectionedMediaItem.Header(label))
             group.forEach { result.add(SectionedMediaItem.Media(it)) }
         }
@@ -501,7 +519,8 @@ class SessionMediaActivity : AppCompatActivity() {
                 ?.map { MediaItem(it, MediaType.IMAGE) }.orEmpty()
         val vids = File(dir, "Video").listFiles { f -> f.isFile && f.extension.equals("mp4", true) }
             ?.map { MediaItem(it, MediaType.VIDEO) }.orEmpty()
-        return (imgs + vids).sortedByDescending { it.file.lastModified() }
+        // Gunakan effectiveDateMs (dari nama file) bukan lastModified
+        return (imgs + vids).sortedByDescending { effectiveDateMs(it) }
     }
 
     private fun loadMultiSessionMedia(paths: List<String>): List<MediaItem> {
@@ -516,7 +535,8 @@ class SessionMediaActivity : AppCompatActivity() {
                 .listFiles { f -> f.isFile && f.extension.equals("mp4", true) }
                 ?.map { MediaItem(it, MediaType.VIDEO) }.orEmpty()
         }
-        return combined.sortedByDescending { it.file.lastModified() }
+        // Gunakan effectiveDateMs (dari nama file) bukan lastModified
+        return combined.sortedByDescending { effectiveDateMs(it) }
     }
 
     // =====================================================================

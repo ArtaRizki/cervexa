@@ -49,13 +49,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * VideoFragmentTv — OPTIMIZED
  *
- * Perubahan utama vs versi sebelumnya:
- * 1. [startFrameGrabber] memakai getBitmap(reusableBitmap) → ZERO heap alloc per frame
- * 2. [processTextToBitmapSafe] memakai Paint yang di-cache di class-level → tidak buat obyek baru 15-25×/detik
- * 3. Encoder fps diturunkan ke STB_FPS (15) agar CPU STB KitKat–Nougat tidak tersedak
- * 4. Resolusi rekaman default 640×480 (bisa diganti konstanta REC_WIDTH/REC_HEIGHT)
- * 5. Coroutine grab frame pakai Dispatchers.Default + withContext(Main) singkat → tidak blokir UI
- * 6. Lifecycle cleanup lebih ketat: bitmap pool di-recycle saat coroutine selesai
+ * Fix scaling font overlay berdasarkan ukuran frame (REC_HEIGHT / bitmap.height)
  */
 class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
@@ -128,18 +122,20 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private var panTyPhone = 0f
 
     // =====================================================================
-    // OPTIMIZATION 1 — Paint objects di-cache di class level
-    // Sebelumnya dibuat BARU setiap panggilan processTextToBitmapSafe,
-    // yang dipanggil 15–25× per detik saat recording → banyak GC pressure.
+    // Paint objects di-cache di class level
     // =====================================================================
     private val paintText = Paint().apply {
         color = Color.WHITE
-        textSize = 36f
+        // textSize JANGAN hardcode di sini (nanti diskalakan per frame)
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
         setShadowLayer(3f, 1f, 1f, Color.BLACK)
     }
     private val paintEnhance = Paint().apply { isAntiAlias = false; isDither = false }
+
+    // ===== Overlay Text Scale Cache =====
+    private var lastOverlayFontPx: Float = -1f
+    private var lastOverlayTargetHeight: Int = -1
 
     private val prefs by lazy {
         requireContext().getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
@@ -704,7 +700,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         videoOutputFile = out
 
         runCatching {
-            // OPTIMIZATION 2 — Resolusi & FPS diturunkan untuk STB KitKat–Nougat
             recorder = RealtimeBitmapEncoder(
                 context = requireContext(),
                 width = REC_WIDTH,
@@ -731,20 +726,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }
     }
 
-    // =====================================================================
-    // OPTIMIZATION 3 — Frame grabber menggunakan bitmap pool (getBitmap reuse)
-    //
-    // Sebelumnya: getBitmap(width, height) → alokasi Bitmap baru SETIAP frame
-    // Sesudahnya : getBitmap(reusableBitmap) → ZERO heap allocation per frame
-    //
-    // TextureView.getBitmap(Bitmap) tersedia sejak API 14 (KitKat) ✓
-    // =====================================================================
     private fun startFrameGrabber() {
         recordingJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
             val frameIntervalNs = 1_000_000_000L / STB_FPS
             var nextFrameNs = System.nanoTime()
 
-            // Bitmap pool: satu buffer yang dipakai ulang setiap frame
             var poolBitmap: Bitmap? = null
 
             try {
@@ -756,7 +742,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                             phoneCameraView?.bitmap
                         } else {
                             val tv = textureView ?: return@withContext null
-                            // Inisialisasi pool bitmap sekali saja
                             if (poolBitmap == null || poolBitmap!!.isRecycled) {
                                 poolBitmap = Bitmap.createBitmap(
                                     REC_WIDTH,
@@ -764,19 +749,14 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                                     Bitmap.Config.ARGB_8888
                                 )
                             }
-                            // Tulis langsung ke buffer yang sudah ada → tidak ada alokasi baru
                             tv.getBitmap(poolBitmap!!)
                             poolBitmap
                         }
                     }
 
                     if (sourceBmp != null && !sourceBmp.isRecycled) {
-                        // processText bekerja in-place pada poolBitmap (isMutable = true)
-                        // dan mengembalikan bitmap yang sama → tidak ada salinan ekstra
                         val finalBmp = processTextToBitmapSafe(sourceBmp)
                         recorder.submitBitmap(finalBmp)
-                        // Jangan recycle poolBitmap di sini — akan dipakai ulang frame berikutnya
-                        // Jika finalBmp ≠ sourceBmp (edge case), recycle sourceBmp
                         if (finalBmp !== sourceBmp && sourceBmp !== poolBitmap && !sourceBmp.isRecycled) {
                             sourceBmp.recycle()
                         }
@@ -788,7 +768,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                         System.nanoTime()
                 }
             } finally {
-                // Bersihkan pool saat coroutine selesai
                 poolBitmap?.recycle()
                 poolBitmap = null
             }
@@ -809,22 +788,44 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     }
 
     // =====================================================================
-    // OPTIMIZATION 4 — processTextToBitmapSafe memakai Paint cache (paintText)
-    // Tidak ada alokasi Paint/ColorMatrix per frame
+    // FIX: Skalakan ukuran text berdasarkan tinggi frame (bitmap.height)
     // =====================================================================
+    private fun ensureOverlayTextSize(targetHeight: Int) {
+        if (targetHeight <= 0) return
+        if (targetHeight == lastOverlayTargetHeight && lastOverlayFontPx > 0f) {
+            // sudah sesuai cache
+            return
+        }
+
+        // === Atur proporsi text terhadap tinggi video ===
+        // 0.035f = 3.5% dari tinggi video (480 -> ~16.8px, 1080 -> ~37.8px)
+        val fontPx = (targetHeight * TEXT_SCALE)
+            .coerceIn(TEXT_MIN_PX, TEXT_MAX_PX)
+
+        paintText.textSize = fontPx
+        lastOverlayFontPx = fontPx
+        lastOverlayTargetHeight = targetHeight
+    }
+
     private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(bitmap)
+
+        // >>> FIX UTAMA: font mengikuti ukuran frame <<<
+        ensureOverlayTextSize(bitmap.height)
 
         val formatted = if (android.os.Build.VERSION.SDK_INT >= 26)
             ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
 
+        val padding = (bitmap.height * 0.03f).coerceIn(12f, 32f) // padding juga ikut skala
+        val baselineY = bitmap.height - padding
+
         val wText = paintText.measureText(formatted)
-        canvas.drawText(formatted, bitmap.width - wText - 20f, bitmap.height - 20f, paintText)
+        canvas.drawText(formatted, bitmap.width - wText - padding, baselineY, paintText)
 
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
-        canvas.drawText(info, 20f, bitmap.height - 20f, paintText)
+        canvas.drawText(info, padding, baselineY, paintText)
 
         return bitmap
     }
@@ -1117,5 +1118,13 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         const val REC_HEIGHT = 480
         const val STB_FPS = 15
         const val STB_BITRATE = 1_500_000 // 1.5 Mbps cukup untuk 640×480
+
+        // ===== Overlay Text Scaling =====
+        // 0.035f = 3.5% dari tinggi frame
+        private const val TEXT_SCALE = 0.035f
+
+        // Batas aman agar tidak terlalu kecil / terlalu besar
+        private const val TEXT_MIN_PX = 14f
+        private const val TEXT_MAX_PX = 42f
     }
 }

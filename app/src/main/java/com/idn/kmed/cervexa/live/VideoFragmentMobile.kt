@@ -19,6 +19,7 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.toColorInt
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -47,27 +48,11 @@ import java.time.format.DateTimeFormatter
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
-import androidx.core.graphics.toColorInt
 
 /**
  * VideoFragmentMobile — OPTIMIZED
  *
- * Perubahan utama vs versi sebelumnya:
- *
- * 1. [onRtspImageBitmapObtained] — bitmap dari decoder di-copy MUTABLE satu kali saja.
- *    Sebelumnya: copy immutable → processTextToBitmapSafe copy lagi mutable = 2× alokasi per frame.
- *    Sesudahnya: copy mutable langsung → processTextToBitmapSafe bekerja in-place = 1× alokasi.
- *
- * 2. [paintText] & [paintBox] — Paint di-cache di class level, bukan dibuat baru tiap frame.
- *    Pada 15–25 fps ini menghasilkan penghematan GC yang signifikan di STB low-end.
- *
- * 3. Encoder STB — fps=15, bitrate=1.5 Mbps, resolusi fallback ke 640×480 untuk KitKat-Nougat.
- *
- * 4. [bitmapLock] scope diperkecil — hanya melindungi assignment, bukan seluruh processing.
- *
- * 5. [statisticsTimer] diganti coroutine agar konsisten dengan lifecycle fragment.
- *
- * 6. Redundant null-check dihapus (src != null sudah dijamin oleh signature non-null).
+ * Fix overlay text: ukuran font + padding + background box diskalakan berdasarkan ukuran frame.
  */
 class VideoFragmentMobile : Fragment() {
 
@@ -126,12 +111,11 @@ class VideoFragmentMobile : Fragment() {
     private lateinit var gestureDetector: GestureDetector
 
     // =====================================================================
-    // OPTIMIZATION 1 — Paint di-cache di class level
-    // Sebelumnya: dibuat baru di processTextToBitmapSafe (dipanggil setiap frame!)
+    // Paint di-cache di class level
     // =====================================================================
     private val paintText = Paint().apply {
         color = Color.WHITE
-        textSize = 36f
+        // textSize JANGAN hardcode (akan diskalakan berdasarkan frame)
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
         setShadowLayer(3f, 1f, 1f, Color.BLACK)
@@ -144,6 +128,10 @@ class VideoFragmentMobile : Fragment() {
         color = "#3F3F3F".toColorInt()
         style = Paint.Style.FILL
     }
+
+    // === Overlay scaling cache ===
+    private var lastOverlayTargetHeight: Int = -1
+    private var lastOverlayTextSizePx: Float = -1f
 
     private fun isLandscape(): Boolean =
         resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -195,7 +183,6 @@ class VideoFragmentMobile : Fragment() {
         binding.ivVideoImage.setDataListener(null)
         hudHandler.removeCallbacks(hudTick)
 
-        // Recycle last bitmap dengan sedikit delay agar tidak ada race condition
         binding.root.postDelayed({
             synchronized(bitmapLock) { lastBitmap?.recycle(); lastBitmap = null }
         }, 100)
@@ -235,7 +222,6 @@ class VideoFragmentMobile : Fragment() {
         liveViewModel = ViewModelProvider(this)[LiveViewModel::class.java]
         binding = FragmentVideoMobileBinding.inflate(inflater, container, false)
 
-        // RtspImageView initial setup
         binding.ivVideoImage.apply {
             setStatusListener(rtspStatusListener)
             setDataListener(rtspDataListener)
@@ -333,10 +319,8 @@ class VideoFragmentMobile : Fragment() {
                         requireContext(),
                         com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java
                     ).apply {
-                        putStringArrayListExtra("paths", paths); putStringArrayListExtra(
-                        "types",
-                        types
-                    )
+                        putStringArrayListExtra("paths", paths)
+                        putStringArrayListExtra("types", types)
                         putExtra("index", position)
                     })
             }
@@ -353,11 +337,9 @@ class VideoFragmentMobile : Fragment() {
                 R.id.action_info_pasien -> {
                     showPatientInfoBottomSheet(); true
                 }
-
                 R.id.action_pilih -> {
                     enterSelectionMode(); true
                 }
-
                 else -> false
             }
         }
@@ -412,8 +394,9 @@ class VideoFragmentMobile : Fragment() {
                 setDimensionRatio(binding.ivVideoImage.id, "$width:$height")
                 applyTo(binding.csVideoImage)
             }
-            currentScale = 1f; focusX = binding.ivVideoImage.width / 2f; focusY =
-                binding.ivVideoImage.height / 2f
+            currentScale = 1f
+            focusX = binding.ivVideoImage.width / 2f
+            focusY = binding.ivVideoImage.height / 2f
             applyZoomMatrix()
         }
     }
@@ -454,16 +437,10 @@ class VideoFragmentMobile : Fragment() {
                 VideoDecodeThread.DecoderType.HARDWARE else VideoDecodeThread.DecoderType.SOFTWARE
             videoRotation = prefs.getInt(KEY_CAMERA_ROTATION_DEG, 0)
 
-            // =====================================================================
-            // OPTIMIZATION 2 — Bitmap di-copy MUTABLE satu kali
-            // Sebelumnya: copy(ARGB_8888, false) immutable → processText copy lagi = 2× alloc
-            // Sesudahnya: copy(ARGB_8888, true)  mutable   → processText in-place = 1× alloc
-            // =====================================================================
             onRtspImageBitmapListener = object : RtspImageView.RtspImageBitmapListener {
                 override fun onRtspImageBitmapObtained(bitmap: Bitmap) {
                     if (!isAdded || view == null) return
 
-                    // Satu kali copy mutable — reused oleh processTextToBitmapSafe (in-place)
                     val workBitmap: Bitmap = synchronized(bitmapLock) {
                         lastBitmap?.recycle()
                         val b = bitmap.copy(Bitmap.Config.ARGB_8888, true) // mutable!
@@ -471,23 +448,16 @@ class VideoFragmentMobile : Fragment() {
                         b
                     }
 
-                    // processText bekerja in-place karena workBitmap.isMutable = true
                     val bmWithOverlay = processTextToBitmapSafe(workBitmap)
 
-                    // Submit ke encoder jika recording
                     if (record.get() && ::recorder.isInitialized) {
                         runCatching {
-                            // Submit salinan agar encoder bisa recycle tanpa konflik dengan lastBitmap
                             recorder.submitBitmap(
-                                bmWithOverlay.copy(
-                                    Bitmap.Config.ARGB_8888,
-                                    false
-                                )
+                                bmWithOverlay.copy(Bitmap.Config.ARGB_8888, false)
                             )
                         }.onFailure { Log.e(TAG, "submitBitmap error", it) }
                     }
 
-                    // Proses snapshot jika diminta
                     if (ss.compareAndSet(true, false)) {
                         processSnapshot(bmWithOverlay)
                     }
@@ -527,7 +497,6 @@ class VideoFragmentMobile : Fragment() {
         videoOutputFile = out
 
         runCatching {
-            // OPTIMIZATION 3 — STB-friendly encoder settings
             recorder = RealtimeBitmapEncoder(
                 context = requireContext(),
                 width = width,
@@ -611,7 +580,7 @@ class VideoFragmentMobile : Fragment() {
             }; return
         }
         runCatching { StorageUtils.saveJpegWithPrefix(dir!!, bmp, prefix = "ss") }
-            .onSuccess { file ->
+            .onSuccess {
                 if (!isMetadataSaved) saveSessionMetadata()
                 requireActivity().runOnUiThread {
                     Toast.makeText(requireContext(), "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT)
@@ -631,42 +600,94 @@ class VideoFragmentMobile : Fragment() {
     }
 
     // =====================================================================
-    // OPTIMIZATION 4 — processTextToBitmapSafe
-    // Menggunakan paintText & paintBox dari class-level cache.
-    // Tidak ada alokasi Paint baru per frame.
-    // Jika src.isMutable (hasil copy(ARGB_8888, true)) → bekerja in-place, tanpa copy.
+    // FIX: overlay scaling berdasarkan ukuran frame
     // =====================================================================
+
+    private fun ensureOverlayTextSize(frameHeight: Int) {
+        if (frameHeight <= 0) return
+        if (frameHeight == lastOverlayTargetHeight && lastOverlayTextSizePx > 0f) return
+
+        val fontPx = (frameHeight * TEXT_SCALE).coerceIn(TEXT_MIN_PX, TEXT_MAX_PX)
+        paintText.textSize = fontPx
+
+        lastOverlayTargetHeight = frameHeight
+        lastOverlayTextSizePx = fontPx
+    }
+
+    private fun overlayPadding(frameHeight: Int): Float {
+        // padding ikut skala agar box tidak terlalu tebal di resolusi kecil
+        return (frameHeight * PADDING_SCALE).coerceIn(PADDING_MIN_PX, PADDING_MAX_PX)
+    }
+
     private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         if (src.isRecycled) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(bitmap)
 
+        // >>> FIX UTAMA: font & padding mengikuti ukuran frame <<<
+        ensureOverlayTextSize(bitmap.height)
+        val pad = overlayPadding(bitmap.height)
+
         val formatted = if (android.os.Build.VERSION.SDK_INT >= 26)
             ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
 
-        // Background tanggal (kanan bawah)
-        canvas.drawRect(
-            bitmap.width.toFloat() - 360f, bitmap.height.toFloat() - 60f,
-            bitmap.width.toFloat(), bitmap.height.toFloat(), paintDateBg
-        )
-        canvas.drawText(
-            formatted,
-            bitmap.width.toFloat() - 350f,
-            bitmap.height.toFloat() - 20f,
-            paintText
-        )
-
-        // Info pasien (kiri bawah)
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
-        canvas.drawRect(0f, bitmap.height.toFloat() - 65f, 650f, bitmap.height.toFloat(), paintBox)
-        canvas.drawText(info, 20f, bitmap.height.toFloat() - 20f, paintText)
+
+        // Baseline text (bawah)
+        val baselineY = bitmap.height - pad
+
+        // === Right-bottom date box (dynamic width) ===
+        val dateTextW = paintText.measureText(formatted)
+        val dateBoxW = dateTextW + (pad * 2f)
+        val dateBoxH = (paintText.textSize + pad * 1.6f).coerceAtLeast(pad * 2.2f)
+
+        val right = bitmap.width.toFloat()
+        val left = (right - dateBoxW).coerceAtLeast(0f)
+        val bottom = bitmap.height.toFloat()
+        val top = (bottom - dateBoxH).coerceAtLeast(0f)
+
+        canvas.drawRect(left, top, right, bottom, paintDateBg)
+        canvas.drawText(formatted, left + pad, baselineY, paintText)
+
+        // === Left-bottom info box (dynamic width) ===
+        val infoTextW = paintText.measureText(info)
+        val infoBoxW = (infoTextW + pad * 2f).coerceAtMost(bitmap.width * 0.75f) // batasi supaya aman
+        val infoLeft = 0f
+        val infoRight = (infoLeft + infoBoxW).coerceAtMost(bitmap.width.toFloat())
+        val infoTop = top // sejajarkan tinggi box bawah
+        val infoBottom = bottom
+
+        canvas.drawRect(infoLeft, infoTop, infoRight, infoBottom, paintBox)
+
+        // Kalau text terlalu panjang sampai melewati box, kita potong (ellipsize manual sederhana)
+        val maxTextW = (infoRight - infoLeft - pad * 2f).coerceAtLeast(0f)
+        val infoDraw = ellipsizeToWidth(info, paintText, maxTextW)
+
+        canvas.drawText(infoDraw, infoLeft + pad, baselineY, paintText)
 
         return bitmap
     }
 
+    private fun ellipsizeToWidth(text: String, paint: Paint, maxWidth: Float): String {
+        if (maxWidth <= 0f) return ""
+        if (paint.measureText(text) <= maxWidth) return text
+        val ell = "…"
+        val ellW = paint.measureText(ell)
+        var lo = 0
+        var hi = text.length
+        while (lo < hi) {
+            val mid = (lo + hi) / 2
+            val sub = text.substring(0, mid)
+            val w = paint.measureText(sub) + ellW
+            if (w <= maxWidth) lo = mid + 1 else hi = mid
+        }
+        val cut = (lo - 1).coerceAtLeast(0)
+        return text.substring(0, cut) + ell
+    }
+
     // =====================================================================
-    // STATISTICS (diganti coroutine agar lifecycle-safe)
+    // STATISTICS
     // =====================================================================
 
     private fun startStatisticsJob() {
@@ -696,10 +717,8 @@ class VideoFragmentMobile : Fragment() {
         runCatching {
             File(dir, "session.json").writeText(JSONObject().apply {
                 put("nama", patientNama); put("nik", patientNik); put("nrm", patientNrm)
-                put("rs", patientRs); put("dob_utc", patientDobUtc); put(
-                "saved_at",
-                System.currentTimeMillis()
-            )
+                put("rs", patientRs); put("dob_utc", patientDobUtc)
+                put("saved_at", System.currentTimeMillis())
             }.toString(2))
             isMetadataSaved = true
         }.onFailure { Log.e(TAG, "session.json error", it) }
@@ -823,7 +842,7 @@ class VideoFragmentMobile : Fragment() {
     }
 
     private fun deleteFiles(files: List<File>) {
-        var ok = 0;
+        var ok = 0
         var fail = 0
         val deleted = mutableListOf<String>()
         files.forEach { f ->
@@ -901,9 +920,10 @@ class VideoFragmentMobile : Fragment() {
                 thumbsAdapter.currentList.map { it.file }.filterNot { keep.contains(it) }
                     .forEach { runCatching { it.delete() } }
             }
-            pd.dismiss(); if (selectionMode) {
-            exitSelectionMode(); refreshThumbs()
-        }
+            pd.dismiss()
+            if (selectionMode) {
+                exitSelectionMode(); refreshThumbs()
+            }
             showSaveSuccessDialog()
         }
     }
@@ -931,9 +951,7 @@ class VideoFragmentMobile : Fragment() {
         dialog.findViewById<TextView>(R.id.tvNik)?.text = patientNik.ifBlank { "-" }
         dialog.findViewById<TextView>(R.id.tvDob)?.text =
             if (patientDobUtc > 0L) SimpleDateFormat("dd/MM/yyyy", Locale("id", "ID")).format(
-                Date(
-                    patientDobUtc
-                )
+                Date(patientDobUtc)
             ) else "-"
         dialog.findViewById<TextView>(R.id.tvNrm)?.text =
             patientNrm.ifBlank { "Tidak ada nomor rekam medis" }
@@ -970,14 +988,17 @@ class VideoFragmentMobile : Fragment() {
             ): Boolean {
                 if (scale > 1f) {
                     translationX -= dx; translationY -= dy
-                    val mX = width * (scale - 1f) / 2f;
+                    val mX = width * (scale - 1f) / 2f
                     val mY = height * (scale - 1f) / 2f
-                    translationX = translationX.coerceIn(-mX, mX); translationY =
-                        translationY.coerceIn(-mY, mY)
-                }; return scale > 1f
+                    translationX = translationX.coerceIn(-mX, mX)
+                    translationY = translationY.coerceIn(-mY, mY)
+                }
+                return scale > 1f
             }
         })
-        setOnTouchListener { _, ev -> sd.onTouchEvent(ev); td.onTouchEvent(ev); sd.isInProgress || scale > 1f }
+        setOnTouchListener { _, ev ->
+            sd.onTouchEvent(ev); td.onTouchEvent(ev); sd.isInProgress || scale > 1f
+        }
     }
 
     companion object {
@@ -988,5 +1009,16 @@ class VideoFragmentMobile : Fragment() {
         const val STB_HEIGHT = 360
         const val STB_FPS = 15
         const val STB_BITRATE = 1_500_000 // 1.5 Mbps
+
+        // ===== Overlay scaling =====
+        // 0.035f = 3.5% tinggi frame (480 -> ~16.8px)
+        private const val TEXT_SCALE = 0.035f
+        private const val TEXT_MIN_PX = 14f
+        private const val TEXT_MAX_PX = 42f
+
+        // Padding scale
+        private const val PADDING_SCALE = 0.03f
+        private const val PADDING_MIN_PX = 12f
+        private const val PADDING_MAX_PX = 32f
     }
 }

@@ -37,7 +37,13 @@ class CervexaRepository private constructor(
 
     suspend fun login(email: String, password: String): ApiResult<LoginResponse> =
         safeCall { api.login(LoginRequest(email, password)) }
-            .onSuccessData { tokenManager.token = it.token; tokenManager.userName = it.user.name }
+            .onSuccessData { resp ->
+                tokenManager.token = resp.token
+                tokenManager.userName = resp.user.name
+                tokenManager.userId = resp.user.id
+                tokenManager.hospitalName = resp.user.hospitalName
+                tokenManager.userRole = resp.user.role
+            }
 
     suspend fun logout(): ApiResult<MessageResponse> =
         safeCall { api.logout() }.also { tokenManager.clear() }

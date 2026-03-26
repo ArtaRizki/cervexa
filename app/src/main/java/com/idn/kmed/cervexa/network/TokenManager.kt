@@ -24,6 +24,14 @@ class TokenManager private constructor(context: Context) {
         get() = prefs.getString(KEY_USER_NAME, null)
         set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
 
+    var hospitalName: String?
+        get() = prefs.getString(KEY_HOSPITAL_NAME, null)
+        set(value) = prefs.edit().putString(KEY_HOSPITAL_NAME, value).apply()
+
+    var userRole: String?
+        get() = prefs.getString(KEY_USER_ROLE, null)
+        set(value) = prefs.edit().putString(KEY_USER_ROLE, value).apply()
+
     val isLoggedIn: Boolean get() = token != null
 
     fun clear() = prefs.edit().clear().apply()
@@ -33,6 +41,8 @@ class TokenManager private constructor(context: Context) {
         private const val KEY_TOKEN = "bearer_token"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_NAME = "user_name"
+        private const val KEY_HOSPITAL_NAME = "hospital_name"
+        private const val KEY_USER_ROLE = "user_role"
 
         @Volatile
         private var INSTANCE: TokenManager? = null

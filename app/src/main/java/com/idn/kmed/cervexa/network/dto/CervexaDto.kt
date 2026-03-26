@@ -17,7 +17,9 @@ data class LoginResponse(
 data class UserDto(
     val id: Int,
     val name: String,
-    val email: String
+    val email: String,
+    val role: String? = null,
+    @SerializedName("hospital_name") val hospitalName: String? = null
 )
 
 // ─── Patient ─────────────────────────────────────────────────────────────────

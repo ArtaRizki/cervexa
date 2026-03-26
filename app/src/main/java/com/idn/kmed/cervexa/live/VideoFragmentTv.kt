@@ -34,8 +34,8 @@ import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.databinding.FragmentVideoTvBinding
 import com.idn.kmed.cervexa.record.RealtimeBitmapEncoder
 import com.idn.kmed.cervexa.utils.*
-import kotlinx.coroutines.*
-import org.videolan.libvlc.LibVLC
+import com.idn.kmed.cervexa.utils.PdfReportHelper
+import com.idn.kmed.cervexa.utils.PrintHelper
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.interfaces.IVLCVout
@@ -1073,9 +1073,117 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         v.findViewById<TextView>(R.id.tvAction)?.apply {
             isClickable = true; requestFocus()
             setOnClickListener {
-                d.dismiss(); stopStreamAndExit()
+                d.dismiss()
+                showPrintPromptDialog()   // ← tanya cetak sebelum keluar
+            }
+        }
+    }
+
+    /** Dialog: apakah ingin mencetak setelah simpan? */
+    private fun showPrintPromptDialog() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Cetak Dokumen?")
+            .setMessage("Apakah Anda ingin mencetak atau mengunduh data rekam medis sesi ini?")
+            .setPositiveButton("Ya, Cetak / Unduh") { _, _ -> showPrintOptionsDialog() }
+            .setNegativeButton("Tidak, Selesai") { _, _ ->
                 requireActivity().requestedOrientation =
                     ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                stopStreamAndExit()
+            }
+            .show()
+    }
+
+    /** Dialog: pilih jenis dokumen dan output */
+    private fun showPrintOptionsDialog() {
+        val options = arrayOf(
+            "🖨️  Cetak Data Pasien",
+            "📋  Cetak Sesi Lengkap (+ Media)",
+            "💾  Unduh PDF Sesi ke Perangkat"
+        )
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Pilih Opsi Cetak / Unduh")
+            .setItems(options) { dlg, which ->
+                dlg.dismiss()
+                when (which) {
+                    0 -> generateAndActionPdf(sessionOnly = false, download = false)
+                    1 -> generateAndActionPdf(sessionOnly = true, download = false)
+                    2 -> generateAndActionPdf(sessionOnly = true, download = true)
+                }
+                requireActivity().requestedOrientation =
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                stopStreamAndExit()
+            }
+            .setNegativeButton("Batal") { _, _ ->
+                requireActivity().requestedOrientation =
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                stopStreamAndExit()
+            }
+            .show()
+    }
+
+    /**
+     * Generate PDF lalu print atau download.
+     * @param sessionOnly  true = sertakan media, false = data pasien saja
+     * @param download     true = simpan ke Downloads, false = dialog cetak printer
+     */
+    private fun generateAndActionPdf(sessionOnly: Boolean, download: Boolean) {
+        val ctx = requireContext()
+        val ts = System.currentTimeMillis()
+        val fname = if (sessionOnly) "cervexa_sesi_${ts}.pdf" else "cervexa_pasien_${ts}.pdf"
+        val outFile = File(ctx.cacheDir, fname)
+
+        val snaps = snapshotsDir?.listFiles()?.sortedBy { it.lastModified() } ?: emptyList()
+        val videos = videosDir?.listFiles()?.sortedBy { it.lastModified() } ?: emptyList()
+
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            val pdf = if (sessionOnly) {
+                PdfReportHelper.generateSessionPdf(
+                    outputFile = outFile,
+                    nama = patientNama.ifBlank { "—" },
+                    nik = patientNik.ifBlank { "—" },
+                    hospitalName = patientRs.ifBlank { "—" },
+                    nrm = patientNrm.ifBlank { null },
+                    dobUtcMs = patientDobUtc.takeIf { it > 0L },
+                    sessionId = apiDelegate.serverSessionId,
+                    sessionCode = null,
+                    startedAt = null,
+                    completedAt = null,
+                    snapshotFiles = snaps,
+                    videoFiles = videos
+                )
+            } else {
+                PdfReportHelper.generatePatientPdf(
+                    outputFile = outFile,
+                    nama = patientNama.ifBlank { "—" },
+                    nik = patientNik.ifBlank { "—" },
+                    hospitalName = patientRs.ifBlank { "—" },
+                    nrm = patientNrm.ifBlank { null },
+                    dobUtcMs = patientDobUtc.takeIf { it > 0L },
+                    sessionId = apiDelegate.serverSessionId,
+                    sessionCode = null,
+                    startedAt = null,
+                    completedAt = null,
+                    snapshotCount = snaps.size,
+                    videoCount = videos.size
+                )
+            }
+
+            withContext(Dispatchers.Main) {
+                if (pdf == null) {
+                    Toast.makeText(ctx, "Gagal membuat PDF", Toast.LENGTH_SHORT).show()
+                    return@withContext
+                }
+                if (download) {
+                    val ok = PrintHelper.downloadPdf(ctx, pdf, fname)
+                    Toast.makeText(
+                        ctx,
+                        if (ok) "PDF tersimpan di folder Downloads" else "Gagal menyimpan PDF",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    val label = if (sessionOnly) "Sesi Pemeriksaan" else "Data Pasien"
+                    PrintHelper.printPdf(requireActivity(), pdf, "Cervexa — $label")
+                }
             }
         }
     }

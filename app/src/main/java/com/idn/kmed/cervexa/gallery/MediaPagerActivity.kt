@@ -15,12 +15,12 @@ import androidx.viewpager2.widget.ViewPager2
 import com.idn.kmed.cervexa.R
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.idn.kmed.cervexa.utils.PrintHelper
 import java.io.File
 import androidx.core.content.FileProvider
-import androidx.print.PrintHelper
 import com.idn.kmed.cervexa.utils.MediaType
 import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
 import com.google.android.material.shape.CornerFamily
@@ -178,6 +178,22 @@ open class MediaPagerActivity : AppCompatActivity() {
             dialog.dismiss()
         }
 
+        // Cetak Data Pasien (PDF ringkasan, tanpa media)
+        v.findViewById<LinearLayout>(R.id.itemPrintPatient)?.setOnClickListener {
+            dialog.dismiss()
+            // Di MediaPagerActivity tidak ada data pasien lengkap — buka chooser share PDF
+            val outFile = File(cacheDir, "cervexa_media_${System.currentTimeMillis()}.pdf")
+            PrintHelper.sharePdf(this, outFile.takeIf { it.exists() } ?: file, appLabel = "")
+        }
+
+        // Unduh / cetak — share PDF ke aplikasi lain
+        v.findViewById<LinearLayout>(R.id.itemPrintSession)?.setOnClickListener {
+            dialog.dismiss()
+            // Langsung share file aslinya via chooser (PDF share dari context galeri)
+            val pdfFile = File(cacheDir, "cervexa_media_${System.currentTimeMillis()}.pdf")
+            PrintHelper.printPdf(this, file, "Cervexa Media")
+        }
+
         dialog.show()
     }
 
@@ -198,14 +214,15 @@ open class MediaPagerActivity : AppCompatActivity() {
     ) {
         val targetPkg = resolveFirstInstalled(*packages)
         if (targetPkg == null) {
+            // App belum terpasang → tawarkan buka Play Store
             MaterialAlertDialogBuilder(this)
                 .setTitle("$appLabel Belum Terpasang")
-                .setMessage("Aplikasi $appLabel belum terpasang. Buka Play Store?")
-                .setPositiveButton("Play Store") { _, _ ->
-                    val pkg = packages.firstOrNull() ?: return@setPositiveButton
-                    PrintHelper.openPlayStore(this, pkg)
+                .setMessage("Aplikasi $appLabel belum terpasang di perangkat ini. Buka Play Store untuk memasangnya?")
+                .setPositiveButton("Buka Play Store") { _, _ ->
+                    PrintHelper.openPlayStore(this, packages.first())
                 }
-                .setNegativeButton("Batal", null).show()
+                .setNegativeButton("Batal", null)
+                .show()
             return
         }
 
@@ -227,7 +244,12 @@ open class MediaPagerActivity : AppCompatActivity() {
 
         val canHandle = packageManager.queryIntentActivities(intent, 0).isNotEmpty()
         if (!canHandle) {
-            Toast.makeText(this, "Tidak dapat membuka $appLabel", Toast.LENGTH_SHORT).show()
+            // Package terinstall tapi tidak support intent ini → fallback chooser
+            startActivity(
+                Intent.createChooser(
+                    intent.apply { `package` = null }, "Bagikan via"
+                )
+            )
             return
         }
         startActivity(intent)

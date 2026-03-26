@@ -63,7 +63,7 @@
         android:layout_width="32dp"
         android:layout_height="32dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:src="@drawable/iconamoon_menu_kebab_vertical_bold"
+        android:src="@drawable/ic_menu_kebab"
         android:clickable="false" />
 <!--        android:focusable="false"-->
 

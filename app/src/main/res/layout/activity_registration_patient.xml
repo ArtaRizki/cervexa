@@ -13,7 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:background="@color/colorWhite"
-        app:navigationIcon="@drawable/baseline_arrow_back_24"
+        app:navigationIcon="@drawable/ic_arrow_back"
         app:title="Verifikasi Identitas"
         app:titleCentered="false"
         app:titleTextAppearance="@style/CustomToolbarTitle" />
@@ -130,7 +130,7 @@
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                app:endIconDrawable="@drawable/calendar_24"
+                app:endIconDrawable="@drawable/ic_calendar"
                 app:endIconMode="custom"
                 app:hintEnabled="false"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -259,7 +259,7 @@
                 app:layout_constraintHorizontal_bias="0.501"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/verifyid_ilustration" />
+                app:srcCompat="@drawable/img_verifyid_ilustration" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </ScrollView>

@@ -34,7 +34,7 @@
             android:layout_height="32dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Tutup"
-            android:src="@drawable/outline_close_24"
+            android:src="@drawable/ic_close"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="@id/tvTitle"
             app:layout_constraintBottom_toBottomOf="@id/tvTitle"
@@ -71,7 +71,7 @@
             <ImageView
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:background="@drawable/icon_whatsapp"
+                android:background="@drawable/ic_whatsapp"
                 android:padding="10dp"/>
 
             <TextView
@@ -96,7 +96,7 @@
             <ImageView
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:background="@drawable/icon_telegram"
+                android:background="@drawable/ic_telegram"
                 android:padding="10dp" />
 
             <TextView
@@ -121,7 +121,7 @@
             <ImageView
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:background="@drawable/icon_email"
+                android:background="@drawable/ic_email"
                 android:padding="10dp" />
 
             <TextView
@@ -145,7 +145,7 @@
             <ImageView
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:background="@drawable/icon_share_cloud"
+                android:background="@drawable/ic_share_cloud"
                 android:padding="10dp" />
 
             <TextView
@@ -169,7 +169,7 @@
             <ImageView
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:background="@drawable/icon_save"
+                android:background="@drawable/ic_save"
                 android:padding="10dp" />
 
             <TextView

@@ -532,7 +532,7 @@ class VideoFragmentMobile : Fragment() {
             binding.tvRecordTimer.text = "00:00:00"
             hudHandler.removeCallbacks(hudTick)
             hudHandler.post(hudTick)
-            binding.btnRecordVideo.setImageResource(R.drawable.btn_stop)
+            binding.btnRecordVideo.setImageResource(R.drawable.ic_btn_stop)
         }.onFailure {
             Log.e(TAG, "Recording ERROR", it); record.set(false)
             Toast.makeText(requireContext(), "❌ Gagal merekam: ${it.message}", Toast.LENGTH_LONG)
@@ -545,7 +545,7 @@ class VideoFragmentMobile : Fragment() {
         record.set(false)
         hudHandler.removeCallbacks(hudTick)
         binding.recordHud.visibility = View.GONE
-        binding.btnRecordVideo.setImageResource(R.drawable.majesticons_video)
+        binding.btnRecordVideo.setImageResource(R.drawable.ic_video)
 
         runCatching { if (::recorder.isInitialized) recorder.stop() }
             .onFailure { Log.e(TAG, "Encoder stop error", it) }

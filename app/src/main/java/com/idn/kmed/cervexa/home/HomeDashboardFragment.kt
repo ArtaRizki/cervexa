@@ -151,11 +151,11 @@ class HomeDashboardFragment : Fragment() {
 
     private fun refreshUi(status: WifiMonitor.WifiStatus) {
         if (status.isCamera) {
-            imgIndicator.setImageResource(R.drawable.device_active)
+            imgIndicator.setImageResource(R.drawable.img_device_active)
             tvStatus.text = "Terhubung"
             btnConnect.text = "Mulai"
         } else {
-            imgIndicator.setImageResource(R.drawable.device_inactive)
+            imgIndicator.setImageResource(R.drawable.img_device_inactive)
             // Tampilkan info detail untuk memudahkan debug user
             if (status.ssid.isNullOrBlank() || status.ssid == "<unknown ssid>") {
                 tvStatus.text = "Koneksi Terputus"

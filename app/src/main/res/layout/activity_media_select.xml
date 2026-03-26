@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:background="?attr/colorSurface"
-        app:navigationIcon="@drawable/outline_close_24"
+        app:navigationIcon="@drawable/ic_close"
         app:title="Semua"
         app:titleTextColor="?attr/colorOnSurface"
         app:menu="@menu/menu_media_select"/>
@@ -41,7 +41,7 @@
             android:text="Hapus"
             android:insetTop="0dp"
             android:insetBottom="0dp"
-            android:drawableStart="@drawable/solar_trash_bin_trash_linear"/>
+            android:drawableStart="@drawable/ic_delete"/>
     </com.google.android.material.bottomappbar.BottomAppBar>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

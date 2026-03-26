@@ -24,7 +24,7 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            app:navigationIcon="@drawable/baseline_arrow_back_24"
+            app:navigationIcon="@drawable/ic_arrow_back"
             app:titleTextColor="@color/colorBlack"
             tools:title="Image_17_06_2025 10:12:49.jpg"/>
     </com.google.android.material.appbar.AppBarLayout>
@@ -74,7 +74,7 @@
             android:layout_height="32dp"
             android:visibility="gone"
             android:contentDescription="Exit Landscape"
-            android:src="@drawable/mingcute_fullscreen_exit_2_line"
+            android:src="@drawable/ic_fullscreen_exit"
             android:layout_gravity="bottom|end"
             android:layout_marginTop="30dp"
             android:layout_marginRight="30dp"
@@ -88,7 +88,7 @@
             android:layout_margin="12dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Kembali"
-            android:src="@drawable/baseline_arrow_back_24"
+            android:src="@drawable/ic_arrow_back"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:tint="@android:color/white" />

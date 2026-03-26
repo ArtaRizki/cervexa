@@ -61,7 +61,7 @@ class OnboardingActivity : AppCompatActivity() {
         val toolbar2 =
             findViewById<MaterialToolbar>(R.id.toolbar2)
         toolbar2.navigationIcon =
-            AppCompatResources.getDrawable(this, R.drawable.baseline_arrow_back_24)
+            AppCompatResources.getDrawable(this, R.drawable.ic_arrow_back)
         toolbar2.setNavigationOnClickListener { handleBack() }
 
         findViewById<Button>(R.id.btnConnect2).setOnClickListener {

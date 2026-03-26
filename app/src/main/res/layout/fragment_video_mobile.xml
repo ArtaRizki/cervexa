@@ -19,7 +19,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:menu="@menu/menu_video_fragment"
-        app:navigationIcon="@drawable/baseline_arrow_back_24"
+        app:navigationIcon="@drawable/ic_arrow_back"
         app:popupTheme="@style/ToolbarPopupTheme"
         app:title="Cervexa Colposcope"
         app:titleCentered="false"
@@ -164,7 +164,7 @@
             android:backgroundTint="@android:color/transparent"
             android:contentDescription="ShutterImage"
             android:scaleType="centerCrop"
-            android:src="@drawable/mage_camera_fill" />
+            android:src="@drawable/ic_camera" />
 
         <ImageButton
             android:id="@+id/btnRecordVideo"
@@ -176,7 +176,7 @@
             android:backgroundTint="@android:color/transparent"
             android:contentDescription="Record Video"
             android:scaleType="centerCrop"
-            android:src="@drawable/majesticons_video" />
+            android:src="@drawable/ic_video" />
 
         <ImageButton
             android:id="@+id/imageButton3"
@@ -201,7 +201,7 @@
             android:backgroundTint="@android:color/transparent"
             android:contentDescription="Fullscreen"
             android:scaleType="centerCrop"
-            android:src="@drawable/tdesign_fullscreen" />
+            android:src="@drawable/ic_fullscreen" />
 
     </LinearLayout>
 

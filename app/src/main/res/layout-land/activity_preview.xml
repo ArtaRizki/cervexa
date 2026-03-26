@@ -23,7 +23,7 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            app:navigationIcon="@drawable/baseline_arrow_back_24"
+            app:navigationIcon="@drawable/ic_arrow_back"
             app:titleTextColor="@color/colorBlack"
             tools:title="Image_17_06_2025 10:12:49.jpg"/>
     </com.google.android.material.appbar.AppBarLayout>
@@ -177,7 +177,7 @@
             android:layout_margin="12dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Kembali"
-            android:src="@drawable/baseline_arrow_back_24"
+            android:src="@drawable/ic_arrow_back"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:tint="@android:color/white" />

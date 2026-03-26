@@ -55,7 +55,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintVertical_bias="0.466"
-            app:srcCompat="@drawable/onboarding_illustration" />
+            app:srcCompat="@drawable/img_onboarding_illustration" />
 
         <TextView
             android:id="@+id/textFooter1"
@@ -172,7 +172,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintVertical_bias="0.582"
-            app:srcCompat="@drawable/onboarding_illustration" />
+            app:srcCompat="@drawable/img_onboarding_illustration" />
 
         <TextView
             android:id="@+id/textFooter"

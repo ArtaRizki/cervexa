@@ -45,7 +45,7 @@
         android:layout_width="20dp"
         android:layout_height="20dp"
         android:layout_margin="6dp"
-        android:src="@drawable/round_check_circle_24"
+        android:src="@drawable/ic_check_circle"
         android:visibility="gone"
         app:layout_constraintTop_toTopOf="@id/ivThumb"
         app:layout_constraintEnd_toEndOf="@id/ivThumb"
@@ -67,7 +67,7 @@
         android:layout_height="18dp"
         android:layout_marginStart="10dp"
         android:layout_marginBottom="10dp"
-        android:src="@drawable/icon_video_thumb"
+        android:src="@drawable/ic_video_thumb"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@+id/ivThumb"
         app:layout_constraintStart_toStartOf="@+id/bgVideoTitle" />
@@ -78,7 +78,7 @@
         android:layout_height="18dp"
         android:layout_marginStart="10dp"
         android:layout_marginBottom="10dp"
-        android:src="@drawable/icon_image_thumb"
+        android:src="@drawable/ic_image_thumb"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent" />

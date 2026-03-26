@@ -36,7 +36,7 @@ import com.google.android.material.shape.CornerFamily
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
 import com.idn.kmed.cervexa.R
-import com.idn.kmed.cervexa.RegistrationPatientActivity
+import com.idn.kmed.cervexa.patient.RegistrationPatientActivity
 import com.idn.kmed.cervexa.gallery.SessionMediaActivity
 import com.idn.kmed.cervexa.utils.WifiMonitor
 import org.json.JSONObject

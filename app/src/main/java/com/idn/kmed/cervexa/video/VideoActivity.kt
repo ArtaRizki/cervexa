@@ -1,10 +1,12 @@
-package com.idn.kmed.cervexa.live
+package com.idn.kmed.cervexa.video
 
 import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import com.idn.kmed.cervexa.R
+import com.idn.kmed.cervexa.live.VideoFragmentMobile
+import com.idn.kmed.cervexa.live.VideoFragmentTv
 import com.idn.kmed.cervexa.utils.DeviceTypeDetector
 
 class VideoActivity : AppCompatActivity() {

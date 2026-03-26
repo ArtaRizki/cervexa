@@ -1,10 +1,12 @@
-package com.idn.kmed.cervexa
+package com.idn.kmed.cervexa.settings
 
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.appbar.MaterialToolbar
@@ -13,14 +15,17 @@ import android.widget.TextView
 import androidx.core.content.edit
 import androidx.lifecycle.ViewModelProvider
 import com.alexvas.rtsp.codec.VideoDecodeThread
-import com.idn.kmed.cervexa.SettingsActivity.Companion.KEY_CAMERA_ROTATION_DEG
-import com.idn.kmed.cervexa.SettingsActivity.Companion.KEY_USE_HW_DECODER
+import com.idn.kmed.cervexa.settings.SettingsActivity.Companion.KEY_CAMERA_ROTATION_DEG
+import com.idn.kmed.cervexa.settings.SettingsActivity.Companion.KEY_USE_HW_DECODER
 import com.idn.kmed.cervexa.live.LiveViewModel
 import com.idn.kmed.cervexa.live.VideoFragmentTv
 import com.idn.kmed.cervexa.utils.StorageUtils
 import com.alexvas.rtsp.widget.RtspImageView
 import com.alexvas.rtsp.widget.RtspProcessor.Statistics
 import com.alexvas.rtsp.widget.RtspStatusListener
+import com.idn.kmed.cervexa.R
+import com.idn.kmed.cervexa.gallery.MediaPagerActivity
+import com.idn.kmed.cervexa.gallery.MediaPagerActivityLand
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -42,13 +47,13 @@ class SystemInfoActivity : AppCompatActivity() {
     private val prefs by lazy {
         getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
     }
-    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val main = Handler(Looper.getMainLooper())
     private fun isLandscape(): Boolean =
         resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_informayion_system)
+        setContentView(R.layout.activity_information_system)
 
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         tvDecoder = findViewById<TextView>(R.id.tvDecoder)
@@ -104,9 +109,9 @@ class SystemInfoActivity : AppCompatActivity() {
         val types = arrayListOf(if (isVideo) "VIDEO" else "IMAGE")
 
         val target = if (isLandscape())
-            com.idn.kmed.cervexa.gallery.MediaPagerActivityLand::class.java
+            MediaPagerActivityLand::class.java
         else
-            com.idn.kmed.cervexa.gallery.MediaPagerActivity::class.java
+            MediaPagerActivity::class.java
 
         startActivity(
             Intent(this, target).apply {

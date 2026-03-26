@@ -32,10 +32,10 @@ import com.alexvas.rtsp.widget.toHexString
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
-import com.idn.kmed.cervexa.HomeActivity
+import com.idn.kmed.cervexa.home.HomeActivity
 import com.idn.kmed.cervexa.R
-import com.idn.kmed.cervexa.SettingsActivity.Companion.KEY_CAMERA_ROTATION_DEG
-import com.idn.kmed.cervexa.SettingsActivity.Companion.KEY_USE_HW_DECODER
+import com.idn.kmed.cervexa.settings.SettingsActivity.Companion.KEY_CAMERA_ROTATION_DEG
+import com.idn.kmed.cervexa.settings.SettingsActivity.Companion.KEY_USE_HW_DECODER
 import com.idn.kmed.cervexa.databinding.FragmentVideoMobileBinding
 import com.idn.kmed.cervexa.record.RealtimeBitmapEncoder
 import com.idn.kmed.cervexa.utils.*

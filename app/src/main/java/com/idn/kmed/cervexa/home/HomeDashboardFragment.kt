@@ -1,15 +1,16 @@
-package com.idn.kmed.cervexa
+package com.idn.kmed.cervexa.home
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.*
 import android.content.Context.MODE_PRIVATE
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -21,7 +22,9 @@ import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.*
-import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.appbar.MaterialToolbar
+import com.idn.kmed.cervexa.patient.ConfirmPatientActivity
+import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.model.WifiViewModel
 import com.idn.kmed.cervexa.utils.WifiMonitor
 import kotlinx.coroutines.launch
@@ -42,7 +45,7 @@ class HomeDashboardFragment : Fragment() {
     private val postConnReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                android.net.wifi.WifiManager.ACTION_WIFI_NETWORK_SUGGESTION_POST_CONNECTION == intent.action
+                WifiManager.ACTION_WIFI_NETWORK_SUGGESTION_POST_CONNECTION == intent.action
             ) {
                 // Paksa refresh saat ada notifikasi koneksi sukses dari sistem
                 forceRefreshWifi()
@@ -56,7 +59,7 @@ class HomeDashboardFragment : Fragment() {
         val v = inflater.inflate(R.layout.fragment_home_dashboard, container, false)
 
         requireActivity()
-            .findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
+            .findViewById<MaterialToolbar>(R.id.topAppBar)
             ?.title = "Cervexa"
 
         wifiViewModel = ViewModelProvider(requireActivity())[WifiViewModel::class.java]
@@ -118,7 +121,7 @@ class HomeDashboardFragment : Fragment() {
             runCatching {
                 requireContext().registerReceiver(
                     postConnReceiver,
-                    IntentFilter(android.net.wifi.WifiManager.ACTION_WIFI_NETWORK_SUGGESTION_POST_CONNECTION)
+                    IntentFilter(WifiManager.ACTION_WIFI_NETWORK_SUGGESTION_POST_CONNECTION)
                 )
             }
         }
@@ -232,9 +235,9 @@ class HomeDashboardFragment : Fragment() {
 
                 // Cek apakah GPS Hardware nyala
                 val lm =
-                    ctx.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+                    ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
                 val isGpsOn = try {
-                    lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
+                    lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
                 } catch (e: Exception) {
                     true
                 } // Fallback true jika error cek provider

@@ -29,7 +29,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
-import com.idn.kmed.cervexa.HomeActivity
+import com.idn.kmed.cervexa.home.HomeActivity
 import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.databinding.FragmentVideoTvBinding
 import com.idn.kmed.cervexa.record.RealtimeBitmapEncoder

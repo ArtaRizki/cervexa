@@ -53,6 +53,6 @@
         app:itemRippleColor="@null"
         app:itemTextColor="@color/nav_item_color"
 
-        app:menu="@menu/buttom_home_nav_menu" />
+        app:menu="@menu/button_home_nav_menu" />
 
 </LinearLayout>

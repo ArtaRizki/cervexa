@@ -1,4 +1,4 @@
-package com.idn.kmed.cervexa
+package com.idn.kmed.cervexa.auth
 
 import android.content.Intent
 import android.os.Bundle
@@ -8,6 +8,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.textfield.TextInputEditText
+import com.idn.kmed.cervexa.home.HomeActivity
+import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.network.ApiResult
 import com.idn.kmed.cervexa.network.CervexaRepository
 import com.idn.kmed.cervexa.network.TokenManager

@@ -1,13 +1,17 @@
-package com.idn.kmed.cervexa
+package com.idn.kmed.cervexa.auth
 
+import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
+import android.net.wifi.WifiNetworkSpecifier
+import android.net.wifi.WifiNetworkSuggestion
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -24,6 +28,9 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
 import com.idn.kmed.cervexa.utils.WifiCamConnection
 import androidx.core.content.edit
+import com.google.android.material.appbar.MaterialToolbar
+import com.idn.kmed.cervexa.home.HomeActivity
+import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.network.TokenManager
 
 class OnboardingActivity : AppCompatActivity() {
@@ -52,7 +59,7 @@ class OnboardingActivity : AppCompatActivity() {
         }
 
         val toolbar2 =
-            findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar2)
+            findViewById<MaterialToolbar>(R.id.toolbar2)
         toolbar2.navigationIcon =
             AppCompatResources.getDrawable(this, R.drawable.baseline_arrow_back_24)
         toolbar2.setNavigationOnClickListener { handleBack() }
@@ -138,13 +145,13 @@ class OnboardingActivity : AppCompatActivity() {
         return if (Build.VERSION.SDK_INT >= 33) {
             ContextCompat.checkSelfPermission(
                 this,
-                android.Manifest.permission.NEARBY_WIFI_DEVICES
+                Manifest.permission.NEARBY_WIFI_DEVICES
             ) ==
                     PackageManager.PERMISSION_GRANTED
         } else {
             ContextCompat.checkSelfPermission(
                 this,
-                android.Manifest.permission.ACCESS_FINE_LOCATION
+                Manifest.permission.ACCESS_FINE_LOCATION
             ) ==
                     PackageManager.PERMISSION_GRANTED
         }
@@ -152,9 +159,9 @@ class OnboardingActivity : AppCompatActivity() {
 
     private fun requestWifiPermissions() {
         if (Build.VERSION.SDK_INT >= 33) {
-            requestPermissions(arrayOf(android.Manifest.permission.NEARBY_WIFI_DEVICES), 1001)
+            requestPermissions(arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES), 1001)
         } else {
-            requestPermissions(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 1002)
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1002)
         }
     }
 
@@ -173,17 +180,17 @@ class OnboardingActivity : AppCompatActivity() {
             return
         }
 
-        val spec = android.net.wifi.WifiNetworkSpecifier.Builder()
+        val spec = WifiNetworkSpecifier.Builder()
             .setSsidPattern(PatternMatcher(ssidPrefix, PatternMatcher.PATTERN_PREFIX))
             .apply { if (!password.isNullOrEmpty()) setWpa2Passphrase(password) }
             .build()
 
-        val request = android.net.NetworkRequest.Builder()
+        val request = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .setNetworkSpecifier(spec)
             .build()
 
-        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
 
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
@@ -229,7 +236,7 @@ class OnboardingActivity : AppCompatActivity() {
                     cm.activeNetwork
                 )
             if (Build.VERSION.SDK_INT >= 31) {
-                (caps?.transportInfo as? android.net.wifi.WifiInfo)?.ssid?.removeSurrounding("\"")
+                (caps?.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
             } else null
         }.getOrNull()
 
@@ -258,9 +265,9 @@ class OnboardingActivity : AppCompatActivity() {
 
     private fun addCameraWifiSuggestion(ssid: String, password: String?) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
-        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
 
-        val builder = android.net.wifi.WifiNetworkSuggestion.Builder()
+        val builder = WifiNetworkSuggestion.Builder()
             .setSsid(ssid)
             .setIsAppInteractionRequired(false)
 
@@ -298,7 +305,7 @@ class OnboardingActivity : AppCompatActivity() {
         val ssidPrefix =
             prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_") ?: "wifi_camera_MS2_"
 
-        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
 
         recheckRunnable = object : Runnable {
             override fun run() {
@@ -333,7 +340,7 @@ class OnboardingActivity : AppCompatActivity() {
     /** Ambil SSID dari caps (API 31+). */
     private fun ssidFromCaps(caps: NetworkCapabilities): String? {
         return if (Build.VERSION.SDK_INT >= 31)
-            (caps.transportInfo as? android.net.wifi.WifiInfo)?.ssid?.removeSurrounding("\"")
+            (caps.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
         else null
     }
 

@@ -74,7 +74,7 @@
             Pengecekan token (Login vs Home) dilakukan di dalam SplashActivity.kt.
         -->
         <activity
-            android:name=".SplashActivity"
+            android:name=".auth.SplashActivity"
             android:exported="true"
             android:theme="@style/Theme_App_Splash">
             <intent-filter>
@@ -89,7 +89,7 @@
 
         <!-- FIX #3 — LoginActivity ditambahkan (bukan launcher, dipanggil dari SplashActivity) -->
         <activity
-            android:name=".LoginActivity"
+            android:name=".auth.LoginActivity"
             android:exported="false"
             android:theme="@style/AppTheme.NoActionBar" />
 
@@ -99,28 +99,28 @@
             yang menyebabkan duplicate activity declaration warning/error.
         -->
         <activity
-            android:name=".HomeActivity"
+            android:name=".home.HomeActivity"
             android:exported="true"
             android:theme="@style/AppTheme.NoActionBar" />
 
-        <activity android:name=".OnboardingActivity" />
+        <activity android:name=".auth.OnboardingActivity" />
 
         <activity
-            android:name=".ConfirmPatientActivity"
+            android:name=".patient.ConfirmPatientActivity"
             android:exported="false"
             android:label="@string/title_activity_confirm_patient"
             android:theme="@style/AppTheme.NoActionBar" />
 
         <activity
-            android:name=".SelectExistingPatientActivity"
+            android:name=".patient.SelectExistingPatientActivity"
             android:exported="false" />
 
         <activity
-            android:name=".RegistrationPatientActivity"
+            android:name=".patient.RegistrationPatientActivity"
             android:exported="false" />
 
         <activity
-            android:name=".live.VideoActivity"
+            android:name=".video.VideoActivity"
             android:exported="false" />
 
         <activity
@@ -139,10 +139,10 @@
             android:name=".gallery.SessionMediaActivity"
             android:exported="false" />
         <activity
-            android:name=".SystemInfoActivity"
+            android:name=".settings.SystemInfoActivity"
             android:exported="false" />
         <activity
-            android:name=".SettingsActivity"
+            android:name=".settings.SettingsActivity"
             android:exported="false" />
 
         <provider

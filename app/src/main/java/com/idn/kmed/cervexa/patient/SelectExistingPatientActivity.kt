@@ -1,6 +1,5 @@
-package com.idn.kmed.cervexa
+package com.idn.kmed.cervexa.patient
 
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
@@ -10,12 +9,12 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ProgressBar
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.idn.kmed.cervexa.live.VideoActivity
+import com.idn.kmed.cervexa.R
+import com.idn.kmed.cervexa.video.VideoActivity
 import com.idn.kmed.cervexa.media.MediaRepository
 import com.idn.kmed.cervexa.media.PatientListAdapter
 import com.idn.kmed.cervexa.model.PatientItem
@@ -236,7 +235,7 @@ class SelectExistingPatientActivity : AppCompatActivity() {
     }
 
     private fun hideKeyboard(v: View) {
-        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+        (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(v.windowToken, 0)
     }
 }

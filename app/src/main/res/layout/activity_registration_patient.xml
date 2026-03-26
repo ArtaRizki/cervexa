@@ -130,7 +130,7 @@
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                app:endIconDrawable="@drawable/calender_24"
+                app:endIconDrawable="@drawable/calendar_24"
                 app:endIconMode="custom"
                 app:hintEnabled="false"
                 app:layout_constraintEnd_toEndOf="parent"

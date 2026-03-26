@@ -1,6 +1,48 @@
+# ─── Gradle ───────────────────────────────────────────────────────────────────
+.gradle/
+/build/
+**/build/
+
+# ─── Android Studio / IntelliJ ────────────────────────────────────────────────
+/.idea/
 *.iml
-.gradle
-/local.properties
-/.idea
-/build
+.navigation/
+
+# ─── Kotlin IDE metadata ──────────────────────────────────────────────────────
+# Jangan commit session / cache IDE Kotlin
+.kotlin/
+
+# ─── Local config ─────────────────────────────────────────────────────────────
+local.properties
+
+# ─── Keystore & credential ────────────────────────────────────────────────────
+# JANGAN pernah commit keystore atau file credential apapun ke repo.
+# Simpan di tempat aman (password manager, secrets vault, dsb).
+*.jks
+*.keystore
+*.p12
+keystore/
+google-services.json
+
+# ─── Build artifacts ──────────────────────────────────────────────────────────
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+app/release/
+
+# ─── Log ──────────────────────────────────────────────────────────────────────
+*.log
+
+# ─── macOS ────────────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# ─── Windows ──────────────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini

@@ -1,7 +1,8 @@
-package com.idn.kmed.cervexa
+package com.idn.kmed.cervexa.patient
 
 import android.app.DatePickerDialog
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
 import android.view.KeyEvent
@@ -13,7 +14,8 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import com.idn.kmed.cervexa.live.VideoActivity
+import com.idn.kmed.cervexa.R
+import com.idn.kmed.cervexa.video.VideoActivity
 import com.idn.kmed.cervexa.network.ApiResult
 import com.idn.kmed.cervexa.network.CervexaRepository
 import kotlinx.coroutines.launch
@@ -229,13 +231,13 @@ class RegistrationPatientActivity : AppCompatActivity() {
                 Calendar.getInstance().apply { add(Calendar.YEAR, -130) }.timeInMillis
             show()
             getButton(DatePickerDialog.BUTTON_POSITIVE)
-                ?.setBackgroundColor(android.graphics.Color.parseColor("#1E63E4"))
+                ?.setBackgroundColor(Color.parseColor("#1E63E4"))
             getButton(DatePickerDialog.BUTTON_POSITIVE)
-                ?.setTextColor(android.graphics.Color.parseColor("#FFFFFF"))
+                ?.setTextColor(Color.parseColor("#FFFFFF"))
             getButton(DatePickerDialog.BUTTON_NEGATIVE)
-                ?.setBackgroundColor(android.graphics.Color.parseColor("#FFFFFF"))
+                ?.setBackgroundColor(Color.parseColor("#FFFFFF"))
             getButton(DatePickerDialog.BUTTON_NEGATIVE)
-                ?.setTextColor(android.graphics.Color.parseColor("#1E63E4"))
+                ?.setTextColor(Color.parseColor("#1E63E4"))
         }
     }
 

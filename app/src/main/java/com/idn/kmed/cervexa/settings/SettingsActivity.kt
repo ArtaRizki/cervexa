@@ -1,11 +1,13 @@
-package com.idn.kmed.cervexa
+package com.idn.kmed.cervexa.settings
 
 import android.os.Bundle
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.idn.kmed.cervexa.R
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -23,7 +25,7 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings)
 
         // Toolbar
-        val top = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
+        val top = findViewById<MaterialToolbar>(R.id.topAppBar)
         top.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
         swHw = findViewById(R.id.switchHwDecoder)

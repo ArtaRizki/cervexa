@@ -1,24 +1,30 @@
-package com.idn.kmed.cervexa
+package com.idn.kmed.cervexa.home
 
 import android.Manifest
 import android.app.UiModeManager
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import android.view.KeyEvent
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.ActionMenuView
 import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.children
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.idn.kmed.cervexa.R
+import com.idn.kmed.cervexa.settings.SettingsActivity
+import com.idn.kmed.cervexa.settings.SystemInfoActivity
+import com.idn.kmed.cervexa.auth.OnboardingActivity
 import com.idn.kmed.cervexa.media.MediaListFragment
 import com.idn.kmed.cervexa.model.WifiViewModel
 import com.idn.kmed.cervexa.utils.WifiMonitor
@@ -33,7 +39,7 @@ class HomeActivity : AppCompatActivity() {
     // Helper untuk mendeteksi apakah ini TV
     private val isTvDevice: Boolean
         get() {
-            val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
+            val uiModeManager = getSystemService(UI_MODE_SERVICE) as UiModeManager
             return uiModeManager.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
         }
 
@@ -55,7 +61,7 @@ class HomeActivity : AppCompatActivity() {
 
         // 3. SETUP TOOLBAR & MENU
         val toolbar =
-            findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
+            findViewById<MaterialToolbar>(R.id.topAppBar)
 
         // Listener Menu
         toolbar.setOnMenuItemClickListener { item ->
@@ -203,7 +209,7 @@ class HomeActivity : AppCompatActivity() {
             // 1. Cari tombol Overflow
             for (i in 0 until toolbar.childCount) {
                 val child = toolbar.getChildAt(i)
-                if (child is androidx.appcompat.widget.ActionMenuView) {
+                if (child is ActionMenuView) {
                     for (j in 0 until child.childCount) {
                         val innerChild = child.getChildAt(j)
                         if (isOverflowButton(innerChild)) {
@@ -267,7 +273,7 @@ class HomeActivity : AppCompatActivity() {
 
     private fun setupBottomNavForRemote(bottomNav: BottomNavigationView) {
         val menuView = bottomNav.getChildAt(0) as? ViewGroup
-        val navHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        val navHandler = Handler(Looper.getMainLooper())
         var navRunnable: Runnable? = null
 
         menuView?.children?.forEachIndexed { index, child ->
@@ -321,7 +327,7 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
-    private fun showFragment(f: androidx.fragment.app.Fragment) {
+    private fun showFragment(f: Fragment) {
         supportFragmentManager.beginTransaction()
             .replace(R.id.navHost, f)
             .commit()

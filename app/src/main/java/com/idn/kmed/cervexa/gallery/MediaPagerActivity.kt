@@ -17,8 +17,10 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.chip.Chip
 import java.io.File
 import androidx.core.content.FileProvider
+import androidx.print.PrintHelper
 import com.idn.kmed.cervexa.utils.MediaType
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
 import com.google.android.material.shape.CornerFamily
@@ -196,7 +198,14 @@ open class MediaPagerActivity : AppCompatActivity() {
     ) {
         val targetPkg = resolveFirstInstalled(*packages)
         if (targetPkg == null) {
-            Toast.makeText(this, "$appLabel belum terpasang", Toast.LENGTH_SHORT).show()
+            MaterialAlertDialogBuilder(this)
+                .setTitle("$appLabel Belum Terpasang")
+                .setMessage("Aplikasi $appLabel belum terpasang. Buka Play Store?")
+                .setPositiveButton("Play Store") { _, _ ->
+                    val pkg = packages.firstOrNull() ?: return@setPositiveButton
+                    PrintHelper.openPlayStore(this, pkg)
+                }
+                .setNegativeButton("Batal", null).show()
             return
         }
 

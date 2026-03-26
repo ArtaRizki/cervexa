@@ -19,15 +19,22 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.children
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.idn.kmed.cervexa.R
+import com.idn.kmed.cervexa.auth.LoginActivity
 import com.idn.kmed.cervexa.settings.SettingsActivity
 import com.idn.kmed.cervexa.settings.SystemInfoActivity
 import com.idn.kmed.cervexa.auth.OnboardingActivity
 import com.idn.kmed.cervexa.media.MediaListFragment
 import com.idn.kmed.cervexa.model.WifiViewModel
+import com.idn.kmed.cervexa.network.ApiResult
+import com.idn.kmed.cervexa.network.CervexaRepository
+import com.idn.kmed.cervexa.network.TokenManager
 import com.idn.kmed.cervexa.utils.WifiMonitor
+import kotlinx.coroutines.launch
 
 class HomeActivity : AppCompatActivity() {
 

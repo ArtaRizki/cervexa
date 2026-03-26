@@ -958,8 +958,63 @@ class VideoFragmentMobile : Fragment() {
         val d = MaterialAlertDialogBuilder(requireContext(), R.style.MyAlertDialogTheme)
             .setView(v).setCancelable(true).create()
         d.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom); d.show()
-        v.findViewById<TextView>(R.id.tvAction)
-            ?.setOnClickListener { d.dismiss(); stopStreamAndExit() }
+        v.findViewById<TextView>(R.id.tvAction)?.setOnClickListener {
+            d.dismiss()
+            showPrintPromptDialog()  // NEW: ask about printing before exit
+        }
+    }
+
+    private fun showPrintPromptDialog() {
+        MaterialAlertDialogBuilder(requireContext(), R.style.MyAlertDialogTheme)
+            .setTitle("Cetak Dokumen?")
+            .setMessage("Apakah Anda ingin mencetak atau mengunduh data rekam medis sesi ini?")
+            .setPositiveButton("Ya, Cetak") { _, _ -> showPrintOptionsDialog() }
+            .setNegativeButton("Tidak") { _, _ -> stopStreamAndExit() }
+            .create()
+            .also { it.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom); it.show() }
+    }
+
+    private fun showPrintOptionsDialog() {
+        val options = arrayOf(
+            "🖨️  Cetak Data Pasien",
+            "📋  Cetak Data Sesi Lengkap (+ Media)",
+            "💾  Unduh PDF ke Perangkat"
+        )
+        MaterialAlertDialogBuilder(requireContext(), R.style.MyAlertDialogTheme)
+            .setTitle("Pilih Opsi")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> generateAndPrintPatientPdf(printOnly = true)
+                    1 -> generateAndPrintSessionPdf(printOnly = true)
+                    2 -> generateAndPrintSessionPdf(printOnly = false)
+                }
+                stopStreamAndExit()
+            }
+            .setNegativeButton("Batal") { _, _ -> stopStreamAndExit() }
+            .create()
+            .also { it.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom); it.show() }
+    }
+
+    private fun generateAndPrintPatientPdf(printOnly: Boolean) {
+        val outFile =
+            File(requireContext().cacheDir, "patient_report_${System.currentTimeMillis()}.pdf")
+        val pdf = PdfReportHelper.generatePatientPdf(
+            outputFile = outFile,
+            nama = patientNama, nik = patientNik, hospitalName = patientRs,
+            nrm = patientNrm.ifBlank { null }, dobUtcMs = patientDobUtc.takeIf { it > 0 },
+            sessionId = apiDelegate.serverSessionId, sessionCode = null,
+            startedAt = null, completedAt = null,
+            snapshotCount = snapshotsDir?.listFiles()?.size ?: 0,
+            videoCount = videosDir?.listFiles()?.size ?: 0
+        ) ?: return
+        if (printOnly) PrintHelper.printPdf(requireActivity(), pdf, "Cervexa - Data Pasien")
+        else PrintHelper.downloadPdf(requireContext(), pdf, outFile.name).let {
+            Toast.makeText(
+                context,
+                if (it) "PDF tersimpan di Downloads" else "Gagal menyimpan",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     private fun showPatientInfoBottomSheet() {

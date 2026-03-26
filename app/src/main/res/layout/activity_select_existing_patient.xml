@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -16,9 +15,9 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="@color/colorWhite"
+            app:navigationIcon="@drawable/baseline_arrow_back_24"
             app:title="Pilih Pasien"
             app:titleCentered="false"
-            app:navigationIcon="@drawable/baseline_arrow_back_24"
             app:titleTextAppearance="@style/CustomToolbarTitle" />
 
         <androidx.cardview.widget.CardView
@@ -44,20 +43,20 @@
                     android:layout_weight="1"
                     android:background="@drawable/bg_search_focus"
                     android:hint="Cari pasien (nama / NIK / NRM / RS)"
-                    android:inputType="text"
                     android:imeOptions="actionSearch"
+                    android:inputType="text"
                     android:maxLines="1"
-                    android:singleLine="true"
                     android:paddingStart="20dp"
                     android:paddingEnd="10dp"
+                    android:singleLine="true"
                     android:textColor="#333333"
                     android:textColorHint="#9E9E9E"
-                    android:textSize="14sp"/>
+                    android:textSize="14sp" />
 
-<!--                     android:focusable="true"-->
-                    <!--                    android:focusableInTouchMode="true"-->
-<!--                    android:nextFocusRight="@id/btnSearch"-->
-<!--                    android:nextFocusDown="@id/rvPatients" -->
+                <!--                     android:focusable="true"-->
+                <!--                    android:focusableInTouchMode="true"-->
+                <!--                    android:nextFocusRight="@id/btnSearch"-->
+                <!--                    android:nextFocusDown="@id/rvPatients" -->
 
 
                 <FrameLayout
@@ -67,11 +66,11 @@
                     android:layout_marginEnd="8dp"
                     android:background="@drawable/bg_search_button"
                     android:clickable="true">
-<!--                     android:focusable="true"-->
+                    <!--                     android:focusable="true"-->
                     <!--                    android:focusableInTouchMode="true"-->
-<!--                    android:nextFocusLeft="@id/searchViewPatient"-->
-<!--                    android:nextFocusDown="@id/rvPatients"-->
-<!--                >-->
+                    <!--                    android:nextFocusLeft="@id/searchViewPatient"-->
+                    <!--                    android:nextFocusDown="@id/rvPatients"-->
+                    <!--                >-->
 
                     <ImageView
                         android:layout_width="24dp"
@@ -93,8 +92,8 @@
                 android:id="@+id/emptyStateContainer"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:orientation="vertical"
                 android:gravity="center"
+                android:orientation="vertical"
                 android:visibility="gone">
 
                 <ImageView
@@ -107,31 +106,31 @@
                     android:id="@+id/tvEmpty"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:fontFamily="@font/manrope_medium"
                     android:text="Data tidak ditemukan"
                     android:textColor="#333333"
-                    android:textSize="16sp"
-                    android:fontFamily="@font/manrope_medium"
-                    android:layout_marginTop="12dp" />
+                    android:textSize="16sp" />
 
                 <TextView
                     android:id="@+id/tvEmptySubtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center"
                     android:text="Silakan coba kata kunci lain atau tambah pasien baru"
                     android:textColor="#777777"
-                    android:textSize="14sp"
-                    android:gravity="center"
-                    android:layout_marginTop="4dp" />
+                    android:textSize="14sp" />
             </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvPatients"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:background="@android:color/white"
                 android:clipToPadding="false"
                 android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:background="@android:color/white" />
+                android:paddingBottom="4dp" />
 
             <ProgressBar
                 android:id="@+id/progress"
@@ -143,5 +142,15 @@
         </FrameLayout>
 
     </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:indeterminate="true"
+        android:indeterminateTint="@color/colorButton"
+        android:visibility="gone" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

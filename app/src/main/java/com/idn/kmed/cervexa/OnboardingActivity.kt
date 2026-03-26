@@ -24,6 +24,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
 import com.idn.kmed.cervexa.utils.WifiCamConnection
 import androidx.core.content.edit
+import com.idn.kmed.cervexa.network.TokenManager
 
 class OnboardingActivity : AppCompatActivity() {
 
@@ -50,13 +51,16 @@ class OnboardingActivity : AppCompatActivity() {
             showScreen(2, pushToBackStack = true)
         }
 
-        val toolbar2 = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar2)
-        toolbar2.navigationIcon = AppCompatResources.getDrawable(this, R.drawable.baseline_arrow_back_24)
+        val toolbar2 =
+            findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar2)
+        toolbar2.navigationIcon =
+            AppCompatResources.getDrawable(this, R.drawable.baseline_arrow_back_24)
         toolbar2.setNavigationOnClickListener { handleBack() }
 
         findViewById<Button>(R.id.btnConnect2).setOnClickListener {
             val prefs = getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
-            val prefix = prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_") ?: "wifi_camera_MS2_"
+            val prefix =
+                prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_") ?: "wifi_camera_MS2_"
             connectToCameraWifiWithFallback(
                 ssidPrefix = prefix,
                 password = null,     // isi jika perlu
@@ -93,7 +97,12 @@ class OnboardingActivity : AppCompatActivity() {
         }
     }
 
-    private fun showScreen(target: Int, pushToBackStack: Boolean, isBack: Boolean = false, animate: Boolean = true) {
+    private fun showScreen(
+        target: Int,
+        pushToBackStack: Boolean,
+        isBack: Boolean = false,
+        animate: Boolean = true
+    ) {
         val from = if (screen2.visibility == View.VISIBLE) 2 else 1
         if (from == target) return
 
@@ -127,10 +136,16 @@ class OnboardingActivity : AppCompatActivity() {
 
     private fun hasWifiPermissions(): Boolean {
         return if (Build.VERSION.SDK_INT >= 33) {
-            ContextCompat.checkSelfPermission(this, android.Manifest.permission.NEARBY_WIFI_DEVICES) ==
+            ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.NEARBY_WIFI_DEVICES
+            ) ==
                     PackageManager.PERMISSION_GRANTED
         } else {
-            ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+            ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) ==
                     PackageManager.PERMISSION_GRANTED
         }
     }
@@ -186,7 +201,11 @@ class OnboardingActivity : AppCompatActivity() {
             override fun onUnavailable() {
                 super.onUnavailable()
                 runOnUiThread {
-                    Toast.makeText(this@OnboardingActivity, "Jaringan kamera tidak ditemukan", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this@OnboardingActivity,
+                        "Jaringan kamera tidak ditemukan",
+                        Toast.LENGTH_SHORT
+                    ).show()
                     openWifiSettings()
                 }
             }
@@ -205,7 +224,10 @@ class OnboardingActivity : AppCompatActivity() {
     ) {
         // Ambil SSID jika tersedia (API 31+ via transportInfo)
         val ssid = runCatching {
-            val caps = if (network != null) cm.getNetworkCapabilities(network) else cm.getNetworkCapabilities(cm.activeNetwork)
+            val caps =
+                if (network != null) cm.getNetworkCapabilities(network) else cm.getNetworkCapabilities(
+                    cm.activeNetwork
+                )
             if (Build.VERSION.SDK_INT >= 31) {
                 (caps?.transportInfo as? android.net.wifi.WifiInfo)?.ssid?.removeSurrounding("\"")
             } else null
@@ -220,11 +242,17 @@ class OnboardingActivity : AppCompatActivity() {
 
         addCameraWifiSuggestion(ssid = ssid ?: ssidPrefix, password = password)
 
-        // Beres → pindah ke Home
-        startActivity(Intent(this@OnboardingActivity, HomeActivity::class.java).apply {
+        // Sesudah
+        val tokenManager = TokenManager.getInstance(this@OnboardingActivity)
+        // Beres → pindah ke Login , kalau sudah login maka ke home
+        val nextClass =
+            if (tokenManager.isLoggedIn) HomeActivity::class.java else LoginActivity::class.java
+
+        startActivity(Intent(this@OnboardingActivity, nextClass).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra("from_onboarding", true)
         })
+        finish()
         finish()
     }
 
@@ -254,8 +282,9 @@ class OnboardingActivity : AppCompatActivity() {
 
     private fun openWifiSettings() {
         openedWifiSettings = true
-        try { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) }
-        catch (_: Exception) {
+        try {
+            startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+        } catch (_: Exception) {
             Toast.makeText(this, "Tidak bisa membuka pengaturan Wi-Fi", Toast.LENGTH_SHORT).show()
         }
     }
@@ -266,7 +295,8 @@ class OnboardingActivity : AppCompatActivity() {
         stopRecheckAfterSettings()
         recheckAttempts = 0
         val prefs = getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
-        val ssidPrefix = prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_") ?: "wifi_camera_MS2_"
+        val ssidPrefix =
+            prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_") ?: "wifi_camera_MS2_"
 
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 

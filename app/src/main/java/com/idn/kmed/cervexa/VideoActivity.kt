@@ -13,15 +13,12 @@ class VideoActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_video)
 
-        // Log device information untuk debugging
         DeviceTypeDetector.logDeviceInfo(this)
-
-        // Deteksi device type
         val isTvDevice = DeviceTypeDetector.isTvDevice(this)
 
         Log.d(TAG, "Device Type: ${if (isTvDevice) "TV/STB" else "Smartphone/Tablet"}")
 
-        // Ambil data dari intent
+        // ── Ambil semua extra dari Intent ──────────────────────────────────
         val sessionDirPath = intent.getStringExtra("sessionDirPath")
         val patientNama = intent.getStringExtra("patient_nama")
         val patientNik = intent.getStringExtra("patient_nik")
@@ -29,7 +26,10 @@ class VideoActivity : AppCompatActivity() {
         val patientNrm = intent.getStringExtra("patient_nrm")
         val patientDobUtc = intent.getLongExtra("patient_dob_utc", -1L)
 
-        // Buat Bundle untuk fragment
+        // FIX: teruskan patient_id dari server ke fragment agar sesi bisa dibuat via API
+        val serverPatientId = intent.getIntExtra("patient_id", -1)
+
+        // ── Bundle ke Fragment ─────────────────────────────────────────────
         val bundle = Bundle().apply {
             putString("sessionDirPath", sessionDirPath)
             putString("patient_nama", patientNama)
@@ -37,20 +37,18 @@ class VideoActivity : AppCompatActivity() {
             putString("patient_rs", patientRs)
             putString("patient_nrm", patientNrm)
             putLong("patient_dob_utc", patientDobUtc)
+            putInt("patient_id", serverPatientId)   // ← BARU: ID dari server
         }
 
-        // Pilih fragment berdasarkan device type
+        // ── Pilih fragment berdasarkan device ──────────────────────────────
         val fragment: Fragment = if (isTvDevice) {
-            Log.i(TAG, "Loading VideoFragmentTv (VLC with auto-crop)")
-//            VideoFragmentTv().apply { arguments = bundle }
-            VideoFragmentMobile().apply { arguments = bundle }
+            Log.i(TAG, "Loading VideoFragmentTv")
+            VideoFragmentTv().apply { arguments = bundle }
         } else {
-            Log.i(TAG, "Loading VideoFragmentMobile (RTSP)")
-//            VideoFragmentTv().apply { arguments = bundle }
+            Log.i(TAG, "Loading VideoFragmentMobile")
             VideoFragmentMobile().apply { arguments = bundle }
         }
 
-        // Load fragment jika belum ada
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.fragment_container, fragment)

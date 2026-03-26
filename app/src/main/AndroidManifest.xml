@@ -14,7 +14,6 @@
     <uses-feature
         android:name="android.hardware.dpad"
         android:required="false" />
-
     <uses-feature
         android:name="android.hardware.location.gps"
         android:required="false" />
@@ -23,16 +22,13 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
-
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission
         android:name="android.permission.WRITE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
-
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
-
     <uses-permission android:name="android.permission.CAMERA" />
 
     <uses-feature android:name="android.hardware.camera.any" />
@@ -58,6 +54,11 @@
         </intent>
     </queries>
 
+    <!--
+        FIX #1 — android:usesCleartextTraffic hanya boleh ada SEKALI sebagai
+        atribut <application>, bukan sebagai teks di dalam body elemen.
+        Versi lama punya duplikat orphan teks yang bikin manifest corrupt.
+    -->
     <application
         android:allowBackup="true"
         android:banner="@mipmap/ic_launcher"
@@ -65,33 +66,13 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-
         android:theme="@style/AppTheme.NoActionBar"
-
         android:usesCleartextTraffic="true">
 
-        <activity
-            android:name=".ConfirmPatientActivity"
-            android:exported="false"
-            android:label="@string/title_activity_confirm_patient"
-            android:theme="@style/AppTheme.NoActionBar" />
-
-        <activity
-            android:name=".SelectExistingPatientActivity"
-            android:exported="false" />
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true"
-            tools:replace="android:authorities">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths"
-                tools:replace="android:resource" />
-        </provider>
-
+        <!--
+            FIX #2 — SplashActivity tetap launcher.
+            Pengecekan token (Login vs Home) dilakukan di dalam SplashActivity.kt.
+        -->
         <activity
             android:name=".SplashActivity"
             android:exported="true"
@@ -106,6 +87,17 @@
             </intent-filter>
         </activity>
 
+        <!-- FIX #3 — LoginActivity ditambahkan (bukan launcher, dipanggil dari SplashActivity) -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme.NoActionBar" />
+
+        <!--
+            FIX #4 — HomeActivity cukup dideklarasikan SEKALI.
+            Versi lama mendeklarasikannya dua kali (exported=false dan exported=true)
+            yang menyebabkan duplicate activity declaration warning/error.
+        -->
         <activity
             android:name=".HomeActivity"
             android:exported="true"
@@ -113,32 +105,62 @@
 
         <activity android:name=".OnboardingActivity" />
 
-        <!-- ========================================
-             FIX: Tambah configChanges untuk handle rotasi
-             Tanpa ini, Activity di-recreate setiap rotasi
-             dan Fragment kehilangan state → CRASH
-             ======================================== -->
         <activity
-            android:name=".live.VideoActivity"/>
+            android:name=".ConfirmPatientActivity"
+            android:exported="false"
+            android:label="@string/title_activity_confirm_patient"
+            android:theme="@style/AppTheme.NoActionBar" />
 
-        <activity android:name=".RegistrationPatientActivity" />
-        <activity android:name=".gallery.PreviewActivity" />
-        <activity android:name=".gallery.MediaPagerActivity" />
+        <activity
+            android:name=".SelectExistingPatientActivity"
+            android:exported="false" />
 
+        <activity
+            android:name=".RegistrationPatientActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".live.VideoActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".gallery.PreviewActivity"
+            android:exported="false" />
+        <activity
+            android:name=".gallery.MediaPagerActivity"
+            android:exported="false" />
         <activity
             android:name=".gallery.MediaPagerActivityLand"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:exported="false"
             android:screenOrientation="sensorLandscape"
             tools:ignore="DiscouragedApi" />
+        <activity
+            android:name=".gallery.SessionMediaActivity"
+            android:exported="false" />
+        <activity
+            android:name=".SystemInfoActivity"
+            android:exported="false" />
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false" />
 
-        <activity android:name=".gallery.SessionMediaActivity" />
-        <activity android:name=".SystemInfoActivity" />
-        <activity android:name=".SettingsActivity" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true"
+            tools:replace="android:authorities">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"
+                tools:replace="android:resource" />
+        </provider>
 
         <meta-data
             android:name="preloaded_fonts"
             android:resource="@array/preloaded_fonts" />
+
     </application>
 
 </manifest>

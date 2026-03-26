@@ -64,6 +64,22 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private var patientRs: String = ""
     private var patientNrm: String = ""
     private var patientDobUtc: Long = -1L
+
+    private var serverPatientId: Int = -1
+
+    private val apiDelegate by lazy {
+        VideoApiDelegate(
+            context = requireContext(),
+            scope = lifecycleScope,
+            onError = { msg ->
+                view?.let {
+                    com.google.android.material.snackbar.Snackbar
+                        .make(it, msg, com.google.android.material.snackbar.Snackbar.LENGTH_SHORT)
+                        .show()
+                }
+            }
+        )
+    }
     private var patientAge: Int = 0
     private var snapshotsDir: File? = null
 
@@ -173,7 +189,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             patientAge = PatientUtils.calculateAge(patientDobUtc)
             sessionDir =
                 args.getString("sessionDirPath")?.takeIf { it.isNotBlank() }?.let { File(it) }
+            serverPatientId = args.getInt("patient_id", -1)
+            // Buat sesi di server segera setelah fragment siap
+            // (auto-skip jika serverPatientId == -1 / offline mode)
         }
+        apiDelegate.createSession(serverPatientId, patientRs)
 
         if (sessionDir == null) {
             val dateFolder = StorageUtils.todayDateFolderWIB()
@@ -779,6 +799,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         recordingJob?.cancel()
         runCatching { recorder.stop() }
         record.set(false)
+        videoOutputFile?.takeIf { it.exists() }?.let { apiDelegate.uploadVideo(it) }
         hudHandler.removeCallbacks(hudTick)
         binding.recordHud.visibility = View.GONE
         binding.btnRecordVideo.imageTintList =
@@ -852,9 +873,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }
         runCatching {
             StorageUtils.saveJpegWithPrefix(dir!!, processTextToBitmapSafe(bmp), prefix = "ss")
-        }.onSuccess {
+        }.onSuccess { savedFile ->
             Toast.makeText(requireContext(), "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT).show()
             refreshThumbs()
+            apiDelegate.uploadSnapshot(savedFile)   // ← BARU
         }.onFailure {
             Toast.makeText(requireContext(), "Gagal menyimpan: ${it.message}", Toast.LENGTH_LONG)
                 .show()
@@ -1024,7 +1046,9 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private fun showSaveConfirmDialog() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Konfirmasi").setMessage("Simpan media dan tutup sesi?")
-            .setPositiveButton("Simpan") { _, _ -> showSavingProgressAndExecute() }
+            .setPositiveButton("Simpan") { _, _ ->
+                apiDelegate.completeSession { showSavingProgressAndExecute() }
+            }
             .setNegativeButton("Batal", null).show()
     }
 

@@ -7,25 +7,32 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
+import com.idn.kmed.cervexa.network.TokenManager
 
 @SuppressLint("CustomSplashScreen")
 class SplashActivity : AppCompatActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ❌ Jangan pakai setContentView() di sini
-        // setContentView(R.layout.activity_splash)
-
-        val prefApps = getSharedPreferences(getString(R.string.pref_application), Context.MODE_PRIVATE)
-        val onBoarding = prefApps.getBoolean("on_boarding", false)
+        val prefApps =
+            getSharedPreferences(getString(R.string.pref_application), Context.MODE_PRIVATE)
+        val onBoardingDone = prefApps.getBoolean("on_boarding", false)
+        val tokenManager = TokenManager.getInstance(this)
 
         Handler(Looper.getMainLooper()).postDelayed({
-            if (onBoarding) {
-                startActivity(Intent(this, HomeActivity::class.java))
-            } else {
-                startActivity(Intent(this, OnboardingActivity::class.java))
+            val next: Intent = when {
+                // Onboarding belum selesai → tampil onboarding dulu
+                !onBoardingDone -> Intent(this, OnboardingActivity::class.java)
+
+                // Onboarding sudah, tapi belum login → wajib login
+                !tokenManager.isLoggedIn -> Intent(this, LoginActivity::class.java)
+
+                // Sudah login → langsung ke Home
+                else -> Intent(this, HomeActivity::class.java)
             }
+            startActivity(next)
             finish()
-        }, 3000)
+        }, 2_000L)
     }
 }

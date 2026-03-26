@@ -78,6 +78,21 @@ class VideoFragmentMobile : Fragment() {
     private var snapshotsDir: File? = null
     private var videosDir: File? = null
     private var isMetadataSaved = false
+    private var serverPatientId: Int = -1
+
+    private val apiDelegate by lazy {
+        VideoApiDelegate(
+            context = requireContext(),
+            scope = lifecycleScope,
+            onError = { msg ->
+                view?.let {
+                    com.google.android.material.snackbar.Snackbar
+                        .make(it, msg, com.google.android.material.snackbar.Snackbar.LENGTH_SHORT)
+                        .show()
+                }
+            }
+        )
+    }
 
     // ==== Encode / Flags ====
     private lateinit var recorder: RealtimeBitmapEncoder
@@ -150,9 +165,11 @@ class VideoFragmentMobile : Fragment() {
             patientNrm = args.getString("patient_nrm").orEmpty()
             patientDobUtc = args.getLong("patient_dob_utc", -1L)
             patientAge = PatientUtils.calculateAge(patientDobUtc)
+            serverPatientId = args.getInt("patient_id", -1)
             sessionDir =
                 args.getString("sessionDirPath")?.takeIf { it.isNotBlank() }?.let { File(it) }
         }
+        apiDelegate.createSession(serverPatientId, patientRs)
 
         if (sessionDir == null) {
             val dateFolder = StorageUtils.todayDateFolderWIB()
@@ -337,9 +354,11 @@ class VideoFragmentMobile : Fragment() {
                 R.id.action_info_pasien -> {
                     showPatientInfoBottomSheet(); true
                 }
+
                 R.id.action_pilih -> {
                     enterSelectionMode(); true
                 }
+
                 else -> false
             }
         }
@@ -534,6 +553,7 @@ class VideoFragmentMobile : Fragment() {
         val file = videoOutputFile; videoOutputFile = null
         if (file != null && file.exists()) {
             if (!isMetadataSaved) saveSessionMetadata()
+            apiDelegate.uploadVideo(file)
             Toast.makeText(requireContext(), "✅ VIDEO TERSIMPAN!", Toast.LENGTH_SHORT).show()
             binding.rvThumbs.postDelayed({ refreshThumbs() }, 300)
         } else {
@@ -580,8 +600,9 @@ class VideoFragmentMobile : Fragment() {
             }; return
         }
         runCatching { StorageUtils.saveJpegWithPrefix(dir!!, bmp, prefix = "ss") }
-            .onSuccess {
+            .onSuccess { savedFile ->
                 if (!isMetadataSaved) saveSessionMetadata()
+                apiDelegate.uploadSnapshot(savedFile)   // ← BARU: upload ke server (background)
                 requireActivity().runOnUiThread {
                     Toast.makeText(requireContext(), "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT)
                         .show()
@@ -652,7 +673,8 @@ class VideoFragmentMobile : Fragment() {
 
         // === Left-bottom info box (dynamic width) ===
         val infoTextW = paintText.measureText(info)
-        val infoBoxW = (infoTextW + pad * 2f).coerceAtMost(bitmap.width * 0.75f) // batasi supaya aman
+        val infoBoxW =
+            (infoTextW + pad * 2f).coerceAtMost(bitmap.width * 0.75f) // batasi supaya aman
         val infoLeft = 0f
         val infoRight = (infoLeft + infoBoxW).coerceAtMost(bitmap.width.toFloat())
         val infoTop = top // sejajarkan tinggi box bawah
@@ -900,8 +922,11 @@ class VideoFragmentMobile : Fragment() {
             .setTitle("Konfirmasi")
             .setMessage("Pastikan pekerjaan telah selesai, sebelum menyimpan media")
             .setNegativeButton("Kembali", null)
-            .setPositiveButton("Simpan") { _, _ -> showSavingProgressAndExecute() }
-            .create()
+            .setPositiveButton("Simpan") { _, _ ->
+                apiDelegate.completeSession {
+                    showSavingProgressAndExecute()
+                }
+            }.create()
             .also { it.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom); it.show() }
     }
 

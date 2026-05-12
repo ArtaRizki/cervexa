@@ -36,11 +36,9 @@ import com.idn.kmed.cervexa.record.RealtimeBitmapEncoder
 import com.idn.kmed.cervexa.utils.*
 import com.idn.kmed.cervexa.utils.PdfReportHelper
 import com.idn.kmed.cervexa.utils.PrintHelper
-import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.interfaces.IVLCVout
-import kotlinx.coroutines.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.time.ZonedDateTime
@@ -58,8 +56,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private lateinit var binding: FragmentVideoTvBinding
     private lateinit var liveViewModel: LiveViewModel
     private var ivVideoImageResolution = Pair(0, 0)
-    
-    private var viaModelHelper: com.idn.kmed.cervexa.ml.ViaModelHelper? = null
 
     // ==== Session / Storage ====
     private var sessionDir: File? = null
@@ -238,7 +234,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         super.onDestroyView()
         clockJob?.cancel()
         stopPhoneCamera()
-        viaModelHelper?.close()
         prefs.edit().apply {
             putFloat("image_brightness", brightness)
             putFloat("image_contrast", contrast)
@@ -297,8 +292,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     ): View {
         liveViewModel = ViewModelProvider(this)[LiveViewModel::class.java]
         binding = FragmentVideoTvBinding.inflate(inflater, container, false)
-        
-        viaModelHelper = com.idn.kmed.cervexa.ml.ViaModelHelper(requireContext())
 
         textureView = binding.textureView
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
@@ -782,8 +775,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                     }
 
                     if (sourceBmp != null && !sourceBmp.isRecycled) {
-                        val prob = viaModelHelper?.detectAbnormality(sourceBmp) ?: -1f
-                        val finalBmp = processTextToBitmapSafe(sourceBmp, prob)
+                        val finalBmp = processTextToBitmapSafe(sourceBmp)
                         recorder.submitBitmap(finalBmp)
                         if (finalBmp !== sourceBmp && sourceBmp !== poolBitmap && !sourceBmp.isRecycled) {
                             sourceBmp.recycle()
@@ -836,7 +828,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         lastOverlayTargetHeight = targetHeight
     }
 
-    private fun processTextToBitmapSafe(src: Bitmap, abnormalityProb: Float = -1f): Bitmap {
+    private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(bitmap)
 
@@ -855,23 +847,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
         canvas.drawText(info, padding, baselineY, paintText)
-
-        // === AI Detection Overlay ===
-        if (abnormalityProb >= 0f) {
-            val isAbnormal = abnormalityProb > 0.5f
-            val aiText = if (isAbnormal) "AI: ABNORMAL (${(abnormalityProb * 100).toInt()}%)" else "AI: NORMAL (${((1 - abnormalityProb) * 100).toInt()}%)"
-            
-            val aiPaintText = Paint(paintText).apply {
-                color = if (isAbnormal) Color.RED else Color.GREEN
-                isFakeBoldText = true
-                setShadowLayer(5f, 0f, 0f, Color.BLACK)
-            }
-            
-            val aiTextW = aiPaintText.measureText(aiText)
-            
-            // Draw AI status on top-right corner
-            canvas.drawText(aiText, bitmap.width - aiTextW - padding, padding + paintText.textSize, aiPaintText)
-        }
 
         return bitmap
     }
@@ -896,9 +871,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             Toast.makeText(requireContext(), "Gagal capture bitmap", Toast.LENGTH_SHORT)
                 .show(); return
         }
-        val prob = viaModelHelper?.detectAbnormality(bmp) ?: -1f
         runCatching {
-            StorageUtils.saveJpegWithPrefix(dir!!, processTextToBitmapSafe(bmp, prob), prefix = "ss")
+            StorageUtils.saveJpegWithPrefix(dir!!, processTextToBitmapSafe(bmp), prefix = "ss")
         }.onSuccess { savedFile ->
             Toast.makeText(requireContext(), "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT).show()
             refreshThumbs()

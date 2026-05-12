@@ -61,8 +61,6 @@ class VideoFragmentMobile : Fragment() {
     private lateinit var binding: FragmentVideoMobileBinding
     private lateinit var liveViewModel: LiveViewModel
 
-    private var viaModelHelper: com.idn.kmed.cervexa.ml.ViaModelHelper? = null
-
     // Frame terakhir — dilindungi lock hanya saat assignment
     private var lastBitmap: Bitmap? = null
     private val bitmapLock = Any()
@@ -207,8 +205,6 @@ class VideoFragmentMobile : Fragment() {
         binding.root.postDelayed({
             synchronized(bitmapLock) { lastBitmap?.recycle(); lastBitmap = null }
         }, 100)
-
-        viaModelHelper?.close()
     }
 
     override fun onResume() {
@@ -244,8 +240,6 @@ class VideoFragmentMobile : Fragment() {
     ): View {
         liveViewModel = ViewModelProvider(this)[LiveViewModel::class.java]
         binding = FragmentVideoMobileBinding.inflate(inflater, container, false)
-        
-        viaModelHelper = com.idn.kmed.cervexa.ml.ViaModelHelper(requireContext())
 
         binding.ivVideoImage.apply {
             setStatusListener(rtspStatusListener)
@@ -475,8 +469,7 @@ class VideoFragmentMobile : Fragment() {
                         b
                     }
 
-                    val prob = viaModelHelper?.detectAbnormality(workBitmap) ?: -1f
-                    val bmWithOverlay = processTextToBitmapSafe(workBitmap, prob)
+                    val bmWithOverlay = processTextToBitmapSafe(workBitmap)
 
                     if (record.get() && ::recorder.isInitialized) {
                         runCatching {
@@ -649,7 +642,7 @@ class VideoFragmentMobile : Fragment() {
         return (frameHeight * PADDING_SCALE).coerceIn(PADDING_MIN_PX, PADDING_MAX_PX)
     }
 
-    private fun processTextToBitmapSafe(src: Bitmap, abnormalityProb: Float = -1f): Bitmap {
+    private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         if (src.isRecycled) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(bitmap)
@@ -696,29 +689,6 @@ class VideoFragmentMobile : Fragment() {
         val infoDraw = ellipsizeToWidth(info, paintText, maxTextW)
 
         canvas.drawText(infoDraw, infoLeft + pad, baselineY, paintText)
-
-        // === AI Detection Overlay ===
-        if (abnormalityProb >= 0f) {
-            val isAbnormal = abnormalityProb > 0.5f
-            val aiText = if (isAbnormal) "AI: ABNORMAL (${(abnormalityProb * 100).toInt()}%)" else "AI: NORMAL (${((1 - abnormalityProb) * 100).toInt()}%)"
-            
-            val aiPaintText = Paint(paintText).apply {
-                color = if (isAbnormal) Color.RED else Color.GREEN
-                isFakeBoldText = true
-            }
-            
-            val aiTextW = aiPaintText.measureText(aiText)
-            val aiBoxW = aiTextW + (pad * 2f)
-            val aiBoxH = (aiPaintText.textSize + pad * 1.6f).coerceAtLeast(pad * 2.2f)
-            
-            val aiLeft = left // Sejajarkan dengan kotak tanggal (kanan)
-            val aiRight = right
-            val aiBottom = top // Di atas kotak tanggal
-            val aiTop = (aiBottom - aiBoxH).coerceAtLeast(0f)
-            
-            canvas.drawRect(aiLeft, aiTop, aiRight, aiBottom, paintBox)
-            canvas.drawText(aiText, aiLeft + pad, aiBottom - pad, aiPaintText)
-        }
 
         return bitmap
     }

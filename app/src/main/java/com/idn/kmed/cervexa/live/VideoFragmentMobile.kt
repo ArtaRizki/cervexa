@@ -173,7 +173,7 @@ class VideoFragmentMobile : Fragment() {
             sessionDir =
                 args.getString("sessionDirPath")?.takeIf { it.isNotBlank() }?.let { File(it) }
         }
-        apiDelegate.createSession(serverPatientId, patientRs)
+        // apiDelegate.createSession(serverPatientId, patientRs) // DIHAPUS - Seperti Commit 1665902
 
         if (sessionDir == null) {
             val dateFolder = StorageUtils.todayDateFolderWIB()
@@ -562,7 +562,7 @@ class VideoFragmentMobile : Fragment() {
         val file = videoOutputFile; videoOutputFile = null
         if (file != null && file.exists()) {
             if (!isMetadataSaved) saveSessionMetadata()
-            apiDelegate.uploadVideo(file)
+            // apiDelegate.uploadVideo(file) // DIHAPUS - Seperti Commit 1665902
             Toast.makeText(requireContext(), "✅ VIDEO TERSIMPAN!", Toast.LENGTH_SHORT).show()
             binding.rvThumbs.postDelayed({ refreshThumbs() }, 300)
         } else {
@@ -611,7 +611,7 @@ class VideoFragmentMobile : Fragment() {
         runCatching { StorageUtils.saveJpegWithPrefix(dir!!, bmp, prefix = "ss") }
             .onSuccess { savedFile ->
                 if (!isMetadataSaved) saveSessionMetadata()
-                apiDelegate.uploadSnapshot(savedFile)   // ← BARU: upload ke server (background)
+                // apiDelegate.uploadSnapshot(savedFile) // DIHAPUS - Seperti Commit 1665902
                 requireActivity().runOnUiThread {
                     Toast.makeText(requireContext(), "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT)
                         .show()
@@ -955,9 +955,7 @@ class VideoFragmentMobile : Fragment() {
             .setMessage("Pastikan pekerjaan telah selesai, sebelum menyimpan media")
             .setNegativeButton("Kembali", null)
             .setPositiveButton("Simpan") { _, _ ->
-                apiDelegate.completeSession {
-                    showSavingProgressAndExecute()
-                }
+                showSavingProgressAndExecute()
             }.create()
             .also { it.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom); it.show() }
     }

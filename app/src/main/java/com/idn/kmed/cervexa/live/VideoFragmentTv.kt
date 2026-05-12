@@ -194,10 +194,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             sessionDir =
                 args.getString("sessionDirPath")?.takeIf { it.isNotBlank() }?.let { File(it) }
             serverPatientId = args.getInt("patient_id", -1)
-            // Buat sesi di server segera setelah fragment siap
-            // (auto-skip jika serverPatientId == -1 / offline mode)
         }
-        apiDelegate.createSession(serverPatientId, patientRs)
+        // apiDelegate.createSession(serverPatientId, patientRs) // DIHAPUS - Seperti Commit 1665902
 
         if (sessionDir == null) {
             val dateFolder = StorageUtils.todayDateFolderWIB()
@@ -807,7 +805,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         recordingJob?.cancel()
         runCatching { recorder.stop() }
         record.set(false)
-        videoOutputFile?.takeIf { it.exists() }?.let { apiDelegate.uploadVideo(it) }
         hudHandler.removeCallbacks(hudTick)
         binding.recordHud.visibility = View.GONE
         binding.btnRecordVideo.imageTintList =
@@ -902,7 +899,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }.onSuccess { savedFile ->
             Toast.makeText(requireContext(), "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT).show()
             refreshThumbs()
-            apiDelegate.uploadSnapshot(savedFile)   // ← BARU
+            // apiDelegate.uploadSnapshot(savedFile) // DIHAPUS - Seperti Commit 1665902
         }.onFailure {
             Toast.makeText(requireContext(), "Gagal menyimpan: ${it.message}", Toast.LENGTH_LONG)
                 .show()
@@ -1073,7 +1070,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Konfirmasi").setMessage("Simpan media dan tutup sesi?")
             .setPositiveButton("Simpan") { _, _ ->
-                apiDelegate.completeSession { showSavingProgressAndExecute() }
+                showSavingProgressAndExecute()
             }
             .setNegativeButton("Batal", null).show()
     }

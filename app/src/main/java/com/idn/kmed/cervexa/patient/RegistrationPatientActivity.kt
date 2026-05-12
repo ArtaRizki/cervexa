@@ -10,15 +10,11 @@ import android.view.View
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.video.VideoActivity
-import com.idn.kmed.cervexa.network.ApiResult
-import com.idn.kmed.cervexa.network.CervexaRepository
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -42,9 +38,6 @@ class RegistrationPatientActivity : AppCompatActivity() {
         timeZone = TimeZone.getTimeZone("Asia/Jakarta")
     }
     private var selectedDobUtcMs: Long? = null
-
-    // ── API ─────────────────────────────────────────────────────────────────
-    private val repo by lazy { CervexaRepository.getInstance(this) }
 
     fun blockCenterKey(et: TextInputEditText) {
         et.setOnKeyListener { _, keyCode, event ->
@@ -104,70 +97,11 @@ class RegistrationPatientActivity : AppCompatActivity() {
         val nrm = etNrm.text?.toString()?.trim().orEmpty()
         val dob = selectedDobUtcMs ?: -1L
 
-        lifecycleScope.launch {
-            setLoading(true)
-
-            // Langkah 1: cek apakah NIK sudah terdaftar di server
-            when (val lookup = repo.lookupPatient(nik)) {
-                is ApiResult.Success -> {
-                    if (lookup.data.found && lookup.data.data != null) {
-                        // Pasien sudah ada → pakai ID-nya langsung
-                        val existing = lookup.data.data
-                        Toast.makeText(
-                            this@RegistrationPatientActivity,
-                            "Pasien ditemukan: ${existing.nama}",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        setLoading(false)
-                        openVideoActivity(
-                            patientId = existing.id,
-                            nama = existing.nama, nik = existing.nik,
-                            rs = existing.hospitalName.orEmpty(),
-                            nrm = existing.nrm.orEmpty(), dobUtcMs = dob
-                        )
-                    } else {
-                        // Langkah 2: pasien belum ada → daftarkan
-                        registerAndOpen(nama, nik, rs, nrm, dob)
-                    }
-                }
-
-                is ApiResult.Error -> {
-                    // Server tidak tersedia → coba register, fallback offline jika gagal
-                    registerAndOpen(nama, nik, rs, nrm, dob)
-                }
-            }
-        }
-    }
-
-    private suspend fun registerAndOpen(
-        nama: String, nik: String, rs: String, nrm: String, dobUtcMs: Long
-    ) {
-        when (val result = repo.storePatient(
-            nama, nik, rs,
-            nrm.ifBlank { null },
-            dobUtcMs.takeIf { it > 0 }
-        )) {
-            is ApiResult.Success -> {
-                setLoading(false)
-                openVideoActivity(
-                    patientId = result.data.id,
-                    nama = nama, nik = nik, rs = rs, nrm = nrm, dobUtcMs = dobUtcMs
-                )
-            }
-
-            is ApiResult.Error -> {
-                setLoading(false)
-                Toast.makeText(
-                    this,
-                    "Server tidak tersedia, lanjut mode offline",
-                    Toast.LENGTH_LONG
-                ).show()
-                openVideoActivity(
-                    patientId = -1,   // -1 = offline, belum tersinkron
-                    nama = nama, nik = nik, rs = rs, nrm = nrm, dobUtcMs = dobUtcMs
-                )
-            }
-        }
+        // Langsung buka video activity (Mode Offline - Seperti Commit 1665902)
+        openVideoActivity(
+            patientId = -1,
+            nama = nama, nik = nik, rs = rs, nrm = nrm, dobUtcMs = dob
+        )
     }
 
     private fun openVideoActivity(

@@ -2,18 +2,20 @@ import os
 import requests
 from bs4 import BeautifulSoup
 import time
+import re
 
-# Base URL for IARC Image Bank
+# Base URL for IARC Atlas
 BASE_URL = "https://screening.iarc.fr/"
-LIST_PAGE = "cervicalimagebank.php"
+ATLAS_URL = "https://screening.iarc.fr/atlasviadiag.php"
 
-# Categories to download
+# Categories mapping to our dataset folders
 CATEGORIES = {
-    "Normal": "Normal",
-    "CIN1": "CIN 1",
-    "CIN2": "CIN 2",
-    "CIN3": "CIN 3",
-    "Cancer": "Cancer"
+    "Negative": "normal",
+    "CIN1": "abnormal",
+    "CIN2": "abnormal",
+    "CIN3": "abnormal",
+    "Cancer": "abnormal",
+    "Positive": "abnormal"
 }
 
 OUTPUT_DIR = "dataset_combined"
@@ -24,61 +26,81 @@ def download_image(url, folder, filename):
     
     filepath = os.path.join(folder, filename)
     if os.path.exists(filepath):
+        # print(f"Skipping: {filename} (already exists)")
         return
     
     try:
-        response = requests.get(url, stream=True, timeout=10)
+        response = requests.get(url, stream=True, timeout=15)
         if response.status_code == 200:
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(1024):
                     f.write(chunk)
-            print(f"Downloaded: {filename}")
+            print(f"Downloaded: {filename} to {folder}")
         else:
             print(f"Failed to download {url}: {response.status_code}")
     except Exception as e:
         print(f"Error downloading {url}: {e}")
 
-def scrape_iarc():
-    print("Starting IARC Image Bank scraping...")
+def scrape_atlas():
+    print("Starting IARC VIA Atlas scraping...")
     
-    response = requests.get(BASE_URL + LIST_PAGE)
+    # Get the main atlas page
+    response = requests.get(ATLAS_URL)
     if response.status_code != 200:
-        print("Failed to access IARC website.")
+        print("Failed to access IARC atlas page.")
         return
     
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    # Find all links
-    links = soup.find_all('a')
+    # Find all links to atlasviadiag_detail.php
+    case_links = soup.find_all('a', href=re.compile(r'atlasviadiag_detail\.php\?Id='))
+    print(f"Found {len(case_links)} case links.")
     
-    for link in links:
-        category_name = link.text.strip()
-        if category_name in CATEGORIES.values():
-            folder_name = [k for k, v in CATEGORIES.items() if v == category_name][0]
-            category_url = BASE_URL + link.get('href')
+    for link in case_links:
+        href = link.get('href')
+        # Extract ID and FinalDiag from URL
+        # Example: atlasviadiag_detail.php?Id=AFC&FinalDiag=Negative
+        match_id = re.search(r'Id=([^&]+)', href)
+        match_diag = re.search(r'FinalDiag=([^&]+)', href)
+        
+        if not match_id or not match_diag:
+            continue
             
-            print(f"\nProcessing category: {category_name}")
-            
-            # Go to category page
-            cat_response = requests.get(category_url)
-            if cat_response.status_code != 200:
+        case_id = match_id.group(1)
+        diag = match_diag.group(1)
+        
+        # Map diagnosis to our categories
+        target_folder = "abnormal"
+        for key, folder in CATEGORIES.items():
+            if key.lower() in diag.lower():
+                target_folder = folder
+                break
+        
+        print(f"Processing Case {case_id} ({diag}) -> {target_folder}")
+        
+        # Go to case detail page to find images
+        detail_url = BASE_URL + href
+        try:
+            detail_res = requests.get(detail_url, timeout=10)
+            if detail_res.status_code != 200:
                 continue
             
-            cat_soup = BeautifulSoup(cat_response.text, 'html.parser')
+            detail_soup = BeautifulSoup(detail_res.text, 'html.parser')
             
-            # Find thumbnails
-            # Images are usually in <img src="pic/thumb/..."> and link to large images
-            img_links = cat_soup.find_all('a', href=lambda x: x and 'pic/' in x)
-            
-            for img_link in img_links:
-                img_url = BASE_URL + img_link.get('href')
-                img_name = img_url.split('/')[-1]
+            # Images are in <img src="viavilipic/...">
+            imgs = detail_soup.find_all('img', src=re.compile(r'viavilipic/'))
+            for img in imgs:
+                img_src = img.get('src')
+                img_url = BASE_URL + img_src
+                img_name = img_src.split('/')[-1]
                 
-                # Check if it's a direct image link
-                if img_url.endswith('.jpg') or img_url.endswith('.png'):
-                    target_subfolder = "normal" if folder_name == "Normal" else "abnormal"
-                    download_image(img_url, os.path.join(OUTPUT_DIR, target_subfolder), img_name)
-                    time.sleep(0.5) # Be polite
+                # Only download if it's likely a full image (not just small thumbs if any)
+                # But in this atlas, they seem to be the primary images
+                download_image(img_url, os.path.join(OUTPUT_DIR, target_folder), f"{case_id}_{img_name}")
+                time.sleep(0.2) # Polite delay
+                
+        except Exception as e:
+            print(f"Error processing case {case_id}: {e}")
 
 if __name__ == "__main__":
-    scrape_iarc()
+    scrape_atlas()

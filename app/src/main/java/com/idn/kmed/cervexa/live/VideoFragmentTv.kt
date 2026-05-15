@@ -858,19 +858,30 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
         // === AI Detection Overlay ===
         if (abnormalityProb >= 0f) {
-            val isAbnormal = abnormalityProb > 0.5f
-            val aiText = if (isAbnormal) "AI: ABNORMAL (${(abnormalityProb * 100).toInt()}%)" else "AI: NORMAL (${((1 - abnormalityProb) * 100).toInt()}%)"
-            
+            // Threshold klinis: lebih baik over-alert daripada miss kasus kanker
+            // > 0.55 = ABNORMAL (merah)
+            // 0.35 - 0.55 = SUSPECTED (kuning)
+            // < 0.35 = NORMAL (hijau)
+            val isAbnormal = abnormalityProb > 0.55f
+            val isSuspected = abnormalityProb in 0.35f..0.55f
+            val displayProb = if (isAbnormal || isSuspected) abnormalityProb else (1f - abnormalityProb)
+            val label = when {
+                isAbnormal  -> "AI: ABNORMAL (${(abnormalityProb * 100).toInt()}%)"
+                isSuspected -> "AI: DICURIGAI (${(abnormalityProb * 100).toInt()}%)"
+                else        -> "AI: NORMAL (${((1 - abnormalityProb) * 100).toInt()}%)"
+            }
+            val labelColor = when {
+                isAbnormal  -> Color.RED
+                isSuspected -> Color.YELLOW
+                else        -> Color.GREEN
+            }
             val aiPaintText = Paint(paintText).apply {
-                color = if (isAbnormal) Color.RED else Color.GREEN
+                color = labelColor
                 isFakeBoldText = true
                 setShadowLayer(5f, 0f, 0f, Color.BLACK)
             }
-            
-            val aiTextW = aiPaintText.measureText(aiText)
-            
-            // Draw AI status on top-right corner
-            canvas.drawText(aiText, bitmap.width - aiTextW - padding, padding + paintText.textSize, aiPaintText)
+            val aiTextW = aiPaintText.measureText(label)
+            canvas.drawText(label, bitmap.width - aiTextW - padding, padding + paintText.textSize, aiPaintText)
         }
 
         return bitmap

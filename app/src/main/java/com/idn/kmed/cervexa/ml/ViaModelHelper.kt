@@ -2,7 +2,7 @@ package com.idn.kmed.cervexa.ml
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Color
+import android.graphics.RectF
 import android.util.Log
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
@@ -12,9 +12,21 @@ import org.tensorflow.lite.support.image.ops.ResizeOp
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 import java.nio.MappedByteBuffer
 
+/**
+ * Wrapper around TFLite Interpreter for the VIA model (`via_model.tflite`).
+ *
+ * Responsibilities:
+ * - Load and manage the TFLite model lifecycle
+ * - Run inference on bitmap frames and return [AbnormalityResult.Detected]
+ * - Extract bounding box coordinates from model output (if supported)
+ * - Propagate exceptions to the caller (AiDetector handles fallback)
+ *
+ * This class does NOT handle fallback logic — that is the responsibility of [AiDetector].
+ */
 class ViaModelHelper(private val context: Context) {
     private var interpreter: Interpreter? = null
     private val modelName = "via_model.tflite"
+    private var isClosed = false
 
     // Based on EfficientNet input size
     private val imageSizeX = 224
@@ -31,84 +43,124 @@ class ViaModelHelper(private val context: Context) {
             options.setNumThreads(4)
             interpreter = Interpreter(tfliteModel, options)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Failed to load TFLite model: ${e.message}")
+            // Don't catch — interpreter remains null, detectAbnormality will throw
         }
     }
 
     /**
-     * Menjalankan deteksi. 
-     * Jika model TFLite belum siap (dummy), maka otomatis beralih ke Deteksi Warna (Acetowhite).
+     * Runs abnormality detection inference on the given bitmap.
+     *
+     * Returns [AbnormalityResult.Detected] containing classification label,
+     * confidence score, and bounding box (if the model output supports it).
+     *
+     * @param bitmap The input frame to analyze
+     * @return [AbnormalityResult.Detected] with inference results
+     * @throws IllegalStateException if the TFLite interpreter is not loaded
+     * @throws Exception if inference fails (propagated for AiDetector to handle fallback)
      */
-    fun detectAbnormality(bitmap: Bitmap): Float {
-        // Jika model masih dummy atau belum di-load, gunakan deteksi warna sebagai fallback
-        if (interpreter == null) {
-            return detectByColor(bitmap)
+    fun detectAbnormality(bitmap: Bitmap): AbnormalityResult.Detected {
+        val currentInterpreter = interpreter
+            ?: throw IllegalStateException("TFLite interpreter not loaded — model file may be missing or corrupted")
+
+        // Prepare input
+        var tensorImage = TensorImage(org.tensorflow.lite.DataType.FLOAT32)
+        tensorImage.load(bitmap)
+        tensorImage = imageProcessor.process(tensorImage)
+
+        // Prepare output buffer for confidence score
+        val outputBuffer = TensorBuffer.createFixedSize(
+            intArrayOf(1, 1),
+            org.tensorflow.lite.DataType.FLOAT32
+        )
+
+        // Run inference — exceptions propagate to AiDetector
+        currentInterpreter.run(tensorImage.buffer, outputBuffer.buffer.rewind())
+
+        val score = outputBuffer.floatArray[0]
+
+        // Classify based on threshold
+        val label = if (score > CLASSIFICATION_THRESHOLD) {
+            Classification.ABNORMAL
+        } else {
+            Classification.NORMAL
         }
+
+        // Extract bounding box from model output if available
+        val boundingBox = extractBoundingBox(currentInterpreter, label)
+
+        return AbnormalityResult.Detected(
+            label = label,
+            confidenceScore = score,
+            boundingBox = boundingBox,
+            isFallback = false
+        )
+    }
+
+    /**
+     * Attempts to extract bounding box coordinates from the model output.
+     *
+     * If the model has a second output tensor with shape [1, 4] (representing
+     * normalized coordinates [top, left, bottom, right]), it will be extracted.
+     * Otherwise returns null.
+     *
+     * Bounding box is only relevant for ABNORMAL classifications.
+     *
+     * @param interpreter The active TFLite interpreter
+     * @param label The classification result
+     * @return [RectF] with normalized coordinates (0-1), or null if not available/NORMAL
+     */
+    private fun extractBoundingBox(interpreter: Interpreter, label: Classification): RectF? {
+        if (label == Classification.NORMAL) return null
 
         return try {
-            // Prepare input
-            var tensorImage = TensorImage(org.tensorflow.lite.DataType.FLOAT32)
-            tensorImage.load(bitmap)
-            tensorImage = imageProcessor.process(tensorImage)
+            // Check if model has a second output tensor for bounding box
+            val outputTensorCount = interpreter.outputTensorCount
+            if (outputTensorCount < 2) return null
 
-            // Prepare output
-            val outputBuffer = TensorBuffer.createFixedSize(intArrayOf(1, 1), org.tensorflow.lite.DataType.FLOAT32)
+            val bboxTensor = interpreter.getOutputTensor(1)
+            val bboxShape = bboxTensor.shape()
 
-            // Run inference
-            interpreter?.run(tensorImage.buffer, outputBuffer.buffer.rewind())
-
-            outputBuffer.floatArray[0]
+            // Expected shape: [1, 4] for [top, left, bottom, right]
+            if (bboxShape.size == 2 && bboxShape[1] == 4) {
+                val bboxBuffer = TensorBuffer.createFixedSize(
+                    bboxShape,
+                    org.tensorflow.lite.DataType.FLOAT32
+                )
+                val coords = bboxBuffer.floatArray
+                // Coordinates are normalized [0, 1]: top, left, bottom, right
+                RectF(coords[1], coords[0], coords[3], coords[2])
+            } else {
+                null
+            }
         } catch (e: Exception) {
-            Log.e("ViaModelHelper", "TFLite Error: ${e.message}")
-            detectByColor(bitmap) // Fallback ke warna jika TFLite gagal
+            Log.d(TAG, "Bounding box extraction not supported by this model: ${e.message}")
+            null
         }
     }
 
     /**
-     * Deteksi Berdasarkan Warna (Acetowhite Detection).
-     * Mencari bercak putih tebal yang menjadi ciri khas lesi pra-kanker pada metode VIA.
+     * Closes the TFLite interpreter and releases resources.
+     *
+     * Safe to call multiple times — subsequent calls after the first are no-ops.
+     * If interpreter close fails, the error is logged and the interpreter reference
+     * is still cleared to prevent resource leaks.
      */
-    private fun detectByColor(bitmap: Bitmap): Float {
-        val width = bitmap.width
-        val height = bitmap.height
-        
-        // Sampling area tengah (fokus ke serviks)
-        val startX = (width * 0.25).toInt()
-        val endX = (width * 0.75).toInt()
-        val startY = (height * 0.25).toInt()
-        val endY = (height * 0.75).toInt()
-        
-        var whitePixels = 0
-        var totalPixels = 0
-        
-        // Sampling setiap 5 piksel agar ringan
-        for (y in startY until endY step 5) {
-            for (x in startX until endX step 5) {
-                val pixel = bitmap.getPixel(x, y)
-                val r = Color.red(pixel)
-                val g = Color.green(pixel)
-                val b = Color.blue(pixel)
-                
-                // Algoritma Acetowhite Sederhana: 
-                // Jaringan abnormal biasanya putih/abu terang (R, G, B tinggi & seimbang)
-                // Jaringan normal biasanya merah/pink (R >> G, B)
-                val isWhite = (r > 150 && g > 150 && b > 130 && Math.abs(r - g) < 45 && Math.abs(g - b) < 45)
-                if (isWhite) {
-                    whitePixels++
-                }
-                totalPixels++
-            }
+    fun close() {
+        if (isClosed) return
+        isClosed = true
+
+        try {
+            interpreter?.close()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing TFLite interpreter: ${e.message}")
+        } finally {
+            interpreter = null
         }
-        
-        if (totalPixels == 0) return 0f
-        val ratio = whitePixels.toFloat() / totalPixels.toFloat()
-        
-        // Skala: 15% area putih dianggap 100% abnormal (1.0)
-        return (ratio / 0.15f).coerceIn(0f, 1f)
     }
 
-    fun close() {
-        interpreter?.close()
-        interpreter = null
+    companion object {
+        private const val TAG = "ViaModelHelper"
+        const val CLASSIFICATION_THRESHOLD = 0.5f
     }
 }

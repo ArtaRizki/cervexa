@@ -116,7 +116,10 @@ object PdfReportHelper {
         startedAt: String?,
         completedAt: String?,
         snapshotFiles: List<File>,
-        videoFiles: List<File>
+        videoFiles: List<File>,
+        aiClassification: String? = null,
+        aiConfidenceScore: Float? = null,
+        aiIsFallback: Boolean = false
     ): File? = runCatching {
         val doc = PdfDocument()
         var pageNo = 1
@@ -136,6 +139,11 @@ object PdfReportHelper {
             cv, y, sessionId, sessionCode, startedAt, completedAt,
             snapshotFiles.size, videoFiles.size
         )
+
+        /* ── Section: AI Detection Results ────────────────────────────── */
+        if (aiClassification != null && aiConfidenceScore != null) {
+            y = drawAiResultBlock(cv, y, aiClassification, aiConfidenceScore, aiIsFallback)
+        }
 
         /* ── Section: Media ───────────────────────────────────────────── */
         if (snapshotFiles.isNotEmpty() || videoFiles.isNotEmpty()) {
@@ -381,6 +389,32 @@ object PdfReportHelper {
         val sizeTxt = "${file.length() / 1024} KB"
         cv.drawText(sizeTxt, M + 36f, y + h / 2f + 10f, pText(Color.parseColor("#B0BEC5"), 8f))
         return y + h + 8f
+    }
+
+    private fun drawAiResultBlock(
+        cv: Canvas, y: Float,
+        classification: String,
+        confidenceScore: Float,
+        isFallback: Boolean
+    ): Float {
+        var yy = y + 8f
+        yy = drawSectionTitle(cv, yy, "HASIL ANALISIS AI")
+
+        val displayPercentage = if (classification == "ABNORMAL") {
+            "${Math.round(confidenceScore * 100)}%"
+        } else {
+            "${Math.round((1 - confidenceScore) * 100)}%"
+        }
+
+        val methodLabel = if (isFallback) "Acetowhite Detection (Fallback)" else "VIA Model (TFLite)"
+
+        val rows = listOf(
+            "Klasifikasi" to classification,
+            "Confidence Score" to displayPercentage,
+            "Metode Analisis" to methodLabel
+        )
+        yy = drawTable(cv, yy, rows)
+        return yy
     }
 
     private fun drawFooter(cv: Canvas) {

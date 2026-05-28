@@ -780,7 +780,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                     }
 
                     if (sourceBmp != null && !sourceBmp.isRecycled) {
-                        val prob = viaModelHelper?.detectAbnormality(sourceBmp) ?: -1f
+                        val prob = try {
+                            val result = viaModelHelper?.detectAbnormality(sourceBmp)
+                            (result as? com.idn.kmed.cervexa.ml.AbnormalityResult.Detected)?.confidenceScore ?: -1f
+                        } catch (e: Exception) { -1f }
                         val finalBmp = processTextToBitmapSafe(sourceBmp, prob)
                         recorder.submitBitmap(finalBmp)
                         if (finalBmp !== sourceBmp && sourceBmp !== poolBitmap && !sourceBmp.isRecycled) {
@@ -904,7 +907,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             Toast.makeText(requireContext(), "Gagal capture bitmap", Toast.LENGTH_SHORT)
                 .show(); return
         }
-        val prob = viaModelHelper?.detectAbnormality(bmp) ?: -1f
+        val prob = try {
+            val result = viaModelHelper?.detectAbnormality(bmp)
+            (result as? com.idn.kmed.cervexa.ml.AbnormalityResult.Detected)?.confidenceScore ?: -1f
+        } catch (e: Exception) { -1f }
         runCatching {
             StorageUtils.saveJpegWithPrefix(dir!!, processTextToBitmapSafe(bmp, prob), prefix = "ss")
         }.onSuccess { savedFile ->

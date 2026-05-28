@@ -1,6 +1,7 @@
 package com.idn.kmed.cervexa.live
 
 import android.annotation.SuppressLint
+import android.content.ComponentCallbacks2
 import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -42,6 +43,7 @@ import com.idn.kmed.cervexa.utils.*
 import com.idn.kmed.cervexa.utils.PdfReportHelper
 import com.idn.kmed.cervexa.utils.PrintHelper
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -62,6 +64,36 @@ class VideoFragmentMobile : Fragment() {
     private lateinit var liveViewModel: LiveViewModel
  
     private var viaModelHelper: com.idn.kmed.cervexa.ml.ViaModelHelper? = null
+
+    // ==== AI Detection Components ====
+    private lateinit var analysisModeManager: com.idn.kmed.cervexa.ml.AnalysisModeManager
+    private var aiDetector: com.idn.kmed.cervexa.ml.AiDetector? = null
+    private val overlayRenderer = com.idn.kmed.cervexa.ml.OverlayRenderer()
+    private var latestAiResult: com.idn.kmed.cervexa.ml.AbnormalityResult =
+        com.idn.kmed.cervexa.ml.AbnormalityResult.Idle
+    private var aiResultObserverJob: Job? = null
+    private var analysisModeObserverJob: Job? = null
+
+    // ==== Low Memory Callback ====
+    private val memoryCallback = object : ComponentCallbacks2 {
+        override fun onConfigurationChanged(newConfig: Configuration) { /* no-op */ }
+        override fun onLowMemory() { /* handled by onTrimMemory */ }
+        override fun onTrimMemory(level: Int) {
+            if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+                Log.w(TAG, "Low memory detected (level=$level), deactivating AI AnalysisMode")
+                analysisModeManager.deactivate()
+                activity?.runOnUiThread {
+                    if (isAdded && context != null) {
+                        Toast.makeText(
+                            requireContext(),
+                            "AI dinonaktifkan: memori tidak cukup",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
 
     // Frame terakhir — dilindungi lock hanya saat assignment
     private var lastBitmap: Bitmap? = null
@@ -195,6 +227,22 @@ class VideoFragmentMobile : Fragment() {
 
         clockJob?.cancel()
         statisticsJob?.cancel()
+        aiResultObserverJob?.cancel()
+        analysisModeObserverJob?.cancel()
+
+        // Unregister low memory callback
+        try {
+            requireContext().applicationContext.unregisterComponentCallbacks(memoryCallback)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unregistering memory callback: ${e.message}")
+        }
+
+        // Stop AI analysis — robust cleanup: each step independent
+        try {
+            aiDetector?.stopAnalysis()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping AI analysis: ${e.message}")
+        }
 
         if (record.get()) stopVideoRecording()
         if (binding.ivVideoImage.isStarted()) binding.ivVideoImage.stop()
@@ -208,13 +256,19 @@ class VideoFragmentMobile : Fragment() {
             synchronized(bitmapLock) { lastBitmap?.recycle(); lastBitmap = null }
         }, 100)
 
-        viaModelHelper?.close()
+        // Close ViaModelHelper (handles Interpreter.close() failure internally with try-catch-finally)
+        try {
+            viaModelHelper?.close()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing ViaModelHelper: ${e.message}")
+        }
     }
 
     override fun onResume() {
         super.onResume()
         updateStatusBarColor()
         liveViewModel.loadParams(requireContext())
+        analysisModeManager.restore()
         if (!binding.ivVideoImage.isStarted()) startRtspStream()
         if (clockJob?.isActive != true) startOverlayClock()
     }
@@ -224,6 +278,7 @@ class VideoFragmentMobile : Fragment() {
         if (record.get()) stopVideoRecording()
         hudHandler.removeCallbacks(hudTick)
         binding.recordHud.visibility = View.GONE
+        analysisModeManager.persist()
         liveViewModel.saveParams(requireContext())
     }
 
@@ -246,6 +301,25 @@ class VideoFragmentMobile : Fragment() {
         binding = FragmentVideoMobileBinding.inflate(inflater, container, false)
         
         viaModelHelper = com.idn.kmed.cervexa.ml.ViaModelHelper(requireContext())
+
+        // Initialize AI Detection components
+        analysisModeManager = com.idn.kmed.cervexa.ml.AnalysisModeManager(prefs)
+        val acetowhiteDetector = com.idn.kmed.cervexa.ml.AcetowhiteDetector()
+        aiDetector = com.idn.kmed.cervexa.ml.AiDetector(
+            context = requireContext(),
+            viaModelHelper = viaModelHelper!!,
+            acetowhiteDetector = acetowhiteDetector,
+            analysisModeManager = analysisModeManager
+        )
+
+        // Observe AnalysisMode state changes to start/stop analysis
+        observeAnalysisMode()
+
+        // Observe AiDetector results for overlay rendering
+        observeAiResults()
+
+        // Register low memory callback
+        requireContext().applicationContext.registerComponentCallbacks(memoryCallback)
 
         binding.ivVideoImage.apply {
             setStatusListener(rtspStatusListener)
@@ -322,6 +396,14 @@ class VideoFragmentMobile : Fragment() {
             requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
         binding.btnSimpanCase.setOnClickListener { showSaveConfirmDialog() }
+
+        // AI Toggle button
+        binding.btnAiToggle.setOnClickListener {
+            analysisModeManager.toggle()
+        }
+
+        // Observe AnalysisMode state to update toggle UI
+        observeAiToggleUi()
 
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
@@ -475,8 +557,19 @@ class VideoFragmentMobile : Fragment() {
                         b
                     }
 
-                    val prob = viaModelHelper?.detectAbnormality(workBitmap) ?: -1f
-                    val bmWithOverlay = processTextToBitmapSafe(workBitmap, prob)
+                    // Submit frame to AiDetector when AnalysisMode is active
+                    if (analysisModeManager.isActive.value) {
+                        aiDetector?.submitFrame(workBitmap)
+                    }
+
+                    // Apply AI overlay if we have a detection result
+                    val bmWithOverlay = when (val result = latestAiResult) {
+                        is com.idn.kmed.cervexa.ml.AbnormalityResult.Detected -> {
+                            val overlaid = overlayRenderer.renderOverlay(workBitmap, result)
+                            processTextToBitmapSafe(overlaid)
+                        }
+                        else -> processTextToBitmapSafe(workBitmap)
+                    }
 
                     if (record.get() && ::recorder.isInitialized) {
                         runCatching {
@@ -649,7 +742,7 @@ class VideoFragmentMobile : Fragment() {
         return (frameHeight * PADDING_SCALE).coerceIn(PADDING_MIN_PX, PADDING_MAX_PX)
     }
 
-    private fun processTextToBitmapSafe(src: Bitmap, abnormalityProb: Float = -1f): Bitmap {
+    private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         if (src.isRecycled) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(bitmap)
@@ -697,28 +790,7 @@ class VideoFragmentMobile : Fragment() {
 
         canvas.drawText(infoDraw, infoLeft + pad, baselineY, paintText)
 
-        // === AI Detection Overlay ===
-        if (abnormalityProb >= 0f) {
-            val isAbnormal = abnormalityProb > 0.5f
-            val aiText = if (isAbnormal) "AI: ABNORMAL (${(abnormalityProb * 100).toInt()}%)" else "AI: NORMAL (${((1 - abnormalityProb) * 100).toInt()}%)"
-            
-            val aiPaintText = Paint(paintText).apply {
-                color = if (isAbnormal) Color.RED else Color.GREEN
-                isFakeBoldText = true
-            }
-            
-            val aiTextW = aiPaintText.measureText(aiText)
-            val aiBoxW = aiTextW + (pad * 2f)
-            val aiBoxH = (aiPaintText.textSize + pad * 1.6f).coerceAtLeast(pad * 2.2f)
-            
-            val aiLeft = left // Sejajarkan dengan kotak tanggal (kanan)
-            val aiRight = right
-            val aiBottom = top // Di atas kotak tanggal
-            val aiTop = (aiBottom - aiBoxH).coerceAtLeast(0f)
-            
-            canvas.drawRect(aiLeft, aiTop, aiRight, aiBottom, paintBox)
-            canvas.drawText(aiText, aiLeft + pad, aiBottom - pad, aiPaintText)
-        }
+        // AI overlay is now handled by OverlayRenderer — no inline AI drawing here
 
         return bitmap
     }
@@ -738,6 +810,110 @@ class VideoFragmentMobile : Fragment() {
         }
         val cut = (lo - 1).coerceAtLeast(0)
         return text.substring(0, cut) + ell
+    }
+
+    // =====================================================================
+    // AI DETECTION OBSERVERS
+    // =====================================================================
+
+    /**
+     * Observes AnalysisMode state to update the AI toggle button visual.
+     * ON state: green background, green text/icon, "AI ON" label.
+     * OFF state: gray background, gray text/icon, "AI OFF" label.
+     */
+    private fun observeAiToggleUi() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            analysisModeManager.isActive.collectLatest { isActive ->
+                updateAiToggleVisual(isActive)
+            }
+        }
+    }
+
+    /**
+     * Updates the AI toggle button visual based on active/inactive state.
+     */
+    private fun updateAiToggleVisual(isActive: Boolean) {
+        if (!isAdded || view == null) return
+        val colorActive = 0xFF00C853.toInt()   // Green
+        val colorInactive = 0xFF888888.toInt() // Gray
+
+        binding.btnAiToggle.setBackgroundResource(
+            if (isActive) R.drawable.bg_ai_toggle_on else R.drawable.bg_ai_toggle_off
+        )
+        binding.tvAiToggleLabel.text = if (isActive) "AI ON" else "AI OFF"
+        binding.tvAiToggleLabel.setTextColor(if (isActive) colorActive else colorInactive)
+        binding.ivAiIcon.setColorFilter(if (isActive) colorActive else colorInactive)
+    }
+
+    /**
+     * Observes AnalysisMode state changes to start/stop the AI analysis pipeline.
+     * When AnalysisMode is activated, starts the AiDetector consumer coroutine.
+     * When deactivated, stops analysis and resets the result to Idle.
+     *
+     * Note: We recreate AiDetector on re-activation because stopAnalysis() closes
+     * the channel permanently. This ensures clean state on each toggle cycle.
+     */
+    private fun observeAnalysisMode() {
+        analysisModeObserverJob?.cancel()
+        analysisModeObserverJob = viewLifecycleOwner.lifecycleScope.launch {
+            analysisModeManager.isActive.collectLatest { isActive ->
+                if (isActive) {
+                    // Recreate AiDetector to get a fresh channel if previous was closed
+                    val currentHelper = viaModelHelper
+                    if (currentHelper != null) {
+                        val acetowhiteDetector = com.idn.kmed.cervexa.ml.AcetowhiteDetector()
+                        aiDetector = com.idn.kmed.cervexa.ml.AiDetector(
+                            context = requireContext(),
+                            viaModelHelper = currentHelper,
+                            acetowhiteDetector = acetowhiteDetector,
+                            analysisModeManager = analysisModeManager
+                        )
+                        aiDetector?.startAnalysis(viewLifecycleOwner.lifecycleScope)
+                        observeAiResults()
+                        showAiLoadingIndicator(true)
+                    }
+                } else {
+                    aiDetector?.stopAnalysis()
+                    latestAiResult = com.idn.kmed.cervexa.ml.AbnormalityResult.Idle
+                    showAiLoadingIndicator(false)
+                }
+            }
+        }
+    }
+
+    /**
+     * Observes AiDetector result StateFlow to update the latest AI result
+     * used for overlay rendering on each frame.
+     */
+    private fun observeAiResults() {
+        aiResultObserverJob?.cancel()
+        aiResultObserverJob = viewLifecycleOwner.lifecycleScope.launch {
+            aiDetector?.result?.collectLatest { result ->
+                latestAiResult = result
+                // Hide loading indicator once we get a result
+                if (result !is com.idn.kmed.cervexa.ml.AbnormalityResult.Idle) {
+                    showAiLoadingIndicator(false)
+                }
+            }
+        }
+    }
+
+    /**
+     * Shows or hides a non-blocking loading indicator while AI is processing.
+     * Only shows when RTSP stream is active (first frame rendered) to avoid
+     * conflicting with RTSP connection loading state.
+     */
+    private fun showAiLoadingIndicator(show: Boolean) {
+        if (!isAdded || view == null) return
+        requireActivity().runOnUiThread {
+            // Only show AI loading if stream is active (shutter is hidden = first frame rendered)
+            if (show && binding.vShutterImage.visibility == View.GONE) {
+                binding.pbLoadingImage.visibility = View.VISIBLE
+            } else if (!show && analysisModeManager.isActive.value) {
+                // Hide only if we're in analysis mode (don't interfere with RTSP loading)
+                binding.pbLoadingImage.visibility = View.GONE
+            }
+        }
     }
 
     // =====================================================================
@@ -773,6 +949,22 @@ class VideoFragmentMobile : Fragment() {
                 put("nama", patientNama); put("nik", patientNik); put("nrm", patientNrm)
                 put("rs", patientRs); put("dob_utc", patientDobUtc)
                 put("saved_at", System.currentTimeMillis())
+
+                // AI Detection metadata
+                val aiResult = latestAiResult
+                if (aiResult is com.idn.kmed.cervexa.ml.AbnormalityResult.Detected) {
+                    put("ai_classification", aiResult.label.name)
+                    put("ai_confidence_score", aiResult.confidenceScore.toDouble())
+                    put("ai_is_fallback", aiResult.isFallback)
+                    if (aiResult.boundingBox != null) {
+                        put("ai_bounding_box", JSONObject().apply {
+                            put("left", aiResult.boundingBox.left.toDouble())
+                            put("top", aiResult.boundingBox.top.toDouble())
+                            put("right", aiResult.boundingBox.right.toDouble())
+                            put("bottom", aiResult.boundingBox.bottom.toDouble())
+                        })
+                    }
+                }
             }.toString(2))
             isMetadataSaved = true
         }.onFailure { Log.e(TAG, "session.json error", it) }
@@ -1045,6 +1237,12 @@ class VideoFragmentMobile : Fragment() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             val pdf = if (sessionOnly) {
+                // Extract AI result for report metadata
+                val aiResult = latestAiResult
+                val aiClassification = (aiResult as? com.idn.kmed.cervexa.ml.AbnormalityResult.Detected)?.label?.name
+                val aiScore = (aiResult as? com.idn.kmed.cervexa.ml.AbnormalityResult.Detected)?.confidenceScore
+                val aiIsFallback = (aiResult as? com.idn.kmed.cervexa.ml.AbnormalityResult.Detected)?.isFallback ?: false
+
                 PdfReportHelper.generateSessionPdf(
                     outputFile = outFile,
                     nama = patientNama.ifBlank { "—" },
@@ -1057,7 +1255,10 @@ class VideoFragmentMobile : Fragment() {
                     startedAt = null,
                     completedAt = null,
                     snapshotFiles = snaps,
-                    videoFiles = videos
+                    videoFiles = videos,
+                    aiClassification = aiClassification,
+                    aiConfidenceScore = aiScore,
+                    aiIsFallback = aiIsFallback
                 )
             } else {
                 PdfReportHelper.generatePatientPdf(

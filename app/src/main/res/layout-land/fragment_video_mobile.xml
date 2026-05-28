@@ -103,6 +103,41 @@
         app:layout_constraintTop_toTopOf="parent"
         app:tint="@android:color/white" />
 
+    <!-- AI Toggle Button -->
+    <LinearLayout
+        android:id="@+id/btnAiToggle"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_margin="20dp"
+        android:background="@drawable/bg_ai_toggle_off"
+        android:clickable="true"
+        android:elevation="6dp"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        app:layout_constraintEnd_toStartOf="@id/sideControls"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/ivAiIcon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_marginEnd="6dp"
+            android:contentDescription="AI Icon"
+            android:src="@drawable/ic_ai_toggle"
+            app:tint="#888888" />
+
+        <TextView
+            android:id="@+id/tvAiToggleLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="AI OFF"
+            android:textColor="#888888"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
     <!-- ✅ HUD Recording -->
     <LinearLayout
         android:id="@+id/recordHud"

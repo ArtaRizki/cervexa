@@ -22,39 +22,80 @@
             android:scaleType="centerInside"
             tools:src="@drawable/cervexa_logo"/>
 
-        <!-- Overlay bawah gambar -->
-<!--        <LinearLayout-->
-<!--            android:id="@+id/overlayImage"-->
-<!--            android:layout_width="match_parent"-->
-<!--            android:layout_height="36dp"-->
-<!--            android:layout_gravity="bottom"-->
-<!--            android:orientation="horizontal"-->
-<!--            android:gravity="center_vertical"-->
-<!--            android:paddingStart="8dp"-->
-<!--            android:paddingEnd="8dp"-->
-<!--            android:visibility="gone"-->
-<!--            android:background="@drawable/bg_overlay_bottom_rounded">-->
+        <!-- AI Analysis Button -->
+        <LinearLayout
+            android:id="@+id/btnAnalisisAi"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:background="@drawable/bg_ai_toggle_off"
+            android:clickable="true"
+            android:elevation="6dp"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp">
 
-<!--            <TextView-->
-<!--                android:id="@+id/tvInfoLeft"-->
-<!--                android:layout_width="0dp"-->
-<!--                android:layout_height="wrap_content"-->
-<!--                android:layout_weight="1"-->
-<!--                android:maxLines="1"-->
-<!--                android:ellipsize="end"-->
-<!--                android:textColor="@android:color/white"-->
-<!--                android:textSize="12sp"-->
-<!--                tools:text="Ferry Irwandi (35) 3211234567891043"/>-->
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="4dp"
+                android:contentDescription="AI Icon"
+                android:src="@drawable/ic_ai_toggle"
+                app:tint="#888888" />
 
-<!--            <TextView-->
-<!--                android:id="@+id/tvInfoRight"-->
-<!--                android:layout_width="wrap_content"-->
-<!--                android:layout_height="wrap_content"-->
-<!--                android:maxLines="1"-->
-<!--                android:textColor="@android:color/white"-->
-<!--                android:textSize="12sp"-->
-<!--                tools:text="17/06/2025 10:12:49"/>-->
-<!--        </LinearLayout>-->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Analisis AI"
+                android:textColor="#888888"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Remove Overlay Button (hidden by default) -->
+        <LinearLayout
+            android:id="@+id/btnHapusOverlay"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:background="@drawable/bg_ai_toggle_on"
+            android:clickable="true"
+            android:elevation="6dp"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="4dp"
+                android:contentDescription="AI Icon"
+                android:src="@drawable/ic_ai_toggle"
+                app:tint="#00C853" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Hapus Overlay"
+                android:textColor="#00C853"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- AI Loading Indicator -->
+        <ProgressBar
+            android:id="@+id/pbAiLoading"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:elevation="8dp"
+            android:visibility="gone" />
+
     </FrameLayout>
 
     <!-- VIDEO MODE -->

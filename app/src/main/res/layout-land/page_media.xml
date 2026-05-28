@@ -22,6 +22,80 @@
             android:scaleType="centerInside"
             tools:src="@drawable/cervexa_logo"/>
 
+        <!-- AI Analysis Button -->
+        <LinearLayout
+            android:id="@+id/btnAnalisisAi"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:background="@drawable/bg_ai_toggle_off"
+            android:clickable="true"
+            android:elevation="6dp"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="4dp"
+                android:contentDescription="AI Icon"
+                android:src="@drawable/ic_ai_toggle"
+                app:tint="#888888" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Analisis AI"
+                android:textColor="#888888"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Remove Overlay Button (hidden by default) -->
+        <LinearLayout
+            android:id="@+id/btnHapusOverlay"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:background="@drawable/bg_ai_toggle_on"
+            android:clickable="true"
+            android:elevation="6dp"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginEnd="4dp"
+                android:contentDescription="AI Icon"
+                android:src="@drawable/ic_ai_toggle"
+                app:tint="#00C853" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Hapus Overlay"
+                android:textColor="#00C853"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- AI Loading Indicator -->
+        <ProgressBar
+            android:id="@+id/pbAiLoading"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:elevation="8dp"
+            android:visibility="gone" />
+
         <!-- Overlay bawah gambar -->
         <LinearLayout
             android:id="@+id/overlayImage"

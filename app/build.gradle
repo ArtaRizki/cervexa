@@ -42,6 +42,12 @@ android {
         compose true
         buildConfig true
     }
+
+    testOptions {
+        unitTests.all {
+            it.useJUnitPlatform()
+        }
+    }
 }
 
 dependencies {
@@ -109,4 +115,15 @@ dependencies {
     // TensorFlow Lite for AI Inference
     implementation 'org.tensorflow:tensorflow-lite:2.14.0'
     implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
+
+    // Kotest for property-based testing
+    testImplementation 'io.kotest:kotest-runner-junit5:5.8.0'
+    testImplementation 'io.kotest:kotest-assertions-core:5.8.0'
+    testImplementation 'io.kotest:kotest-property:5.8.0'
+
+    // MockK for mocking
+    testImplementation 'io.mockk:mockk:1.13.8'
+
+    // Coroutines test support
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
 }

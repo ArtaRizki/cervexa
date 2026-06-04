@@ -19,7 +19,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:menu="@menu/menu_video_fragment"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:title="Cervexa Colposcope" />
+        app:title="Cervexa Colposcope (TKDN)" />
 
     <FrameLayout
         android:id="@+id/videoContainer"

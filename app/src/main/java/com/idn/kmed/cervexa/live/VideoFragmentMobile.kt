@@ -43,6 +43,15 @@ import com.idn.kmed.cervexa.utils.*
 import com.idn.kmed.cervexa.utils.PdfReportHelper
 import com.idn.kmed.cervexa.utils.PrintHelper
 import kotlinx.coroutines.*
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import android.widget.FrameLayout
+import android.view.ViewGroup
+import androidx.constraintlayout.widget.ConstraintLayout
+import android.Manifest
+import android.content.pm.PackageManager
 import kotlinx.coroutines.flow.collectLatest
 import org.json.JSONObject
 import java.io.File
@@ -73,6 +82,11 @@ class VideoFragmentMobile : Fragment() {
         com.idn.kmed.cervexa.ml.AbnormalityResult.Idle
     private var aiResultObserverJob: Job? = null
     private var analysisModeObserverJob: Job? = null
+
+    // ==== CameraX Components (Bypass for Mobile Demo) ====
+    private var usePhoneCamera = true
+    private var phoneCameraView: PreviewView? = null
+    private var cameraJob: Job? = null
 
     // ==== Low Memory Callback ====
     private val memoryCallback = object : ComponentCallbacks2 {
@@ -225,6 +239,13 @@ class VideoFragmentMobile : Fragment() {
         super.onDestroyView()
         if (allMediaItems.isNotEmpty() && !isMetadataSaved) saveSessionMetadata()
 
+        cameraJob?.cancel()
+        try {
+            stopPhoneCamera()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping camera on destroy: ${e.message}")
+        }
+
         clockJob?.cancel()
         statisticsJob?.cancel()
         aiResultObserverJob?.cancel()
@@ -269,12 +290,18 @@ class VideoFragmentMobile : Fragment() {
         updateStatusBarColor()
         liveViewModel.loadParams(requireContext())
         analysisModeManager.restore()
-        if (!binding.ivVideoImage.isStarted()) startRtspStream()
+        if (usePhoneCamera) {
+            checkAndStartPhoneCamera()
+        } else {
+            if (!binding.ivVideoImage.isStarted()) startRtspStream()
+        }
         if (clockJob?.isActive != true) startOverlayClock()
     }
 
     override fun onPause() {
         super.onPause()
+        cameraJob?.cancel()
+        if (usePhoneCamera) stopPhoneCamera()
         if (record.get()) stopVideoRecording()
         hudHandler.removeCallbacks(hudTick)
         binding.recordHud.visibility = View.GONE
@@ -380,10 +407,32 @@ class VideoFragmentMobile : Fragment() {
     }
 
     private fun setupButtons() {
+        binding.topAppBar.setOnLongClickListener {
+            usePhoneCamera = !usePhoneCamera
+            if (usePhoneCamera) {
+                if (binding.ivVideoImage.isStarted()) {
+                    binding.ivVideoImage.stop()
+                    statisticsJob?.cancel()
+                }
+                checkAndStartPhoneCamera()
+                Toast.makeText(requireContext(), "Mode: Kamera HP", Toast.LENGTH_SHORT).show()
+            } else {
+                cameraJob?.cancel()
+                stopPhoneCamera()
+                startRtspStream()
+                Toast.makeText(requireContext(), "Mode: RTSP (Alat)", Toast.LENGTH_SHORT).show()
+            }
+            true
+        }
+
         binding.bnStartStopImage?.setOnClickListener {
-            if (binding.ivVideoImage.isStarted()) {
-                binding.ivVideoImage.stop(); statisticsJob?.cancel()
-            } else startRtspStream()
+            if (usePhoneCamera) {
+                checkAndStartPhoneCamera()
+            } else {
+                if (binding.ivVideoImage.isStarted()) {
+                    binding.ivVideoImage.stop(); statisticsJob?.cancel()
+                } else startRtspStream()
+            }
         }
         binding.btnEnterLandscape?.setOnClickListener {
             requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -1111,7 +1160,7 @@ class VideoFragmentMobile : Fragment() {
         selectionMode = false
         binding.topAppBar.menu.clear()
         binding.topAppBar.inflateMenu(R.menu.menu_video_fragment)
-        binding.topAppBar.title = "Cervexa Colposcope"
+        binding.topAppBar.title = "Cervexa Colposcope (TKDN)"
         binding.topAppBar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_info_pasien -> {
@@ -1358,6 +1407,143 @@ class VideoFragmentMobile : Fragment() {
         })
         setOnTouchListener { _, ev ->
             sd.onTouchEvent(ev); td.onTouchEvent(ev); sd.isInProgress || scale > 1f
+        }
+    }
+
+    // =====================================================================
+    // CameraX Integrations for Smartphone Testing
+    // =====================================================================
+    
+    private val requestCameraPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            startPhoneCamera()
+        } else {
+            Toast.makeText(requireContext(), "Izin kamera diperlukan untuk demo", Toast.LENGTH_SHORT).show()
+            usePhoneCamera = false
+            startRtspStream()
+        }
+    }
+
+    private fun checkAndStartPhoneCamera() {
+        if (ContextCompat.checkSelfPermission(requireContext(), android.Manifest.permission.CAMERA)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            startPhoneCamera()
+        } else {
+            requestCameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun startPhoneCamera() {
+        if (!isAdded || view == null) return
+        
+        // Remove existing preview view if any
+        phoneCameraView?.let { binding.csVideoImage.removeView(it) }
+
+        // Create a PreviewView that matches the size of ivVideoImage
+        val pv = PreviewView(requireContext()).apply {
+            id = View.generateViewId()
+            layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.MATCH_CONSTRAINT,
+                androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.MATCH_CONSTRAINT
+            ).apply {
+                dimensionRatio = "16:9"
+                topToBottom = R.id.topAppBar
+                startToStart = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+            }
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+        }
+        phoneCameraView = pv
+        
+        // Add to ConstraintLayout behind other views (index 0)
+        binding.csVideoImage.addView(pv, 0)
+
+        // Bind CameraX
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
+        cameraProviderFuture.addListener({
+            try {
+                val cameraProvider = cameraProviderFuture.get()
+                val preview = Preview.Builder().build().also {
+                    it.setSurfaceProvider(pv.surfaceProvider)
+                }
+                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(viewLifecycleOwner, cameraSelector, preview)
+                
+                binding.tvStatusImage?.text = "CameraX Active"
+                binding.pbLoadingImage?.visibility = View.GONE
+                binding.vShutterImage?.visibility = View.GONE
+                
+                startCameraLoop()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to bind CameraX", e)
+                Toast.makeText(requireContext(), "Gagal membuka kamera: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }, ContextCompat.getMainExecutor(requireContext()))
+    }
+
+    private fun stopPhoneCamera() {
+        runCatching {
+            ProcessCameraProvider.getInstance(requireContext()).get().unbindAll()
+        }
+        phoneCameraView?.let { binding.csVideoImage.removeView(it) }
+        phoneCameraView = null
+        cameraJob?.cancel()
+    }
+
+    private fun startCameraLoop() {
+        cameraJob?.cancel()
+        cameraJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
+            val frameIntervalMs = 1000L / STB_FPS
+            while (isActive) {
+                val bitmap = withContext(Dispatchers.Main) {
+                    if (!isAdded) null else phoneCameraView?.bitmap
+                }
+                if (bitmap != null) {
+                    val workBitmap = synchronized(bitmapLock) {
+                        lastBitmap?.recycle()
+                        val b = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                        lastBitmap = b
+                        b
+                    }
+
+                    // Submit frame to AiDetector when AnalysisMode is active
+                    if (analysisModeManager.isActive.value) {
+                        aiDetector?.submitFrame(workBitmap)
+                    }
+
+                    // Apply AI overlay if we have a detection result
+                    val bmWithOverlay = when (val result = latestAiResult) {
+                        is com.idn.kmed.cervexa.ml.AbnormalityResult.Detected -> {
+                            val overlaid = overlayRenderer.renderOverlay(workBitmap, result)
+                            processTextToBitmapSafe(overlaid)
+                        }
+                        else -> processTextToBitmapSafe(workBitmap)
+                    }
+
+                    if (record.get() && ::recorder.isInitialized) {
+                        runCatching {
+                            recorder.submitBitmap(
+                                bmWithOverlay.copy(Bitmap.Config.ARGB_8888, false)
+                            )
+                        }.onFailure { Log.e(TAG, "submitBitmap error", it) }
+                    }
+
+                    if (ss.compareAndSet(true, false)) {
+                        processSnapshot(bmWithOverlay)
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        if (isAdded) {
+                            binding.ivVideoImage.setImageBitmap(bmWithOverlay)
+                        }
+                    }
+                }
+                delay(frameIntervalMs)
+            }
         }
     }
 

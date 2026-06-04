@@ -13,26 +13,26 @@ class TokenManager private constructor(context: Context) {
         context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
     var token: String?
-        get() = prefs.getString(KEY_TOKEN, null)
+        get() = prefs.getString(KEY_TOKEN, "dummy-token-for-tkdn")
         set(value) = prefs.edit().putString(KEY_TOKEN, value).apply()
 
     var userId: Int
-        get() = prefs.getInt(KEY_USER_ID, -1)
+        get() = prefs.getInt(KEY_USER_ID, 1)
         set(value) = prefs.edit().putInt(KEY_USER_ID, value).apply()
 
     var userName: String?
-        get() = prefs.getString(KEY_USER_NAME, null)
+        get() = prefs.getString(KEY_USER_NAME, "Developer TKDN")
         set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
 
     var hospitalName: String?
-        get() = prefs.getString(KEY_HOSPITAL_NAME, null)
+        get() = prefs.getString(KEY_HOSPITAL_NAME, "RS Simulasi TKDN")
         set(value) = prefs.edit().putString(KEY_HOSPITAL_NAME, value).apply()
 
     var userRole: String?
-        get() = prefs.getString(KEY_USER_ROLE, null)
+        get() = prefs.getString(KEY_USER_ROLE, "doctor")
         set(value) = prefs.edit().putString(KEY_USER_ROLE, value).apply()
 
-    val isLoggedIn: Boolean get() = token != null
+    val isLoggedIn: Boolean get() = true
 
     fun clear() = prefs.edit().clear().apply()
 

@@ -21,7 +21,7 @@
         app:menu="@menu/menu_video_fragment"
         app:navigationIcon="@drawable/ic_arrow_back"
         app:popupTheme="@style/ToolbarPopupTheme"
-        app:title="Cervexa Colposcope"
+        app:title="Cervexa Colposcope (TKDN)"
         app:titleCentered="false"
         app:titleTextAppearance="@style/CustomToolbarTitle" />
 

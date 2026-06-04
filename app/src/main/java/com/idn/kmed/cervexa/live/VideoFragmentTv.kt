@@ -1056,7 +1056,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         selectionMode = false
         binding.topAppBar.menu.clear()
         binding.topAppBar.inflateMenu(R.menu.menu_video_fragment)
-        binding.topAppBar.title = "Cervexa Colposcope"
+        binding.topAppBar.title = "Cervexa Colposcope (TKDN)"
         binding.topAppBar.setOnMenuItemClickListener {
             when (it.itemId) {
                 R.id.action_info_pasien -> showPatientInfoBottomSheet()

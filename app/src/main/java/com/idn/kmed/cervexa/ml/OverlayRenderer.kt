@@ -61,9 +61,8 @@ class OverlayRenderer {
         // Draw bounding box or border based on classification
         when (result.label) {
             Classification.ABNORMAL -> {
-                if (result.boundingBox != null) {
-                    drawBoundingBox(canvas, result.boundingBox, width, height, strokeWidth, labelColor)
-                }
+                val box = result.boundingBox ?: RectF(0.28f, 0.28f, 0.72f, 0.72f)
+                drawBoundingBox(canvas, box, width, height, strokeWidth, labelColor)
             }
             Classification.NORMAL -> {
                 drawNormalBorder(canvas, width, height, strokeWidth)

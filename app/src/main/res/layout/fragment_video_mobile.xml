@@ -48,7 +48,7 @@
         app:layout_constraintStart_toStartOf="@id/ivVideoImage"
         app:layout_constraintTop_toTopOf="@id/ivVideoImage" />
 
-    <com.alexvas.rtsp.widget.RtspImageView
+    <com.serenegiant.usb.widget.UVCCameraTextureView
         android:id="@+id/ivVideoImage"
         android:layout_width="0dp"
         android:layout_height="0dp"

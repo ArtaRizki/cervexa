@@ -24,12 +24,12 @@ import androidx.core.graphics.toColorInt
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
-import com.alexvas.rtsp.codec.VideoDecodeThread
-import com.alexvas.rtsp.widget.RtspDataListener
-import com.alexvas.rtsp.widget.RtspImageView
-import com.alexvas.rtsp.widget.RtspProcessor.Statistics
-import com.alexvas.rtsp.widget.RtspStatusListener
-import com.alexvas.rtsp.widget.toHexString
+import com.jiangdg.usbcamera.UVCCameraHelper
+import com.serenegiant.usb.CameraDialog
+import com.serenegiant.usb.USBMonitor
+import com.serenegiant.usb.common.AbstractUVCCameraHandler
+import com.serenegiant.usb.widget.CameraViewInterface
+import android.hardware.usb.UsbDevice
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
@@ -102,6 +102,11 @@ class VideoFragmentMobile : Fragment() {
     private var statisticsJob: Job? = null
     private var clockJob: Job? = null
     private var ivVideoImageResolution = Pair(0, 0)
+
+    private var mCameraHelper: UVCCameraHelper? = null
+    private var isRequest = false
+    private var isPreview = false
+    private var captureJob: Job? = null
 
     // ==== Session / Storage ====
     private var sessionDir: File? = null
@@ -245,12 +250,8 @@ class VideoFragmentMobile : Fragment() {
         }
 
         if (record.get()) stopVideoRecording()
-        if (binding.ivVideoImage.isStarted()) binding.ivVideoImage.stop()
-
-        binding.ivVideoImage.onRtspImageBitmapListener = null
-        binding.ivVideoImage.setStatusListener(null)
-        binding.ivVideoImage.setDataListener(null)
-        hudHandler.removeCallbacks(hudTick)
+        captureJob?.cancel()
+        mCameraHelper?.release()
 
         binding.root.postDelayed({
             synchronized(bitmapLock) { lastBitmap?.recycle(); lastBitmap = null }
@@ -269,7 +270,7 @@ class VideoFragmentMobile : Fragment() {
         updateStatusBarColor()
         liveViewModel.loadParams(requireContext())
         analysisModeManager.restore()
-        if (!binding.ivVideoImage.isStarted()) startRtspStream()
+        mCameraHelper?.registerUSB()
         if (clockJob?.isActive != true) startOverlayClock()
     }
 
@@ -278,6 +279,7 @@ class VideoFragmentMobile : Fragment() {
         if (record.get()) stopVideoRecording()
         hudHandler.removeCallbacks(hudTick)
         binding.recordHud.visibility = View.GONE
+        mCameraHelper?.unregisterUSB()
         analysisModeManager.persist()
         liveViewModel.saveParams(requireContext())
     }
@@ -321,13 +323,11 @@ class VideoFragmentMobile : Fragment() {
         // Register low memory callback
         requireContext().applicationContext.registerComponentCallbacks(memoryCallback)
 
-        binding.ivVideoImage.apply {
-            setStatusListener(rtspStatusListener)
-            setDataListener(rtspDataListener)
-            enablePinchZoom()
-            videoDecoderType = VideoDecodeThread.DecoderType.HARDWARE
-            videoRotation = prefs.getInt(KEY_CAMERA_ROTATION_DEG, 0)
-        }
+        binding.ivVideoImage.enablePinchZoom()
+
+        mCameraHelper = UVCCameraHelper.getInstance()
+        mCameraHelper?.initUSBMonitor(requireActivity(), binding.ivVideoImage as com.serenegiant.usb.widget.CameraViewInterface, listener)
+        startFrameCapture()
 
         setupGestureDetectors()
         setupButtons()
@@ -366,8 +366,9 @@ class VideoFragmentMobile : Fragment() {
                     dY: Float
                 ): Boolean {
                     if (currentScale > 1.01f) {
-                        val m = binding.ivVideoImage.imageMatrix ?: android.graphics.Matrix()
-                        m.postTranslate(-dX, -dY); binding.ivVideoImage.imageMatrix = m
+                        val tv = binding.ivVideoImage as com.serenegiant.usb.widget.UVCCameraTextureView
+                        val m = tv.getTransform(android.graphics.Matrix())
+                        m.postTranslate(-dX, -dY); tv.setTransform(m)
                     }; return true
                 }
             })
@@ -381,9 +382,13 @@ class VideoFragmentMobile : Fragment() {
 
     private fun setupButtons() {
         binding.bnStartStopImage?.setOnClickListener {
-            if (binding.ivVideoImage.isStarted()) {
-                binding.ivVideoImage.stop(); statisticsJob?.cancel()
-            } else startRtspStream()
+            if (isPreview) {
+                mCameraHelper?.stopPreview()
+                isPreview = false
+            } else {
+                mCameraHelper?.startPreview(binding.ivVideoImage as com.serenegiant.usb.widget.CameraViewInterface)
+                isPreview = true
+            }
         }
         binding.btnEnterLandscape?.setOnClickListener {
             requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -458,136 +463,99 @@ class VideoFragmentMobile : Fragment() {
     // RTSP STREAM
     // =====================================================================
 
-    private val rtspStatusListener = object : RtspStatusListener {
-        override fun onRtspStatusConnecting() {
-            binding.tvStatusImage?.text = "RTSP connecting..."
-            binding.pbLoadingImage.visibility = View.VISIBLE
-            binding.vShutterImage.visibility = View.VISIBLE
-        }
-
-        override fun onRtspStatusConnected() {
-            binding.tvStatusImage?.text = "RTSP connected ✓"
-            binding.bnStartStopImage?.text = "Stop RTSP"
-            setKeepScreenOn(true)
-        }
-
-        override fun onRtspStatusDisconnected() {
-            binding.tvStatusImage?.text = "RTSP disconnected"
-            binding.bnStartStopImage?.text = "Start RTSP"
-            binding.pbLoadingImage.visibility = View.GONE
-            binding.vShutterImage.apply { alpha = 1f; visibility = View.VISIBLE }
-            setKeepScreenOn(false)
-            synchronized(bitmapLock) { lastBitmap = null }
-        }
-
-        override fun onRtspStatusFailed(message: String?) {
-            if (context == null) return
-            onRtspStatusDisconnected()
-            binding.tvStatusImage?.text = "Error: $message"
-            binding.pbLoadingImage.visibility = View.GONE
-            Toast.makeText(requireContext(), "❌ RTSP gagal: $message", Toast.LENGTH_LONG).show()
-        }
-
-        override fun onRtspFirstFrameRendered() {
-            binding.pbLoadingImage.visibility = View.GONE
-            binding.vShutterImage.animate().alpha(0f).setDuration(250).withEndAction {
-                binding.vShutterImage.visibility = View.GONE; binding.vShutterImage.alpha = 1f
-            }.start()
-        }
-
-        override fun onRtspFrameSizeChanged(width: Int, height: Int) {
-            ivVideoImageResolution = Pair(width, height)
-            lastFrameSize = Pair(width, height)
-            ConstraintSet().apply {
-                clone(binding.csVideoImage)
-                setDimensionRatio(binding.ivVideoImage.id, "$width:$height")
-                applyTo(binding.csVideoImage)
-            }
-            currentScale = 1f
-            focusX = binding.ivVideoImage.width / 2f
-            focusY = binding.ivVideoImage.height / 2f
-            applyZoomMatrix()
-        }
-    }
-
-    private val rtspDataListener = object : RtspDataListener {
-        override fun onRtspDataApplicationDataReceived(
-            data: ByteArray,
-            offset: Int,
-            length: Int,
-            timestamp: Long
-        ) {
-            Log.i(
-                TAG,
-                "RTSP app data ($length bytes): ${
-                    data.toHexString(
-                        offset,
-                        offset + min(length, 25)
-                    )
-                }"
-            )
-        }
-    }
-
-    private fun startRtspStream() {
-        val rtspUrl = liveViewModel.rtspRequest.value
-        if (rtspUrl.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "❌ URL RTSP tidak valid", Toast.LENGTH_LONG)
-                .show(); return
-        }
-        binding.ivVideoImage.apply {
-            init(
-                uri = Uri.parse(rtspUrl),
-                username = liveViewModel.rtspUsername.value,
-                password = liveViewModel.rtspPassword.value,
-                userAgent = "cervexa-client-android"
-            )
-            videoDecoderType = if (prefs.getBoolean(KEY_USE_HW_DECODER, false))
-                VideoDecodeThread.DecoderType.HARDWARE else VideoDecodeThread.DecoderType.SOFTWARE
-            videoRotation = prefs.getInt(KEY_CAMERA_ROTATION_DEG, 0)
-
-            onRtspImageBitmapListener = object : RtspImageView.RtspImageBitmapListener {
-                override fun onRtspImageBitmapObtained(bitmap: Bitmap) {
-                    if (!isAdded || view == null) return
-
-                    val workBitmap: Bitmap = synchronized(bitmapLock) {
-                        lastBitmap?.recycle()
-                        val b = bitmap.copy(Bitmap.Config.ARGB_8888, true) // mutable!
-                        lastBitmap = b
-                        b
-                    }
-
-                    // Submit frame to AiDetector when AnalysisMode is active
-                    if (analysisModeManager.isActive.value) {
-                        aiDetector?.submitFrame(workBitmap)
-                    }
-
-                    // Apply AI overlay if we have a detection result
-                    val bmWithOverlay = when (val result = latestAiResult) {
-                        is com.idn.kmed.cervexa.ml.AbnormalityResult.Detected -> {
-                            val overlaid = overlayRenderer.renderOverlay(workBitmap, result)
-                            processTextToBitmapSafe(overlaid)
-                        }
-                        else -> processTextToBitmapSafe(workBitmap)
-                    }
-
-                    if (record.get() && ::recorder.isInitialized) {
-                        runCatching {
-                            recorder.submitBitmap(
-                                bmWithOverlay.copy(Bitmap.Config.ARGB_8888, false)
-                            )
-                        }.onFailure { Log.e(TAG, "submitBitmap error", it) }
-                    }
-
-                    if (ss.compareAndSet(true, false)) {
-                        processSnapshot(bmWithOverlay)
-                    }
+    private val listener = object : UVCCameraHelper.OnMyDevConnectListener {
+        override fun onAttachDev(device: UsbDevice?) {
+            if (!isRequest) {
+                isRequest = true
+                if (mCameraHelper != null) {
+                    mCameraHelper!!.requestPermission(0)
                 }
             }
-
-            start(requestVideo = true, requestAudio = false, requestApplication = false)
         }
-        startStatisticsJob()
+        override fun onDettachDev(device: UsbDevice?) {
+            if (isRequest) {
+                isRequest = false
+                mCameraHelper?.closeCamera()
+            }
+        }
+        override fun onConnectDev(device: UsbDevice?, isConnected: Boolean) {
+            if (!isConnected) {
+                activity?.runOnUiThread {
+                    Toast.makeText(context, "Gagal konek USB Camera", Toast.LENGTH_SHORT).show()
+                    binding.tvStatusImage?.text = "Error: connect failed"
+                    binding.pbLoadingImage?.visibility = View.GONE
+                }
+                isPreview = false
+            } else {
+                isPreview = true
+                activity?.runOnUiThread {
+                    binding.tvStatusImage?.text = "UVC connected ✓"
+                    binding.bnStartStopImage?.text = "Stop UVC"
+                    binding.pbLoadingImage?.visibility = View.GONE
+                    binding.vShutterImage?.visibility = View.GONE
+                    setKeepScreenOn(true)
+                }
+            }
+        }
+        override fun onDisConnectDev(device: UsbDevice?) {
+            activity?.runOnUiThread {
+                binding.tvStatusImage?.text = "UVC disconnected"
+                binding.bnStartStopImage?.text = "Start UVC"
+                setKeepScreenOn(false)
+            }
+            isPreview = false
+        }
+    }
+
+    private fun startFrameCapture() {
+        captureJob?.cancel()
+        captureJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
+            while (isActive) {
+                val tv = binding.ivVideoImage as? com.serenegiant.usb.widget.UVCCameraTextureView
+                if (isPreview && tv?.isAvailable == true) {
+                    val bitmap = tv.bitmap
+                    if (bitmap != null) {
+                        processFrame(bitmap)
+                    }
+                }
+                delay(66) // ~15 FPS
+            }
+        }
+    }
+
+    private fun processFrame(bitmap: Bitmap) {
+        if (!isAdded || view == null) return
+
+        val workBitmap: Bitmap = synchronized(bitmapLock) {
+            lastBitmap?.recycle()
+            val b = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+            lastBitmap = b
+            b
+        }
+
+        if (analysisModeManager.isActive.value) {
+            aiDetector?.submitFrame(workBitmap)
+        }
+
+        val bmWithOverlay = when (val result = latestAiResult) {
+            is com.idn.kmed.cervexa.ml.AbnormalityResult.Detected -> {
+                val overlaid = overlayRenderer.renderOverlay(workBitmap, result)
+                processTextToBitmapSafe(overlaid)
+            }
+            else -> processTextToBitmapSafe(workBitmap)
+        }
+
+        if (record.get() && ::recorder.isInitialized) {
+            runCatching {
+                recorder.submitBitmap(
+                    bmWithOverlay.copy(Bitmap.Config.ARGB_8888, false)
+                )
+            }.onFailure { Log.e(TAG, "submitBitmap error", it) }
+        }
+
+        if (ss.compareAndSet(true, false)) {
+            processSnapshot(bmWithOverlay)
+        }
     }
 
     // =====================================================================
@@ -669,7 +637,7 @@ class VideoFragmentMobile : Fragment() {
     // =====================================================================
 
     private fun onSnapshotClicked() {
-        if (!binding.ivVideoImage.isStarted()) {
+        if (!isPreview) {
             Toast.makeText(requireContext(), "⚠️ Stream belum aktif", Toast.LENGTH_LONG)
                 .show(); return
         }
@@ -921,20 +889,7 @@ class VideoFragmentMobile : Fragment() {
     // =====================================================================
 
     private fun startStatisticsJob() {
-        statisticsJob?.cancel()
-        statisticsJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
-            while (isActive) {
-                if (binding.ivVideoImage.isStarted()) {
-                    val s: Statistics = binding.ivVideoImage.statistics
-                    binding.tvStatistics2?.text =
-                        "Decoder: ${s.videoDecoderType.toString().lowercase()} " +
-                                "${if (s.videoDecoderName.isNullOrEmpty()) "" else "(${s.videoDecoderName})"}\n" +
-                                "Latency: ${s.videoDecoderLatencyMsec}ms\n" +
-                                "Resolution: ${ivVideoImageResolution.first}×${ivVideoImageResolution.second}"
-                }
-                delay(1000)
-            }
-        }
+        // Obsolete
     }
 
     // =====================================================================
@@ -978,9 +933,10 @@ class VideoFragmentMobile : Fragment() {
         if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
 
     private fun applyZoomMatrix() {
+        val tv = binding.ivVideoImage as? com.serenegiant.usb.widget.UVCCameraTextureView
         val m = android.graphics.Matrix()
         m.postScale(currentScale, currentScale, focusX, focusY)
-        binding.ivVideoImage.imageMatrix = m
+        tv?.setTransform(m)
     }
 
     private fun setKeepScreenOn(enable: Boolean) {
@@ -1012,7 +968,8 @@ class VideoFragmentMobile : Fragment() {
 
     private fun stopStreamAndExit() {
         stopVideoRecording()
-        if (binding.ivVideoImage.isStarted()) binding.ivVideoImage.stop()
+        mCameraHelper?.release()
+        captureJob?.cancel()
         statisticsJob?.cancel()
         binding.vShutterImage.apply { alpha = 1f; visibility = View.VISIBLE }
         startActivity(Intent(requireContext(), HomeActivity::class.java).apply {

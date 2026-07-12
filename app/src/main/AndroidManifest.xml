@@ -37,6 +37,7 @@
 
     <uses-feature android:name="android.hardware.camera.any"
         android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" />
 
     <uses-sdk
         android:minSdkVersion="21"

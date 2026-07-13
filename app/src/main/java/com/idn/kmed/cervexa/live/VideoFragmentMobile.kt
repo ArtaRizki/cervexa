@@ -666,15 +666,6 @@ class VideoFragmentMobile : Fragment() {
                         continue
                     }
 
-                    // Tahan frame rate (throttle) agar tidak mencekik UI thread & VLC
-                    val now = System.nanoTime()
-                    val sleepNs = nextFrameNs - now
-                    if (sleepNs > 0) {
-                        delay(sleepNs / 1_000_000)
-                    }
-                    nextFrameNs += frameIntervalNs
-                    if (nextFrameNs < System.nanoTime()) nextFrameNs = System.nanoTime() + frameIntervalNs
-
                     val sourceBmp = withContext(Dispatchers.Main) {
                         if (!isAdded || textureView == null) return@withContext null
                         if (poolBitmap == null || poolBitmap!!.isRecycled) {
@@ -714,12 +705,14 @@ class VideoFragmentMobile : Fragment() {
                         bmWithOverlay.recycle()
                     }
 
-                    val now = System.nanoTime()
-                    if (now < nextFrameNs) {
-                        val waitMs = (nextFrameNs - now) / 1_000_000
+                    val loopEndNs = System.nanoTime()
+                    if (loopEndNs < nextFrameNs) {
+                        val waitMs = (nextFrameNs - loopEndNs) / 1_000_000
                         if (waitMs > 0) delay(waitMs)
                     }
                     nextFrameNs += frameIntervalNs
+                    // Cegah nextFrameNs tertinggal jauh yang menyebabkan loop berjalan tanpa delay
+                    if (nextFrameNs < System.nanoTime()) nextFrameNs = System.nanoTime() + frameIntervalNs
                 }
             } catch (e: Exception) {
                 if (e !is CancellationException) Log.e(TAG, "Frame grabber error", e)

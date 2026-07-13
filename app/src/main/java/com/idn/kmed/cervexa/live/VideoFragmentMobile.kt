@@ -24,12 +24,6 @@ import androidx.core.graphics.toColorInt
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
-import com.alexvas.rtsp.codec.VideoDecodeThread
-import com.alexvas.rtsp.widget.RtspDataListener
-import com.alexvas.rtsp.widget.RtspImageView
-import com.alexvas.rtsp.widget.RtspProcessor.Statistics
-import com.alexvas.rtsp.widget.RtspStatusListener
-import com.alexvas.rtsp.widget.toHexString
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
@@ -45,6 +39,10 @@ import com.idn.kmed.cervexa.utils.PrintHelper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import org.json.JSONObject
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IVLCVout
 import java.io.File
 import java.text.SimpleDateFormat
 import java.time.ZonedDateTime
@@ -95,13 +93,19 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    // Frame terakhir — dilindungi lock hanya saat assignment
-    private var lastBitmap: Bitmap? = null
-    private val bitmapLock = Any()
-
-    private var statisticsJob: Job? = null
-    private var clockJob: Job? = null
+    // ==== VLC Player ====
+    private var libVlc: LibVLC? = null
+    private var mediaPlayer: MediaPlayer? = null
+    private var textureView: android.view.TextureView? = null
     private var ivVideoImageResolution = Pair(0, 0)
+    private var baseScaleVlc = 1f
+    private var baseTxVlc = 0f
+    private var baseTyVlc = 0f
+    private var panTxVlc = 0f
+    private var panTyVlc = 0f
+
+    private var clockJob: Job? = null
+    private var liveFrameJob: Job? = null
 
     // ==== Session / Storage ====
     private var sessionDir: File? = null
@@ -226,18 +230,16 @@ class VideoFragmentMobile : Fragment() {
         if (allMediaItems.isNotEmpty() && !isMetadataSaved) saveSessionMetadata()
 
         clockJob?.cancel()
-        statisticsJob?.cancel()
+        liveFrameJob?.cancel()
         aiResultObserverJob?.cancel()
         analysisModeObserverJob?.cancel()
 
-        // Unregister low memory callback
         try {
             requireContext().applicationContext.unregisterComponentCallbacks(memoryCallback)
         } catch (e: Exception) {
             Log.e(TAG, "Error unregistering memory callback: ${e.message}")
         }
 
-        // Stop AI analysis — robust cleanup: each step independent
         try {
             aiDetector?.stopAnalysis()
         } catch (e: Exception) {
@@ -245,18 +247,9 @@ class VideoFragmentMobile : Fragment() {
         }
 
         if (record.get()) stopVideoRecording()
-        if (binding.ivVideoImage.isStarted()) binding.ivVideoImage.stop()
-
-        binding.ivVideoImage.onRtspImageBitmapListener = null
-        binding.ivVideoImage.setStatusListener(null)
-        binding.ivVideoImage.setDataListener(null)
+        stopVlcStream()
         hudHandler.removeCallbacks(hudTick)
 
-        binding.root.postDelayed({
-            synchronized(bitmapLock) { lastBitmap?.recycle(); lastBitmap = null }
-        }, 100)
-
-        // Close ViaModelHelper (handles Interpreter.close() failure internally with try-catch-finally)
         try {
             viaModelHelper?.close()
         } catch (e: Exception) {
@@ -269,7 +262,7 @@ class VideoFragmentMobile : Fragment() {
         updateStatusBarColor()
         liveViewModel.loadParams(requireContext())
         analysisModeManager.restore()
-        if (!binding.ivVideoImage.isStarted()) startRtspStream()
+        if (mediaPlayer?.isPlaying != true) startVlcStream()
         if (clockJob?.isActive != true) startOverlayClock()
     }
 
@@ -280,12 +273,14 @@ class VideoFragmentMobile : Fragment() {
         binding.recordHud.visibility = View.GONE
         analysisModeManager.persist()
         liveViewModel.saveParams(requireContext())
+        stopVlcStream()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         binding.tvOverlayInfo.text = overlayInfoText()
         updateStatusBarColor()
+        binding.videoContainer.postDelayed({ reattachVlcViews() }, 300)
         if (clockJob?.isActive != true) startOverlayClock()
     }
 
@@ -299,10 +294,9 @@ class VideoFragmentMobile : Fragment() {
     ): View {
         liveViewModel = ViewModelProvider(this)[LiveViewModel::class.java]
         binding = FragmentVideoMobileBinding.inflate(inflater, container, false)
-        
+
         viaModelHelper = com.idn.kmed.cervexa.ml.ViaModelHelper(requireContext())
 
-        // Initialize AI Detection components
         analysisModeManager = com.idn.kmed.cervexa.ml.AnalysisModeManager(prefs)
         val acetowhiteDetector = com.idn.kmed.cervexa.ml.AcetowhiteDetector()
         aiDetector = com.idn.kmed.cervexa.ml.AiDetector(
@@ -312,22 +306,12 @@ class VideoFragmentMobile : Fragment() {
             analysisModeManager = analysisModeManager
         )
 
-        // Observe AnalysisMode state changes to start/stop analysis
         observeAnalysisMode()
-
-        // Observe AiDetector results for overlay rendering
         observeAiResults()
-
-        // Register low memory callback
         requireContext().applicationContext.registerComponentCallbacks(memoryCallback)
 
-        binding.ivVideoImage.apply {
-            setStatusListener(rtspStatusListener)
-            setDataListener(rtspDataListener)
-            enablePinchZoom()
-            videoDecoderType = VideoDecodeThread.DecoderType.HARDWARE
-            videoRotation = prefs.getInt(KEY_CAMERA_ROTATION_DEG, 0)
-        }
+        // Ambil TextureView dari layout
+        textureView = binding.root.findViewById(R.id.textureView)
 
         setupGestureDetectors()
         setupButtons()
@@ -347,7 +331,7 @@ class VideoFragmentMobile : Fragment() {
             object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScale(d: ScaleGestureDetector): Boolean {
                     currentScale = (currentScale * d.scaleFactor).coerceIn(minScale, maxScale)
-                    focusX = d.focusX; focusY = d.focusY; applyZoomMatrix(); return true
+                    focusX = d.focusX; focusY = d.focusY; applyZoomAndPan(); return true
                 }
             })
         gestureDetector = GestureDetector(
@@ -356,7 +340,7 @@ class VideoFragmentMobile : Fragment() {
                 override fun onDown(e: MotionEvent): Boolean = true
                 override fun onDoubleTap(e: MotionEvent): Boolean {
                     currentScale = if (currentScale > 1.01f) 1f else 2f
-                    focusX = e.x; focusY = e.y; applyZoomMatrix(); return true
+                    focusX = e.x; focusY = e.y; applyZoomAndPan(); return true
                 }
 
                 override fun onScroll(
@@ -366,8 +350,8 @@ class VideoFragmentMobile : Fragment() {
                     dY: Float
                 ): Boolean {
                     if (currentScale > 1.01f) {
-                        val m = binding.ivVideoImage.imageMatrix ?: android.graphics.Matrix()
-                        m.postTranslate(-dX, -dY); binding.ivVideoImage.imageMatrix = m
+                        panTxVlc -= dX; panTyVlc -= dY
+                        applyZoomAndPan()
                     }; return true
                 }
             })
@@ -375,15 +359,14 @@ class VideoFragmentMobile : Fragment() {
         val touch = View.OnTouchListener { _, ev ->
             scaleDetector.onTouchEvent(ev); gestureDetector.onTouchEvent(ev); true
         }
-        binding.ivVideoImage.setOnTouchListener(touch)
+        binding.videoContainer.setOnTouchListener(touch)
         binding.vShutterImage.setOnTouchListener(touch)
     }
 
     private fun setupButtons() {
         binding.bnStartStopImage?.setOnClickListener {
-            if (binding.ivVideoImage.isStarted()) {
-                binding.ivVideoImage.stop(); statisticsJob?.cancel()
-            } else startRtspStream()
+            if (mediaPlayer?.isPlaying == true) stopVlcStream()
+            else startVlcStream()
         }
         binding.btnEnterLandscape?.setOnClickListener {
             requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -397,20 +380,13 @@ class VideoFragmentMobile : Fragment() {
         }
         binding.btnSimpanCase.setOnClickListener { showSaveConfirmDialog() }
 
-        // AI Toggle button
-        binding.btnAiToggle.setOnClickListener {
-            analysisModeManager.toggle()
-        }
-
-        // Observe AnalysisMode state to update toggle UI
+        binding.btnAiToggle.setOnClickListener { analysisModeManager.toggle() }
         observeAiToggleUi()
 
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(true) {
-                override fun handleOnBackPressed() {
-                    showExitConfirmDialog()
-                }
+                override fun handleOnBackPressed() { showExitConfirmDialog() }
             })
         binding.topAppBar.setNavigationOnClickListener { showExitConfirmDialog() }
     }
@@ -455,139 +431,161 @@ class VideoFragmentMobile : Fragment() {
     }
 
     // =====================================================================
-    // RTSP STREAM
+    // VLC STREAM  (low-latency: 100ms cache, drop-late-frames)
     // =====================================================================
 
-    private val rtspStatusListener = object : RtspStatusListener {
-        override fun onRtspStatusConnecting() {
-            binding.tvStatusImage?.text = "RTSP connecting..."
-            binding.pbLoadingImage.visibility = View.VISIBLE
-            binding.vShutterImage.visibility = View.VISIBLE
-        }
-
-        override fun onRtspStatusConnected() {
-            binding.tvStatusImage?.text = "RTSP connected ✓"
-            binding.bnStartStopImage?.text = "Stop RTSP"
-            setKeepScreenOn(true)
-        }
-
-        override fun onRtspStatusDisconnected() {
-            binding.tvStatusImage?.text = "RTSP disconnected"
-            binding.bnStartStopImage?.text = "Start RTSP"
-            binding.pbLoadingImage.visibility = View.GONE
-            binding.vShutterImage.apply { alpha = 1f; visibility = View.VISIBLE }
-            setKeepScreenOn(false)
-            synchronized(bitmapLock) { lastBitmap = null }
-        }
-
-        override fun onRtspStatusFailed(message: String?) {
-            if (context == null) return
-            onRtspStatusDisconnected()
-            binding.tvStatusImage?.text = "Error: $message"
-            binding.pbLoadingImage.visibility = View.GONE
-            Toast.makeText(requireContext(), "❌ RTSP gagal: $message", Toast.LENGTH_LONG).show()
-        }
-
-        override fun onRtspFirstFrameRendered() {
-            binding.pbLoadingImage.visibility = View.GONE
-            binding.vShutterImage.animate().alpha(0f).setDuration(250).withEndAction {
-                binding.vShutterImage.visibility = View.GONE; binding.vShutterImage.alpha = 1f
-            }.start()
-        }
-
-        override fun onRtspFrameSizeChanged(width: Int, height: Int) {
-            ivVideoImageResolution = Pair(width, height)
-            lastFrameSize = Pair(width, height)
-            ConstraintSet().apply {
-                clone(binding.csVideoImage)
-                setDimensionRatio(binding.ivVideoImage.id, "$width:$height")
-                applyTo(binding.csVideoImage)
+    private val vlcEventListener = MediaPlayer.EventListener { event ->
+        when (event.type) {
+            MediaPlayer.Event.Playing -> activity?.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
+                binding.pbLoadingImage.visibility = View.GONE
+                binding.vShutterImage.animate().alpha(0f).setDuration(250).withEndAction {
+                    binding.vShutterImage.visibility = View.GONE
+                    binding.vShutterImage.alpha = 1f
+                }.start()
+                binding.tvStatusImage?.text = "VLC Connected"
+                setKeepScreenOn(true)
             }
-            currentScale = 1f
-            focusX = binding.ivVideoImage.width / 2f
-            focusY = binding.ivVideoImage.height / 2f
-            applyZoomMatrix()
+            MediaPlayer.Event.Stopped, MediaPlayer.Event.EndReached -> activity?.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
+                binding.tvStatusImage?.text = "Disconnected"
+                binding.vShutterImage.apply { alpha = 1f; visibility = View.VISIBLE }
+                setKeepScreenOn(false)
+            }
+            MediaPlayer.Event.EncounteredError -> activity?.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
+                binding.tvStatusImage?.text = "Error"
+                binding.pbLoadingImage.visibility = View.GONE
+            }
         }
     }
 
-    private val rtspDataListener = object : RtspDataListener {
-        override fun onRtspDataApplicationDataReceived(
-            data: ByteArray,
-            offset: Int,
-            length: Int,
-            timestamp: Long
-        ) {
-            Log.i(
-                TAG,
-                "RTSP app data ($length bytes): ${
-                    data.toHexString(
-                        offset,
-                        offset + min(length, 25)
-                    )
-                }"
-            )
-        }
+    private val vlcVoutCallback = object : IVLCVout.Callback {
+        override fun onSurfacesCreated(vlcVout: IVLCVout) {}
+        override fun onSurfacesDestroyed(vlcVout: IVLCVout) {}
     }
 
-    private fun startRtspStream() {
+    private val newVideoLayoutListener =
+        IVLCVout.OnNewVideoLayoutListener { _, w, h, vw, vh, sn, sd ->
+            if (w * h == 0) return@OnNewVideoLayoutListener
+            ivVideoImageResolution = Pair(w, h)
+            textureView?.post {
+                if (!isAdded || textureView == null) return@post
+                applyVlcLayoutAndBaseTransform(w, h, vw, vh, sn, sd)
+            }
+        }
+
+    private fun startVlcStream() {
         val rtspUrl = liveViewModel.rtspRequest.value
         if (rtspUrl.isNullOrBlank()) {
-            Toast.makeText(requireContext(), "❌ URL RTSP tidak valid", Toast.LENGTH_LONG)
-                .show(); return
+            Toast.makeText(requireContext(), "❌ URL RTSP tidak valid", Toast.LENGTH_LONG).show()
+            return
         }
-        binding.ivVideoImage.apply {
-            init(
-                uri = Uri.parse(rtspUrl),
-                username = liveViewModel.rtspUsername.value,
-                password = liveViewModel.rtspPassword.value,
-                userAgent = "cervexa-client-android"
+        val tv = textureView ?: return
+        binding.pbLoadingImage.visibility = View.VISIBLE
+        binding.vShutterImage.visibility = View.VISIBLE
+
+        runCatching {
+            // Konfigurasi low-latency — 100ms caching, tanpa audio, drop frame terlambat
+            val options = arrayListOf(
+                "--network-caching=100",
+                "--live-caching=100",
+                "--clock-jitter=0",
+                "--clock-synchro=0",
+                "--no-audio",
+                "--drop-late-frames",
+                "--skip-frames"
             )
-            videoDecoderType = if (prefs.getBoolean(KEY_USE_HW_DECODER, false))
-                VideoDecodeThread.DecoderType.HARDWARE else VideoDecodeThread.DecoderType.SOFTWARE
-            videoRotation = prefs.getInt(KEY_CAMERA_ROTATION_DEG, 0)
+            libVlc = LibVLC(requireContext(), options)
+            mediaPlayer = MediaPlayer(libVlc)
 
-            onRtspImageBitmapListener = object : RtspImageView.RtspImageBitmapListener {
-                override fun onRtspImageBitmapObtained(bitmap: Bitmap) {
-                    if (!isAdded || view == null) return
+            val vout = mediaPlayer!!.vlcVout
+            vout.setVideoView(tv)
+            vout.addCallback(vlcVoutCallback)
+            vout.attachViews(newVideoLayoutListener)
 
-                    val workBitmap: Bitmap = synchronized(bitmapLock) {
-                        lastBitmap?.recycle()
-                        val b = bitmap.copy(Bitmap.Config.ARGB_8888, true) // mutable!
-                        lastBitmap = b
-                        b
-                    }
+            val user = liveViewModel.rtspUsername.value.orEmpty()
+            val pass = liveViewModel.rtspPassword.value.orEmpty()
+            val finalUrl = if (user.isNotEmpty() && !rtspUrl.contains("//$user"))
+                rtspUrl.replace("rtsp://", "rtsp://$user:$pass@") else rtspUrl
 
-                    // Submit frame to AiDetector when AnalysisMode is active
-                    if (analysisModeManager.isActive.value) {
-                        aiDetector?.submitFrame(workBitmap)
-                    }
-
-                    // Apply AI overlay if we have a detection result
-                    val bmWithOverlay = when (val result = latestAiResult) {
-                        is com.idn.kmed.cervexa.ml.AbnormalityResult.Detected -> {
-                            val overlaid = overlayRenderer.renderOverlay(workBitmap, result)
-                            processTextToBitmapSafe(overlaid)
-                        }
-                        else -> processTextToBitmapSafe(workBitmap)
-                    }
-
-                    if (record.get() && ::recorder.isInitialized) {
-                        runCatching {
-                            recorder.submitBitmap(
-                                bmWithOverlay.copy(Bitmap.Config.ARGB_8888, false)
-                            )
-                        }.onFailure { Log.e(TAG, "submitBitmap error", it) }
-                    }
-
-                    if (ss.compareAndSet(true, false)) {
-                        processSnapshot(bmWithOverlay)
-                    }
-                }
-            }
-
-            start(requestVideo = true, requestAudio = false, requestApplication = false)
+            val media = Media(libVlc, Uri.parse(finalUrl))
+            media.addOption(":network-caching=100")
+            media.addOption(":no-audio")
+            mediaPlayer?.media = media; media.release()
+            mediaPlayer?.setEventListener(vlcEventListener)
+            mediaPlayer?.play()
+            startLiveFrameGrabber()
+        }.onFailure {
+            Log.e(TAG, "VLC start error", it)
+            binding.pbLoadingImage.visibility = View.GONE
+            Toast.makeText(requireContext(), "❌ Gagal konek: ${it.message}", Toast.LENGTH_SHORT).show()
         }
-        startStatisticsJob()
+    }
+
+    private fun stopVlcStream() {
+        liveFrameJob?.cancel()
+        runCatching {
+            mediaPlayer?.setEventListener(null)
+            mediaPlayer?.stop()
+            mediaPlayer?.vlcVout?.detachViews()
+            mediaPlayer?.release()
+            libVlc?.release()
+        }
+        mediaPlayer = null; libVlc = null
+        setKeepScreenOn(false)
+        baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
+        panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
+    }
+
+    private fun reattachVlcViews() {
+        val player = mediaPlayer ?: return
+        val tv = textureView ?: return
+        runCatching {
+            val vout = player.vlcVout
+            vout.detachViews()
+            vout.setVideoView(tv)
+            vout.addCallback(vlcVoutCallback)
+            vout.attachViews(newVideoLayoutListener)
+        }.onFailure { Log.e(TAG, "reattachVlcViews error", it) }
+    }
+
+    private fun applyVlcLayoutAndBaseTransform(
+        width: Int, height: Int, visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int
+    ) {
+        val tv = textureView ?: return
+        val container = binding.videoContainer
+        val cW = container.width; val cH = container.height
+        if (cW <= 0 || cH <= 0) {
+            container.postDelayed({
+                applyVlcLayoutAndBaseTransform(width, height, visibleWidth, visibleHeight, sarNum, sarDen)
+            }, 100); return
+        }
+        var videoW = (if (visibleWidth > 0) visibleWidth else width).toFloat()
+        var videoH = (if (visibleHeight > 0) visibleHeight else height).toFloat()
+        if (sarNum > 0 && sarDen > 0) videoW = videoW * sarNum / sarDen
+
+        val vAspect = videoW / videoH; val cAspect = cW.toFloat() / cH.toFloat()
+        val (finalW, finalH) = if (cAspect > vAspect) (cH * vAspect).toInt() to cH
+        else cW to (cW / vAspect).toInt()
+
+        tv.layoutParams = android.widget.FrameLayout.LayoutParams(finalW, finalH).also {
+            it.gravity = android.view.Gravity.CENTER
+        }
+        lastFrameSize = Pair(finalW, finalH)
+        baseScaleVlc = 1f
+        baseTxVlc = 0f; baseTyVlc = 0f; panTxVlc = 0f; panTyVlc = 0f
+        if (currentScale <= 1.01f) { focusX = cW / 2f; focusY = cH / 2f }
+        applyZoomAndPan()
+    }
+
+    private fun applyZoomAndPan() {
+        val tv = textureView ?: return
+        val scale = currentScale.coerceIn(minScale, maxScale)
+        tv.pivotX = focusX; tv.pivotY = focusY
+        tv.scaleX = baseScaleVlc * scale; tv.scaleY = baseScaleVlc * scale
+        if (scale <= 1.01f) { panTxVlc = 0f; panTyVlc = 0f }
+        tv.translationX = baseTxVlc + panTxVlc; tv.translationY = baseTyVlc + panTyVlc
     }
 
     // =====================================================================
@@ -635,10 +633,84 @@ class VideoFragmentMobile : Fragment() {
             hudHandler.removeCallbacks(hudTick)
             hudHandler.post(hudTick)
             binding.btnRecordVideo.setImageResource(R.drawable.ic_btn_stop)
+            Toast.makeText(requireContext(), "⏺️ MULAI MEREKAM", Toast.LENGTH_SHORT).show()
         }.onFailure {
             Log.e(TAG, "Recording ERROR", it); record.set(false)
             Toast.makeText(requireContext(), "❌ Gagal merekam: ${it.message}", Toast.LENGTH_LONG)
                 .show()
+        }
+    }
+
+    private fun startLiveFrameGrabber() {
+        liveFrameJob?.cancel()
+        liveFrameJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
+            val frameIntervalNs = 1_000_000_000L / STB_FPS
+            var nextFrameNs = System.nanoTime()
+            var poolBitmap: Bitmap? = null
+
+            try {
+                while (isActive) {
+                    val isRecording = record.get()
+                    val isAiActive = analysisModeManager.isActive.value
+                    val isSnapshotRequested = ss.get()
+
+                    if (!isRecording && !isAiActive && !isSnapshotRequested) {
+                        delay(100)
+                        continue
+                    }
+
+                    val sourceBmp = withContext(Dispatchers.Main) {
+                        if (!isAdded || textureView == null) return@withContext null
+                        if (poolBitmap == null || poolBitmap!!.isRecycled) {
+                            poolBitmap = Bitmap.createBitmap(STB_WIDTH, STB_HEIGHT, Bitmap.Config.ARGB_8888)
+                        }
+                        textureView?.getBitmap(poolBitmap!!)
+                        poolBitmap
+                    } ?: continue
+
+                    // 1. Submit to AI
+                    if (isAiActive) {
+                        aiDetector?.submitFrame(sourceBmp)
+                    }
+
+                    // 2. Prepare Overlay
+                    val bmWithOverlay = when (val result = latestAiResult) {
+                        is com.idn.kmed.cervexa.ml.AbnormalityResult.Detected -> {
+                            val overlaid = overlayRenderer.renderOverlay(sourceBmp, result)
+                            processTextToBitmapSafe(overlaid)
+                        }
+                        else -> processTextToBitmapSafe(sourceBmp)
+                    }
+
+                    // 3. Record Video
+                    if (isRecording && ::recorder.isInitialized) {
+                        runCatching {
+                            recorder.submitBitmap(bmWithOverlay.copy(Bitmap.Config.ARGB_8888, false))
+                        }.onFailure { Log.e(TAG, "submitBitmap error", it) }
+                    }
+
+                    // 4. Snapshot
+                    if (isSnapshotRequested && ss.compareAndSet(true, false)) {
+                        processSnapshot(bmWithOverlay)
+                    }
+
+                    if (bmWithOverlay !== sourceBmp && !bmWithOverlay.isRecycled) {
+                        bmWithOverlay.recycle()
+                    }
+
+                    val now = System.nanoTime()
+                    if (now < nextFrameNs) {
+                        val waitMs = (nextFrameNs - now) / 1_000_000
+                        if (waitMs > 0) delay(waitMs)
+                    }
+                    nextFrameNs += frameIntervalNs
+                }
+            } catch (e: Exception) {
+                if (e !is CancellationException) Log.e(TAG, "Frame grabber error", e)
+            } finally {
+                poolBitmap?.recycle()
+                poolBitmap = null
+            }
         }
     }
 
@@ -669,12 +741,8 @@ class VideoFragmentMobile : Fragment() {
     // =====================================================================
 
     private fun onSnapshotClicked() {
-        if (!binding.ivVideoImage.isStarted()) {
+        if (mediaPlayer?.isPlaying != true) {
             Toast.makeText(requireContext(), "⚠️ Stream belum aktif", Toast.LENGTH_LONG)
-                .show(); return
-        }
-        if (synchronized(bitmapLock) { lastBitmap == null }) {
-            Toast.makeText(requireContext(), "⚠️ Tunggu frame pertama...", Toast.LENGTH_SHORT)
                 .show(); return
         }
         if (sessionDir == null) {
@@ -682,7 +750,6 @@ class VideoFragmentMobile : Fragment() {
                 .show(); return
         }
         ss.set(true)
-        Toast.makeText(requireContext(), "📸 Mengambil snapshot...", Toast.LENGTH_SHORT).show()
     }
 
     private fun processSnapshot(bmp: Bitmap) {
@@ -742,7 +809,7 @@ class VideoFragmentMobile : Fragment() {
         return (frameHeight * PADDING_SCALE).coerceIn(PADDING_MIN_PX, PADDING_MAX_PX)
     }
 
-    private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
+    private fun processTextToBitmapSafe(src: Bitmap, aiProb: Float = -1f): Bitmap {
         if (src.isRecycled) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(bitmap)
@@ -917,27 +984,8 @@ class VideoFragmentMobile : Fragment() {
     }
 
     // =====================================================================
-    // STATISTICS
-    // =====================================================================
-
-    private fun startStatisticsJob() {
-        statisticsJob?.cancel()
-        statisticsJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
-            while (isActive) {
-                if (binding.ivVideoImage.isStarted()) {
-                    val s: Statistics = binding.ivVideoImage.statistics
-                    binding.tvStatistics2?.text =
-                        "Decoder: ${s.videoDecoderType.toString().lowercase()} " +
-                                "${if (s.videoDecoderName.isNullOrEmpty()) "" else "(${s.videoDecoderName})"}\n" +
-                                "Latency: ${s.videoDecoderLatencyMsec}ms\n" +
-                                "Resolution: ${ivVideoImageResolution.first}×${ivVideoImageResolution.second}"
-                }
-                delay(1000)
-            }
-        }
-    }
-
-    // =====================================================================
+    // STATISTICS (REMOVED)
+    // =====================================================================    // =====================================================================
     // SESSION METADATA
     // =====================================================================
 
@@ -977,11 +1025,6 @@ class VideoFragmentMobile : Fragment() {
     private fun overlayInfoText() =
         if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
 
-    private fun applyZoomMatrix() {
-        val m = android.graphics.Matrix()
-        m.postScale(currentScale, currentScale, focusX, focusY)
-        binding.ivVideoImage.imageMatrix = m
-    }
 
     private fun setKeepScreenOn(enable: Boolean) {
         activity?.apply {
@@ -1012,8 +1055,7 @@ class VideoFragmentMobile : Fragment() {
 
     private fun stopStreamAndExit() {
         stopVideoRecording()
-        if (binding.ivVideoImage.isStarted()) binding.ivVideoImage.stop()
-        statisticsJob?.cancel()
+        stopVlcStream()
         binding.vShutterImage.apply { alpha = 1f; visibility = View.VISIBLE }
         startActivity(Intent(requireContext(), HomeActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)

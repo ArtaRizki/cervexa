@@ -133,6 +133,8 @@
             android:exported="false" />
         <activity
             android:name=".gallery.MediaPagerActivity"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:screenOrientation="sensorLandscape"
             android:exported="false" />
         <activity
             android:name=".gallery.MediaPagerActivityLand"

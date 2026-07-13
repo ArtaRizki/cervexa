@@ -563,6 +563,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         binding.vShutterImage.visibility = View.VISIBLE
 
         runCatching {
+            // Zero latency: Software decode (avcodec-hw=none) + UDP (tanpa rtsp-tcp) + avcodec-fast
             val options = arrayListOf(
                 "--network-caching=0",
                 "--live-caching=0",
@@ -573,6 +574,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 "--drop-late-frames",
                 "--skip-frames",
                 "--avcodec-hw=none",
+                "--avcodec-fast",
                 "--video-filter=adjust",
                 "--brightness=1.15",
                 "--contrast=1.2",
@@ -594,7 +596,17 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 rawUrl.replace("rtsp://", "rtsp://$user:$pass@") else rawUrl
 
             val media = Media(libVlc, Uri.parse(finalUrl))
-            media.addOption(":network-caching=0"); media.addOption(":no-audio")
+            media.addOption(":network-caching=0")
+            media.addOption(":live-caching=0")
+            media.addOption(":file-caching=0")
+            media.addOption(":clock-jitter=0")
+            media.addOption(":clock-synchro=0")
+            media.addOption(":drop-late-frames")
+            media.addOption(":skip-frames")
+            // Tidak pakai :rtsp-tcp → UDP bawaan lebih cepat untuk koneksi ad-hoc
+            media.addOption(":no-audio")
+            media.addOption(":avcodec-hw=none")
+            media.addOption(":avcodec-fast")
             mediaPlayer?.media = media; media.release()
 
             mediaPlayer?.setEventListener { event ->

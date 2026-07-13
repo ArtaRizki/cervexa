@@ -486,7 +486,10 @@ class VideoFragmentMobile : Fragment() {
         binding.vShutterImage.visibility = View.VISIBLE
 
         runCatching {
-            // Konfigurasi low-latency — 100ms caching, tanpa audio, drop frame terlambat
+            // Konfigurasi absolute zero latency:
+            // - Software decoding (avcodec-hw=none) → CPU langsung decode tanpa buffer GPU 2-4 frame
+            // - UDP (tanpa rtsp-tcp) → "fire and forget", lebih cepat untuk koneksi ad-hoc jarak dekat
+            // - avcodec-fast → skip non-reference frames agar makin responsif
             val options = arrayListOf(
                 "--network-caching=0",
                 "--live-caching=0",
@@ -496,7 +499,8 @@ class VideoFragmentMobile : Fragment() {
                 "--drop-late-frames",
                 "--skip-frames",
                 "--no-audio",
-                "--avcodec-hw=none"
+                "--avcodec-hw=none",
+                "--avcodec-fast"
             )
             libVlc = LibVLC(requireContext(), options)
             mediaPlayer = MediaPlayer(libVlc)
@@ -519,8 +523,10 @@ class VideoFragmentMobile : Fragment() {
             media.addOption(":clock-synchro=0")
             media.addOption(":drop-late-frames")
             media.addOption(":skip-frames")
-            media.addOption(":rtsp-tcp")
+            // Tidak pakai :rtsp-tcp → gunakan UDP bawaan RTSP yang lebih cepat untuk koneksi ad-hoc
             media.addOption(":no-audio")
+            media.addOption(":avcodec-hw=none")
+            media.addOption(":avcodec-fast")
             mediaPlayer?.media = media; media.release()
             mediaPlayer?.setEventListener(vlcEventListener)
             mediaPlayer?.play()

@@ -249,17 +249,13 @@ class OnboardingActivity : AppCompatActivity() {
 
         addCameraWifiSuggestion(ssid = ssid ?: ssidPrefix, password = password)
 
-        // Sesudah
-        val tokenManager = TokenManager.getInstance(this@OnboardingActivity)
-        // Beres → pindah ke Login , kalau sudah login maka ke home
-        val nextClass =
-            if (tokenManager.isLoggedIn) HomeActivity::class.java else LoginActivity::class.java
+        // Beres → pindah ke Home (bypass login)
+        val nextClass = HomeActivity::class.java
 
         startActivity(Intent(this@OnboardingActivity, nextClass).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra("from_onboarding", true)
         })
-        finish()
         finish()
     }
 

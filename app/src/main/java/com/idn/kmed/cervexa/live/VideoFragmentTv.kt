@@ -563,9 +563,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         binding.vShutterImage.visibility = View.VISIBLE
 
         runCatching {
-            // Konfigurasi zero-latency terbukti cepat (afffe34):
-            // - avcodec-hw=any → Hardware decoder, terbukti lebih responsif
-            // - rtsp-tcp → koneksi stabil untuk stream RTSP kamera MS2
+            // Konfigurasi zero-latency setara IjkMediaPlayer cervexa_new:
+            // - probesize=32768 → analisa stream hanya 32KB (bukan default 1MB)
+            // - analyzeduration=100000 → analisa hanya 100ms (bukan default 5 detik)
+            // - avcodec-skip-frame=8 → skip non-reference frame agresif
             val options = arrayListOf(
                 "--rtsp-tcp",
                 "--network-caching=0",
@@ -577,6 +578,9 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 "--drop-late-frames",
                 "--skip-frames",
                 "--avcodec-hw=any",
+                "--avformat-probesize=32768",
+                "--avformat-analyzeduration=100000",
+                "--avcodec-skip-frame=8",
                 "--video-filter=adjust",
                 "--brightness=1.15",
                 "--contrast=1.2",
@@ -607,6 +611,9 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             media.addOption(":skip-frames")
             media.addOption(":rtsp-tcp")
             media.addOption(":no-audio")
+            media.addOption(":avformat-probesize=32768")
+            media.addOption(":avformat-analyzeduration=100000")
+            media.addOption(":avcodec-skip-frame=8")
             mediaPlayer?.media = media; media.release()
 
             mediaPlayer?.setEventListener { event ->

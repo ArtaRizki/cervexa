@@ -486,9 +486,11 @@ class VideoFragmentMobile : Fragment() {
         binding.vShutterImage.visibility = View.VISIBLE
 
         runCatching {
-            // Konfigurasi zero-latency terbukti cepat (afffe34):
-            // - avcodec-hw=any → Hardware decoder, terbukti lebih responsif di HP ini
-            // - rtsp-tcp → koneksi stabil untuk stream RTSP kamera MS2
+            // Konfigurasi zero-latency setara IjkMediaPlayer cervexa_new:
+            // - probesize=32768 (32KB) setara IJK probesize=32768L  → analisa stream lebih cepat
+            // - analyzeduration=100000 (100ms) setara IJK analyzeduration=100L → tidak tahan 5 detik
+            // - avcodec-skip-frame=8 setara IJK skip_frame=8L → skip non-reference frame
+            // - infbuf=1 setara IJK infbuf=1 → tidak ada batas buffer
             val options = arrayListOf(
                 "--network-caching=0",
                 "--live-caching=0",
@@ -499,7 +501,10 @@ class VideoFragmentMobile : Fragment() {
                 "--skip-frames",
                 "--rtsp-tcp",
                 "--no-audio",
-                "--avcodec-hw=any"
+                "--avcodec-hw=any",
+                "--avformat-probesize=32768",
+                "--avformat-analyzeduration=100000",
+                "--avcodec-skip-frame=8"
             )
             libVlc = LibVLC(requireContext(), options)
             mediaPlayer = MediaPlayer(libVlc)
@@ -524,6 +529,9 @@ class VideoFragmentMobile : Fragment() {
             media.addOption(":skip-frames")
             media.addOption(":rtsp-tcp")
             media.addOption(":no-audio")
+            media.addOption(":avformat-probesize=32768")
+            media.addOption(":avformat-analyzeduration=100000")
+            media.addOption(":avcodec-skip-frame=8")
             mediaPlayer?.media = media; media.release()
             mediaPlayer?.setEventListener(vlcEventListener)
             mediaPlayer?.play()

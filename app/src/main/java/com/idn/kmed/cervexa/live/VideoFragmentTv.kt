@@ -564,7 +564,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
         runCatching {
             val options = arrayListOf(
-                "--rtsp-tcp",
                 "--network-caching=0",
                 "--live-caching=0",
                 "--file-caching=0",
@@ -573,7 +572,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 "--no-audio",
                 "--drop-late-frames",
                 "--skip-frames",
-                "--avcodec-hw=any",
+                "--avcodec-hw=none",
                 "--video-filter=adjust",
                 "--brightness=1.15",
                 "--contrast=1.2",

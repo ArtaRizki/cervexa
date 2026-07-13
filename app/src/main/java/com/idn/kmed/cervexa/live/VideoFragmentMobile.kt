@@ -495,9 +495,8 @@ class VideoFragmentMobile : Fragment() {
                 "--clock-synchro=0",
                 "--drop-late-frames",
                 "--skip-frames",
-                "--rtsp-tcp",
                 "--no-audio",
-                "--avcodec-hw=any"
+                "--avcodec-hw=none"
             )
             libVlc = LibVLC(requireContext(), options)
             mediaPlayer = MediaPlayer(libVlc)

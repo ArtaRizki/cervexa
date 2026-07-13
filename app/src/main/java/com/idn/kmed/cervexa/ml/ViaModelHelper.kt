@@ -68,19 +68,24 @@ class ViaModelHelper(private val context: Context) {
         tensorImage.load(bitmap)
         tensorImage = imageProcessor.process(tensorImage)
 
-        // Prepare output buffer for confidence score
+        // Prepare output buffer for confidence score (model has shape [1, 2])
         val outputBuffer = TensorBuffer.createFixedSize(
-            intArrayOf(1, 1),
+            intArrayOf(1, 2),
             org.tensorflow.lite.DataType.FLOAT32
         )
 
         // Run inference — exceptions propagate to AiDetector
         currentInterpreter.run(tensorImage.buffer, outputBuffer.buffer.rewind())
 
-        val score = outputBuffer.floatArray[0]
+        val scores = outputBuffer.floatArray
+        // Class 0 = abnormal (alphabetically 'abnormal' comes before 'normal')
+        // Class 1 = normal
+        val abnormalScore = scores[0]
+        val normalScore = scores[1]
+        Log.d(TAG, "Inference raw output: abnormal=$abnormalScore, normal=$normalScore")
 
         // Classify based on threshold
-        val label = if (score > CLASSIFICATION_THRESHOLD) {
+        val label = if (abnormalScore > CLASSIFICATION_THRESHOLD) {
             Classification.ABNORMAL
         } else {
             Classification.NORMAL
@@ -91,7 +96,7 @@ class ViaModelHelper(private val context: Context) {
 
         return AbnormalityResult.Detected(
             label = label,
-            confidenceScore = score,
+            confidenceScore = abnormalScore,
             boundingBox = boundingBox,
             isFallback = false
         )

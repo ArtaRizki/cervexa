@@ -48,6 +48,14 @@ android {
             it.useJUnitPlatform()
         }
     }
+
+    // Fix 16KB page size Android 15 (Samsung M156B, dll)
+    // Tanpa ini, libvlc.so dan library lain gagal dimuat di HP dengan kernel 16KB
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
 }
 
 dependencies {

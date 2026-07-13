@@ -488,13 +488,16 @@ class VideoFragmentMobile : Fragment() {
         runCatching {
             // Konfigurasi low-latency — 100ms caching, tanpa audio, drop frame terlambat
             val options = arrayListOf(
-                "--network-caching=100",
-                "--live-caching=100",
+                "--network-caching=0",
+                "--live-caching=0",
+                "--file-caching=0",
                 "--clock-jitter=0",
                 "--clock-synchro=0",
-                "--no-audio",
                 "--drop-late-frames",
-                "--skip-frames"
+                "--skip-frames",
+                "--rtsp-tcp",
+                "--no-audio",
+                "--avcodec-hw=any"
             )
             libVlc = LibVLC(requireContext(), options)
             mediaPlayer = MediaPlayer(libVlc)

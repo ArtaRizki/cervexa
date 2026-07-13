@@ -565,11 +565,15 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         runCatching {
             val options = arrayListOf(
                 "--rtsp-tcp",
-                "--network-caching=150",
-                "--live-caching=150",
+                "--network-caching=0",
+                "--live-caching=0",
+                "--file-caching=0",
+                "--clock-jitter=0",
+                "--clock-synchro=0",
                 "--no-audio",
                 "--drop-late-frames",
                 "--skip-frames",
+                "--avcodec-hw=any",
                 "--video-filter=adjust",
                 "--brightness=1.15",
                 "--contrast=1.2",
@@ -591,7 +595,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 rawUrl.replace("rtsp://", "rtsp://$user:$pass@") else rawUrl
 
             val media = Media(libVlc, Uri.parse(finalUrl))
-            media.addOption(":network-caching=300"); media.addOption(":no-audio")
+            media.addOption(":network-caching=0"); media.addOption(":no-audio")
             mediaPlayer?.media = media; media.release()
 
             mediaPlayer?.setEventListener { event ->

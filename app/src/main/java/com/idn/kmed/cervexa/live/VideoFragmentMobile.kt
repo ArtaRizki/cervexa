@@ -510,7 +510,14 @@ class VideoFragmentMobile : Fragment() {
                 rtspUrl.replace("rtsp://", "rtsp://$user:$pass@") else rtspUrl
 
             val media = Media(libVlc, Uri.parse(finalUrl))
-            media.addOption(":network-caching=100")
+            media.addOption(":network-caching=0")
+            media.addOption(":live-caching=0")
+            media.addOption(":file-caching=0")
+            media.addOption(":clock-jitter=0")
+            media.addOption(":clock-synchro=0")
+            media.addOption(":drop-late-frames")
+            media.addOption(":skip-frames")
+            media.addOption(":rtsp-tcp")
             media.addOption(":no-audio")
             mediaPlayer?.media = media; media.release()
             mediaPlayer?.setEventListener(vlcEventListener)
@@ -658,6 +665,15 @@ class VideoFragmentMobile : Fragment() {
                         delay(100)
                         continue
                     }
+
+                    // Tahan frame rate (throttle) agar tidak mencekik UI thread & VLC
+                    val now = System.nanoTime()
+                    val sleepNs = nextFrameNs - now
+                    if (sleepNs > 0) {
+                        delay(sleepNs / 1_000_000)
+                    }
+                    nextFrameNs += frameIntervalNs
+                    if (nextFrameNs < System.nanoTime()) nextFrameNs = System.nanoTime() + frameIntervalNs
 
                     val sourceBmp = withContext(Dispatchers.Main) {
                         if (!isAdded || textureView == null) return@withContext null

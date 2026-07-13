@@ -486,10 +486,9 @@ class VideoFragmentMobile : Fragment() {
         binding.vShutterImage.visibility = View.VISIBLE
 
         runCatching {
-            // Konfigurasi absolute zero latency:
-            // - Software decoding (avcodec-hw=none) → CPU langsung decode tanpa buffer GPU 2-4 frame
-            // - UDP (tanpa rtsp-tcp) → "fire and forget", lebih cepat untuk koneksi ad-hoc jarak dekat
-            // - avcodec-fast → skip non-reference frames agar makin responsif
+            // Konfigurasi zero-latency terbukti cepat (afffe34):
+            // - avcodec-hw=any → Hardware decoder, terbukti lebih responsif di HP ini
+            // - rtsp-tcp → koneksi stabil untuk stream RTSP kamera MS2
             val options = arrayListOf(
                 "--network-caching=0",
                 "--live-caching=0",
@@ -498,9 +497,9 @@ class VideoFragmentMobile : Fragment() {
                 "--clock-synchro=0",
                 "--drop-late-frames",
                 "--skip-frames",
+                "--rtsp-tcp",
                 "--no-audio",
-                "--avcodec-hw=none",
-                "--avcodec-fast"
+                "--avcodec-hw=any"
             )
             libVlc = LibVLC(requireContext(), options)
             mediaPlayer = MediaPlayer(libVlc)
@@ -523,10 +522,8 @@ class VideoFragmentMobile : Fragment() {
             media.addOption(":clock-synchro=0")
             media.addOption(":drop-late-frames")
             media.addOption(":skip-frames")
-            // Tidak pakai :rtsp-tcp → gunakan UDP bawaan RTSP yang lebih cepat untuk koneksi ad-hoc
+            media.addOption(":rtsp-tcp")
             media.addOption(":no-audio")
-            media.addOption(":avcodec-hw=none")
-            media.addOption(":avcodec-fast")
             mediaPlayer?.media = media; media.release()
             mediaPlayer?.setEventListener(vlcEventListener)
             mediaPlayer?.play()

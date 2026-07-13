@@ -563,8 +563,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         binding.vShutterImage.visibility = View.VISIBLE
 
         runCatching {
-            // Zero latency: Software decode (avcodec-hw=none) + UDP (tanpa rtsp-tcp) + avcodec-fast
+            // Konfigurasi zero-latency terbukti cepat (afffe34):
+            // - avcodec-hw=any → Hardware decoder, terbukti lebih responsif
+            // - rtsp-tcp → koneksi stabil untuk stream RTSP kamera MS2
             val options = arrayListOf(
+                "--rtsp-tcp",
                 "--network-caching=0",
                 "--live-caching=0",
                 "--file-caching=0",
@@ -573,8 +576,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 "--no-audio",
                 "--drop-late-frames",
                 "--skip-frames",
-                "--avcodec-hw=none",
-                "--avcodec-fast",
+                "--avcodec-hw=any",
                 "--video-filter=adjust",
                 "--brightness=1.15",
                 "--contrast=1.2",
@@ -603,10 +605,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             media.addOption(":clock-synchro=0")
             media.addOption(":drop-late-frames")
             media.addOption(":skip-frames")
-            // Tidak pakai :rtsp-tcp → UDP bawaan lebih cepat untuk koneksi ad-hoc
+            media.addOption(":rtsp-tcp")
             media.addOption(":no-audio")
-            media.addOption(":avcodec-hw=none")
-            media.addOption(":avcodec-fast")
             mediaPlayer?.media = media; media.release()
 
             mediaPlayer?.setEventListener { event ->

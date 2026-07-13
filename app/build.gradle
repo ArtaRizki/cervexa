@@ -50,10 +50,12 @@ android {
     }
 
     // Fix 16KB page size Android 15 (Samsung M156B, dll)
-    // Tanpa ini, libvlc.so dan library lain gagal dimuat di HP dengan kernel 16KB
+    // useLegacyPackaging = TRUE → .so di-extract ke disk sebelum dimuat
+    // Ini BYPASS syarat 16KB alignment untuk library pihak ketiga (libvlc, tensorflow, dll)
+    // yang belum dicompile ulang dengan 16KB alignment
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = true
         }
     }
 }

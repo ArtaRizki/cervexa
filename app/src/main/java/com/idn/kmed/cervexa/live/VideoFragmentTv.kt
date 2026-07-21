@@ -32,14 +32,13 @@ import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.idn.kmed.cervexa.home.HomeActivity
 import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.databinding.FragmentVideoTvBinding
-import com.idn.kmed.cervexa.record.RealtimeBitmapEncoder
+
 import com.idn.kmed.cervexa.utils.*
 import com.idn.kmed.cervexa.utils.PdfReportHelper
 import com.idn.kmed.cervexa.utils.PrintHelper
-import org.videolan.libvlc.LibVLC
-import org.videolan.libvlc.Media
-import org.videolan.libvlc.MediaPlayer
-import org.videolan.libvlc.interfaces.IVLCVout
+import tv.danmaku.ijk.media.player.IMediaPlayer
+import tv.danmaku.ijk.media.player.IjkMediaPlayer
+import com.idn.kmed.cervexa.record.RealtimeBitmapEncoder
 import kotlinx.coroutines.*
 import java.io.File
 import java.text.SimpleDateFormat
@@ -53,7 +52,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Fix scaling font overlay berdasarkan ukuran frame (REC_HEIGHT / bitmap.height)
  */
-class VideoFragmentTv : Fragment(), IVLCVout.Callback {
+class VideoFragmentTv : Fragment() {
 
     private lateinit var binding: FragmentVideoTvBinding
     private lateinit var liveViewModel: LiveViewModel
@@ -89,9 +88,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
     private var clockJob: Job? = null
 
-    // ==== VLC Components ====
-    private var libVlc: LibVLC? = null
-    private var mediaPlayer: MediaPlayer? = null
+    // ==== IJK Components ====
+    private var ijkPlayer: IjkMediaPlayer? = null
     private var textureView: TextureView? = null
 
     // ==== PHONE CAMERA (CameraX) ====
@@ -144,6 +142,15 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     // =====================================================================
     // Paint objects di-cache di class level
     // =====================================================================
+    private val paintDateBg = Paint().apply {
+        color = Color.argb(128, 0, 0, 0)
+        style = Paint.Style.FILL
+    }
+    private val paintDateText = Paint().apply {
+        color = Color.WHITE
+        isAntiAlias = true
+        textAlign = Paint.Align.LEFT
+    }
     private val paintText = Paint().apply {
         color = Color.WHITE
         // textSize JANGAN hardcode di sini (nanti diskalakan per frame)
@@ -257,7 +264,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         toggleSystemUI()
         binding.tvOverlayInfo.text =
             if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
-        binding.videoContainer.postDelayed({ reattachVlcViews() }, 300)
+        binding.videoContainer.postDelayed({ applyIjkLayout() }, 300)
         view?.post {
             if (usePhoneCamera && phoneCameraView != null) {
                 currentScale = 1f; applyZoomAndPan()
@@ -272,7 +279,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         toggleSystemUI()
         liveViewModel.loadParams(requireContext())
         if (usePhoneCamera) checkAndStartPhoneCamera()
-        else if (mediaPlayer == null || mediaPlayer?.isPlaying == false) startVlcStream()
+        else if (ijkPlayer == null || ijkPlayer?.isPlaying == false) startIjkStream()
     }
 
     override fun onPause() {
@@ -280,7 +287,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         updateStatusBarColor()
         liveViewModel.saveParams(requireContext())
         if (record.get()) stopVideoRecording()
-        if (!usePhoneCamera) stopVlcStream()
+        if (!usePhoneCamera) stopIjkStream()
     }
 
     // =====================================================================
@@ -347,8 +354,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
         binding.bnStartStopImage?.setOnClickListener {
             if (usePhoneCamera) stopPhoneCamera()
-            else if (mediaPlayer?.isPlaying == true) stopStreamAndExit()
-            else startVlcStream()
+            else if (ijkPlayer?.isPlaying == true) stopIjkStream()
+            else startIjkStream()
         }
         binding.bnStartStopImage?.setOnLongClickListener { toggleSourceMode(); true }
         binding.btnEnterLandscape?.setOnClickListener {
@@ -545,85 +552,102 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     private fun toggleSourceMode() {
         if (usePhoneCamera) {
             usePhoneCamera = false; stopPhoneCamera()
-            binding.videoContainer.postDelayed({ startVlcStream() }, 300)
+            binding.videoContainer.postDelayed({ startIjkStream() }, 300)
             Toast.makeText(requireContext(), "Mode: Alat (RTSP)", Toast.LENGTH_SHORT).show()
         } else {
-            usePhoneCamera = true; stopVlcStream(); checkAndStartPhoneCamera()
+            usePhoneCamera = true; stopIjkStream(); checkAndStartPhoneCamera()
             Toast.makeText(requireContext(), "Mode: Kamera HP", Toast.LENGTH_SHORT).show()
         }
     }
 
     // =====================================================================
-    // VLC STREAM
+    // IJK STREAM
     // =====================================================================
 
-    private fun startVlcStream() {
+    private val ijkEventListener = IMediaPlayer.OnInfoListener { _, what, _ ->
+        when (what) {
+            IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START -> activity?.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
+                binding.pbLoadingImage.visibility = View.GONE
+                binding.vShutterImage.visibility = View.GONE
+                binding.tvStatusImage?.text = "RTSP Connected"
+                setKeepScreenOn(true)
+            }
+        }
+        true
+    }
+
+    private fun startIjkStream() {
         if (usePhoneCamera) return
         binding.pbLoadingImage.visibility = View.VISIBLE
         binding.vShutterImage.visibility = View.VISIBLE
 
         runCatching {
-            // Konfigurasi zero-latency (basis afffe34 yang terbukti jalan):
-            // - avcodec-hw=any + rtsp-tcp terbukti lebih responsif
-            val options = arrayListOf(
-                "--rtsp-tcp",
-                "--network-caching=0",
-                "--live-caching=0",
-                "--file-caching=0",
-                "--clock-jitter=0",
-                "--clock-synchro=0",
-                "--no-audio",
-                "--drop-late-frames",
-                "--skip-frames",
-                "--avcodec-hw=any",
-                "--video-filter=adjust",
-                "--brightness=1.15",
-                "--contrast=1.2",
-                "--saturation=1.1",
-                "--gamma=1.0"
-            )
-            libVlc = LibVLC(requireContext(), options)
-            mediaPlayer = MediaPlayer(libVlc)
-
-            val vout = mediaPlayer!!.vlcVout
-            vout.setVideoView(textureView)
-            vout.addCallback(this)
-            vout.attachViews(newVideoLayoutListener)
-
             val rawUrl = liveViewModel.rtspRequest.value ?: ""
             val user = liveViewModel.rtspUsername.value ?: ""
             val pass = liveViewModel.rtspPassword.value ?: ""
             val finalUrl = if (user.isNotEmpty() && !rawUrl.contains("//$user"))
                 rawUrl.replace("rtsp://", "rtsp://$user:$pass@") else rawUrl
 
-            val media = Media(libVlc, Uri.parse(finalUrl))
-            media.addOption(":network-caching=0")
-            media.addOption(":live-caching=0")
-            media.addOption(":file-caching=0")
-            media.addOption(":clock-jitter=0")
-            media.addOption(":clock-synchro=0")
-            media.addOption(":drop-late-frames")
-            media.addOption(":skip-frames")
-            media.addOption(":rtsp-tcp")
-            media.addOption(":no-audio")
-            mediaPlayer?.media = media; media.release()
+            val player = IjkMediaPlayer().apply {
+                IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp")
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1L)
+                // Filter brightness saja (tanpa kontras & saturasi agar warna natural seperti layar MS2)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
+                val useHw = requireContext().getSharedPreferences("app_prefs", MODE_PRIVATE)
+                    .getBoolean("use_hw_decoder", false)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", if (useHw) 1L else 0L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
+            }
 
-            mediaPlayer?.setEventListener { event ->
-                when (event.type) {
-                    MediaPlayer.Event.Playing -> activity?.runOnUiThread {
-                        binding.pbLoadingImage.visibility = View.GONE
-                        binding.vShutterImage.visibility = View.GONE
-                        binding.tvStatusImage?.text = "RTSP Connected"
+            val tv = textureView ?: return
+            val st = tv.surfaceTexture ?: run {
+                tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                    override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
+                        tv.surfaceTextureListener = null
+                        if (isAdded) startIjkStream()
                     }
-
-                    MediaPlayer.Event.EncounteredError -> activity?.runOnUiThread {
-                        binding.tvStatusImage?.text = "Error — Retrying..."
-                    }
-
-                    else -> Unit
+                    override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+                    override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture) = false
+                    override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
+                }
+                return
+            }
+            player.setSurface(android.view.Surface(st))
+            player.setOnInfoListener(ijkEventListener)
+            player.setOnErrorListener { _, _, _ ->
+                activity?.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    binding.tvStatusImage?.text = "Error — Retrying..."
+                    binding.pbLoadingImage.visibility = View.GONE
+                }
+                true
+            }
+            player.setOnCompletionListener {
+                activity?.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    binding.tvStatusImage?.text = "Disconnected"
+                    binding.vShutterImage.visibility = View.VISIBLE
+                    setKeepScreenOn(false)
                 }
             }
-            mediaPlayer?.play()
+            player.setOnVideoSizeChangedListener { _, w, h, sarNum, sarDen ->
+                if (w > 0 && h > 0) {
+                    ivVideoImageResolution = Pair(w, h)
+                    tv.post { if (isAdded) applyIjkLayout(w, h, sarNum, sarDen) }
+                }
+            }
+
+            player.dataSource = finalUrl
+            player.prepareAsync()
+            ijkPlayer = player
 
             binding.pbLoadingImage.postDelayed({
                 if (isAdded) {
@@ -631,66 +655,34 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                     binding.vShutterImage.visibility = View.GONE
                 }
             }, 3000)
-
             setKeepScreenOn(true)
         }.onFailure {
-            Log.e(TAG, "VLC start error", it)
+            Log.e(TAG, "IJK start error", it)
             binding.pbLoadingImage.visibility = View.GONE
             Toast.makeText(requireContext(), "Gagal konek: ${it.message}", Toast.LENGTH_SHORT)
                 .show()
         }
     }
 
-    /** Lambda extracted so it can be reused in both startVlcStream & reattachVlcViews. */
-    private val newVideoLayoutListener =
-        IVLCVout.OnNewVideoLayoutListener { _, w, h, vw, vh, sn, sd ->
-            if (w * h == 0) return@OnNewVideoLayoutListener
-            ivVideoImageResolution = Pair(w, h)
-            textureView?.post {
-                if (!isAdded || textureView == null) return@post
-                applyVlcLayoutAndBaseTransform(w, h, vw, vh, sn, sd)
-            }
-        }
-
-    private fun reattachVlcViews() {
-        if (usePhoneCamera) return
-        val player = mediaPlayer ?: return
-        val w = binding.videoContainer.width;
-        val h = binding.videoContainer.height
-        if (w == 0 || h == 0) return
-        runCatching {
-            val vout = player.vlcVout
-            vout.detachViews()
-            vout.setVideoView(textureView)
-            vout.setWindowSize(w, h)
-            vout.addCallback(this)
-            vout.attachViews(newVideoLayoutListener)
-        }.onFailure { Log.e(TAG, "reattachVlcViews error", it) }
-    }
-
-    private fun applyVlcLayoutAndBaseTransform(
-        width: Int, height: Int, visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int
+    private fun applyIjkLayout(
+        width: Int = ivVideoImageResolution.first,
+        height: Int = ivVideoImageResolution.second,
+        sarNum: Int = 0,
+        sarDen: Int = 0
     ) {
         val tv = textureView ?: return
-        val cW = binding.videoContainer.width;
+        val cW = binding.videoContainer.width
         val cH = binding.videoContainer.height
         if (cW <= 0 || cH <= 0) {
             binding.videoContainer.postDelayed({
-                applyVlcLayoutAndBaseTransform(
-                    width,
-                    height,
-                    visibleWidth,
-                    visibleHeight,
-                    sarNum,
-                    sarDen
-                )
+                applyIjkLayout(width, height, sarNum, sarDen)
             }, 100); return
         }
-        var videoW = (if (visibleWidth > 0) visibleWidth else width).toFloat()
-        var videoH = (if (visibleHeight > 0) visibleHeight else height).toFloat()
+        var videoW = width.toFloat()
+        var videoH = height.toFloat()
         if (sarNum > 0 && sarDen > 0) videoW = videoW * sarNum / sarDen
 
-        val vAspect = videoW / videoH;
+        val vAspect = videoW / videoH
         val cAspect = cW.toFloat() / cH.toFloat()
         val (finalW, finalH) = if (isLandscape()) {
             if (cAspect > vAspect) cW to (cW / vAspect).toInt() else (cH * vAspect).toInt() to cH
@@ -708,16 +700,19 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         applyZoomAndPan()
     }
 
-    private fun stopVlcStream() {
-        mediaPlayer?.setEventListener(null); mediaPlayer?.stop()
-        mediaPlayer?.vlcVout?.detachViews(); mediaPlayer?.release(); libVlc?.release()
-        mediaPlayer = null; libVlc = null
+    private fun stopIjkStream() {
+        runCatching {
+            ijkPlayer?.stop()
+            ijkPlayer?.release()
+        }
+        ijkPlayer = null
         binding.tvStatusImage?.text = "Disconnected"
         binding.vShutterImage.visibility = View.VISIBLE
         setKeepScreenOn(false)
         baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
     }
+
 
     // =====================================================================
     // RECORDING
@@ -846,6 +841,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             .coerceIn(TEXT_MIN_PX, TEXT_MAX_PX)
 
         paintText.textSize = fontPx
+        paintDateText.textSize = fontPx
         lastOverlayFontPx = fontPx
         lastOverlayTargetHeight = targetHeight
     }
@@ -861,14 +857,28 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
 
-        val padding = (bitmap.height * 0.03f).coerceIn(12f, 32f) // padding juga ikut skala
-        val baselineY = bitmap.height - padding
+        val pad = (bitmap.height * 0.03f).coerceIn(12f, 32f) // padding juga ikut skala
+        val baselineY = bitmap.height - pad
 
-        val wText = paintText.measureText(formatted)
-        canvas.drawText(formatted, bitmap.width - wText - padding, baselineY, paintText)
+        // === Right-bottom date box (dynamic width) ===
+        val dateTextW = paintDateText.measureText(formatted)
+        val dateBoxW = dateTextW + (pad * 2f)
+        val dateBoxH = (paintDateText.textSize + pad * 1.6f).coerceAtLeast(pad * 2.2f)
+
+        val right = bitmap.width.toFloat()
+        val left = (right - dateBoxW).coerceAtLeast(0f)
+        val bottom = bitmap.height.toFloat()
+        val top = bottom - dateBoxH
+
+        // Draw rounded rectangle, overshooting the right and bottom edges to keep them sharp
+        canvas.drawRoundRect(
+            android.graphics.RectF(left, top, right + 20f, bottom + 20f),
+            pad, pad, paintDateBg
+        )
+        canvas.drawText(formatted, left + pad, baselineY - (pad * 0.2f), paintDateText)
 
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
-        canvas.drawText(info, padding, baselineY, paintText)
+        canvas.drawText(info, pad, baselineY, paintText)
 
         // === AI Detection Overlay ===
         if (abnormalityProb >= 0f) {
@@ -895,7 +905,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 setShadowLayer(5f, 0f, 0f, Color.BLACK)
             }
             val aiTextW = aiPaintText.measureText(label)
-            canvas.drawText(label, bitmap.width - aiTextW - padding, padding + paintText.textSize, aiPaintText)
+            canvas.drawText(label, bitmap.width - aiTextW - pad, pad + paintText.textSize, aiPaintText)
         }
 
         return bitmap
@@ -969,8 +979,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             if (usePhoneCamera) {
                 if (phoneCameraView?.display == null) view?.post { if (isAdded) startPhoneCamera() }
             } else {
-                val mp = mediaPlayer
-                if (mp != null && !mp.isPlaying) view?.post { if (isAdded) runCatching { mp.play() } }
+                // Media player check replaced by IJK check if needed
             }
         }
     }
@@ -1016,9 +1025,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             hudHandler.postDelayed(this, 1000L)
         }
     }
-
-    override fun onSurfacesCreated(vlcVout: IVLCVout?) {}
-    override fun onSurfacesDestroyed(vlcVout: IVLCVout?) {}
 
     // =====================================================================
     // THUMBNAIL / MEDIA

@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId "com.idn.kmed.cervexa"
-        minSdk 21 // Catatan: Firebase terbaru menyarankan minSdk 21+ (sudah sesuai)
+        minSdk 24 // Updated to 24 to support FFmpegKit (Android 7.0+)
         targetSdk 34
         versionCode 1
         versionName "1.0"
@@ -51,11 +51,18 @@ android {
 
     // Fix 16KB page size Android 15 (Samsung M156B, dll)
     // useLegacyPackaging = TRUE → .so di-extract ke disk sebelum dimuat
-    // Ini BYPASS syarat 16KB alignment untuk library pihak ketiga (libvlc, tensorflow, dll)
+    // Ini BYPASS syarat 16KB alignment untuk library pihak ketiga (tensorflow, dll)
     // yang belum dicompile ulang dengan 16KB alignment
     packaging {
         jniLibs {
             useLegacyPackaging = true
+        }
+    }
+
+    sourceSets {
+        main {
+            // Native .so IjkPlayer (libijkffmpeg, libijkplayer, libijksdl)
+            jniLibs.srcDirs += ['src/main/lib']
         }
     }
 }
@@ -108,7 +115,15 @@ dependencies {
     implementation 'androidx.exifinterface:exifinterface:1.3.7'
     implementation 'com.github.alexeyvasilyev:rtsp-client-android:1.0.2'
     implementation project(':library-client-rtsp')
-    implementation 'org.videolan.android:libvlc-all:3.6.5'
+
+    // IjkMediaPlayer: source Java sudah dicopy ke app/src/main/java/tv/danmaku/ijk/
+    // .so files (libijkffmpeg, libijkplayer, libijksdl) ada di app/src/main/lib/
+    // Tidak perlu Maven dependency — source + .so sudah lengkap
+
+    // FFmpeg-Kit: untuk native RTSP stream muxing (record tanpa CPU re-encode)
+    // Menggantikan RealtimeBitmapEncoder yang berat
+    implementation 'dev.ffmpegkit-maintained:ffmpeg-kit-min:6.0.3'
+    implementation 'com.arthenica:smart-exception-java:0.2.1'
     // CameraX core library using the camera2 implementation
     implementation "androidx.camera:camera-core:1.3.1"
     implementation "androidx.camera:camera-camera2:1.3.1"

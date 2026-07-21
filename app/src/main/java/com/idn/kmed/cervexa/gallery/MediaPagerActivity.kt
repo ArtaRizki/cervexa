@@ -40,13 +40,8 @@ open class MediaPagerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val forceLandscape = intent.getBooleanExtra("forceLandscape", false)
-
-        if (forceLandscape) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-        }
+        // Foto & video dari kamera MS2 selalu landscape (16:9) — paksa landscape
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
         setContentView(R.layout.activity_media_pager)
 
@@ -58,25 +53,11 @@ open class MediaPagerActivity : AppCompatActivity() {
         findViewById<View>(R.id.bottomShare)?.setOnClickListener { onShareClick() }
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
-        // ============================================================
-        // btnBackLite dan btnExitLandscap:
-        // - Di TV (forceLandscape = true): GONE — tidak ada back stack
-        //   yang benar di TV, dan tombol ini tidak relevan
-        // - Di phone/tablet (forceLandscape = false): VISIBLE — normal
-        // ============================================================
-        val navVisibility = if (forceLandscape) View.GONE else View.VISIBLE
-
+        // btnBackLite selalu tampil — back button untuk kembali dari preview
         findViewById<View>(R.id.btnBackLite)?.let { btn ->
-            btn.visibility = navVisibility
+            btn.visibility = View.VISIBLE
             btn.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
         }
-
-//        findViewById<View>(R.id.btnExitLandscap)?.let { btn ->
-//            btn.visibility = navVisibility
-//            btn.setOnClickListener {
-//                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-//            }
-//        }
 
         paths = intent.getStringArrayListExtra("paths") ?: arrayListOf()
         types = intent.getStringArrayListExtra("types") ?: arrayListOf()

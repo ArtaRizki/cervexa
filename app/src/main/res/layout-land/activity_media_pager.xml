@@ -54,9 +54,11 @@
             android:layout_gravity="top|center_horizontal"
             android:layout_marginTop="40dp"
             android:background="@android:color/transparent"
+            app:chipBackgroundColor="#80000000"
+            app:chipStrokeWidth="0dp"
             android:elevation="2dp"
             android:text="5/6"
-            android:textColor="@color/colorBlack" />
+            android:textColor="@android:color/white" />
 
         <ImageView
             android:id="@id/bottomShare"

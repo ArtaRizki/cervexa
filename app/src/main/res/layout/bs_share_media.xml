@@ -202,7 +202,7 @@
             <ImageView
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:background="@drawable/ic_print"
+                android:background="@drawable/ic_pdf"
                 android:padding="10dp" />
 
             <TextView
@@ -214,9 +214,34 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Item: Cetak Sesi PDF -->
+        <!-- Item: Cetak Sesi Lengkap PDF -->
         <LinearLayout
             android:id="@+id/itemPrintSession"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="6dp">
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/ic_print"
+                android:padding="10dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:text="Cetak Sesi"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Item: Unduh PDF Sesi -->
+        <LinearLayout
+            android:id="@+id/itemDownloadSession"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -235,7 +260,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:gravity="center"
-                android:text="Unduh PDF Sesi"
+                android:text="Unduh Sesi"
                 android:textSize="11sp" />
         </LinearLayout>
 
@@ -243,7 +268,7 @@
         <View
             android:layout_width="0dp"
             android:layout_height="1dp"
-            android:layout_weight="3" />
+            android:layout_weight="2" />
 
     </LinearLayout>
 

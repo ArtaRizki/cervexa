@@ -62,6 +62,9 @@ class SelectExistingPatientActivity : AppCompatActivity() {
         progressBar =
             findViewById(R.id.progressBar)   // tambahkan ProgressBar di XML jika belum ada
 
+        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.topAppBar)
+        toolbar.setNavigationOnClickListener { finish() }
+
         adapter = PatientListAdapter { patient -> openVideoForPatient(patient) }
         rv.layoutManager = LinearLayoutManager(this)
         rv.adapter = adapter
@@ -193,19 +196,9 @@ class SelectExistingPatientActivity : AppCompatActivity() {
             return
         }
 
-        // Lookup ke API untuk dapat server ID, dengan fallback offline
-        lifecycleScope.launch {
-            setLoading(true)
-            val patientId = when (val r = apiRepo.lookupPatient(p.nik)) {
-                is ApiResult.Success -> {
-                    r.data.data?.id?.also { serverIdCache[p.nik] = it } ?: -1
-                }
-
-                is ApiResult.Error -> -1
-            }
-            setLoading(false)
-            launchVideo(p, patientId)
-        }
+        // Bypass API karena aplikasi jalan mode lokal (offline sepenuhnya)
+        val patientId = -1
+        launchVideo(p, patientId)
     }
 
     private fun launchVideo(p: PatientItem, patientId: Int) {

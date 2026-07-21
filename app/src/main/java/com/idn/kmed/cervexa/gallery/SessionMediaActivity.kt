@@ -374,8 +374,14 @@ class SessionMediaActivity : AppCompatActivity() {
             generateAndActionPdf(sessionOnly = false, download = false)
         }
 
-        // Unduh PDF Sesi Lengkap
+        // Cetak Sesi Lengkap (+Media)
         v.findViewById<LinearLayout>(R.id.itemPrintSession)?.setOnClickListener {
+            dialog.dismiss()
+            generateAndActionPdf(sessionOnly = true, download = false)
+        }
+
+        // Unduh PDF Sesi Lengkap
+        v.findViewById<LinearLayout>(R.id.itemDownloadSession)?.setOnClickListener {
             dialog.dismiss()
             generateAndActionPdf(sessionOnly = true, download = true)
         }

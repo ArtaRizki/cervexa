@@ -1,0 +1,58 @@
+﻿Starting a Gradle Daemon, 2 busy and 2 incompatible and 9 stopped Daemons could not be reused, use --status for details
+
+> Configure project :library-client-rtsp
+w: Android Publication 'release' Misconfigured for Variant 'release'
+Android Publication 'release' for variant 'release' was not configured properly:
+
+To avoid this warning, please create and configure Android publication variant with name 'release'.
+Example:
+```
+android {
+    publishing {
+        singleVariant("release") {}
+    }
+}
+```
+Solution: Please configure Android publication 'release' for variant 'release'.
+See https://kotl.in/oe70nr for more details.
+
+
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:dataBindingMergeDependencyArtifactsDebug FAILED
+
+[Incubating] Problems report is available at: file:///C:/Users/it-arta/projects/cervexa/build/reports/problems/problems-report.html
+.\gradlew : 
+At line:1 char:1
++ .\gradlew :app:compileDebugKotlin 2>&1 | Out-File -FilePath "build_er ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:dataBindingMergeDependencyArtifactsDebug'.
+> Could not resolve all files for configuration ':app:debugCompileClasspath'.
+   > Could not find tv.danmaku.ijk.media:ijkplayer-java:0.8.8.
+     Required by:
+         project :app
+   > Could not find com.arthenica:ffmpeg-kit-min:6.0-2.
+     Required by:
+         project :app
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 43s
+1 actionable task: 1 executed

@@ -719,6 +719,28 @@ class VideoFragmentTv : Fragment() {
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
     }
 
+    private var resyncJob: Job? = null
+
+    private fun autoResyncStream() {
+        if (!isAdded || ijkPlayer?.isPlaying != true) return
+        activity?.runOnUiThread {
+            Log.d(TAG, "[Auto-Resync TV] Restarting stream to flush CPU-induced delay")
+            stopIjkStream()
+            binding.root.postDelayed({
+                if (isAdded) startIjkStream()
+            }, 300)
+        }
+    }
+
+    private fun scheduleAutoResync() {
+        resyncJob?.cancel()
+        resyncJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(3000L)
+            if (record.get() || !isAdded) return@launch
+            autoResyncStream()
+        }
+    }
+
     /**
      * Anti-drift watchdog dimatikan sementara karena menyebabkan preview freeze.
      */
@@ -835,8 +857,21 @@ class VideoFragmentTv : Fragment() {
         binding.recordHud.visibility = View.GONE
         binding.btnRecordVideo.imageTintList =
             android.content.res.ColorStateList.valueOf(Color.WHITE)
-        Toast.makeText(requireContext(), "✅ VIDEO TERSIMPAN!", Toast.LENGTH_LONG).show()
-        binding.rvThumbs.postDelayed({ refreshThumbs() }, 300)
+        
+        val file = videoOutputFile; videoOutputFile = null
+        if (file != null && file.exists()) {
+            if (!isMetadataSaved) saveSessionMetadata()
+            Toast.makeText(requireContext(), "🎥 VIDEO TERSIMPAN!", Toast.LENGTH_SHORT).show()
+            binding.rvThumbs.postDelayed({ refreshThumbs() }, 300)
+        } else {
+            Toast.makeText(requireContext(), "Gagal menyimpan video", Toast.LENGTH_SHORT).show()
+        }
+        
+        resyncJob?.cancel()
+        resyncJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(1500L)
+            if (!record.get()) autoResyncStream()
+        }
     }
 
     // =====================================================================
@@ -955,6 +990,7 @@ class VideoFragmentTv : Fragment() {
         }.onSuccess { savedFile ->
             Toast.makeText(requireContext(), "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT).show()
             refreshThumbs()
+            scheduleAutoResync()
             // apiDelegate.uploadSnapshot(savedFile) // DIHAPUS - Seperti Commit 1665902
         }.onFailure {
             Toast.makeText(requireContext(), "Gagal menyimpan: ${it.message}", Toast.LENGTH_LONG)

@@ -570,6 +570,36 @@ class VideoFragmentMobile : Fragment() {
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
     }
 
+    private var resyncJob: Job? = null
+
+    /**
+     * Resync halus: merestart player sekedip mata (300ms) untuk mereset delay 
+     * yang menumpuk akibat beban CPU saat capture/record berlebihan.
+     */
+    private fun autoResyncStream() {
+        if (!isAdded || ijkPlayer?.isPlaying != true) return
+        activity?.runOnUiThread {
+            Log.d(TAG, "[Auto-Resync] Restarting stream to flush CPU-induced delay")
+            stopVlcStream()
+            binding.root.postDelayed({
+                if (isAdded) startVlcStream()
+            }, 300)
+        }
+    }
+
+    /**
+     * Jadwalkan resync 3 detik setelah user Selesai klik-klik capture.
+     * Jika saat itu sedang merekam video, resync dibatalkan (karena akan merusak file video).
+     */
+    private fun scheduleAutoResync() {
+        resyncJob?.cancel()
+        resyncJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(3000L)
+            if (record.get() || !isAdded) return@launch
+            autoResyncStream()
+        }
+    }
+
     /**
      * Anti-drift watchdog dimatikan sementara karena menyebabkan preview freeze 
      * setelah reconnect pada beberapa STB.
@@ -730,6 +760,7 @@ class VideoFragmentMobile : Fragment() {
                     if (isSnapshotRequested && ss.compareAndSet(true, false)) {
                         lastSnapshotMs = System.currentTimeMillis() // catat waktu capture
                         processSnapshot(bmWithOverlay)
+                        scheduleAutoResync() // Jadwalkan reset delay (jika beruntun klik, timer terus ke-reset)
                     }
 
                     if (bmWithOverlay !== sourceBmp && !bmWithOverlay.isRecycled) {
@@ -772,6 +803,14 @@ class VideoFragmentMobile : Fragment() {
         } else {
             Toast.makeText(requireContext(), "⚠️ File video tidak ditemukan", Toast.LENGTH_SHORT)
                 .show()
+        }
+
+        // Auto-resync stream setelah 1.5 detik mesin encoder beristirahat 
+        // untuk membuang delay yg menumpuk selama merekam
+        resyncJob?.cancel()
+        resyncJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(1500L)
+            if (!record.get()) autoResyncStream()
         }
     }
 

@@ -479,8 +479,8 @@ class VideoFragmentMobile : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
-                // Batasi cache maksimum agar buffer tidak menumpuk dari waktu ke waktu
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 0L)
+                // Batasi cache maksimum 500ms — nilai 0 = unlimited, harus pakai nilai ms
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 500L)
                 // RTSP via TCP (lebih stabil di WiFi lokal, hindari packet loss UDP)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp")
                 // Frame drop agresif agar tidak tertinggal saat CPU sibuk
@@ -572,10 +572,10 @@ class VideoFragmentMobile : Fragment() {
     private fun startLiveResyncWatchdog() {
         liveResyncJob?.cancel()
         liveResyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            // Tunggu 2 menit pertama sebelum mulai mengawasi
-            delay(2 * 60 * 1000L)
+            // Tunggu 90 detik pertama sebelum mulai mengawasi
+            delay(90_000L)
             while (isActive) {
-                delay(45_000L) // cek setiap 45 detik
+                delay(30_000L) // cek setiap 30 detik
                 if (!isActive || !isAdded) break
                 // Jangan restart saat sedang merekam — bisa merusak file video
                 if (record.get()) continue

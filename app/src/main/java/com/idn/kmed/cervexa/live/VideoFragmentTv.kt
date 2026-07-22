@@ -596,8 +596,8 @@ class VideoFragmentTv : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
-                // Batasi cache maksimum agar buffer tidak menumpuk dari waktu ke waktu
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 0L)
+                // Batasi cache maksimum 500ms — nilai 0 = unlimited, harus pakai nilai ms
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 500L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp")
                 // Frame drop agresif agar tidak tertinggal saat CPU sibuk
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
@@ -721,16 +721,16 @@ class VideoFragmentTv : Fragment() {
     }
 
     /**
-     * Anti-drift watchdog: setelah 2 menit stream berjalan, cek setiap 45 detik.
+     * Anti-drift watchdog: setelah 90 detik stream berjalan, cek setiap 30 detik.
      * Restart dengan jeda 500ms agar SurfaceTexture sempat melepas surface lama.
      * Tidak aktif saat merekam video atau dalam 10 detik setelah capture.
      */
     private fun startLiveResyncWatchdog() {
         liveResyncJob?.cancel()
         liveResyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(2 * 60 * 1000L)
+            delay(90_000L)
             while (isActive) {
-                delay(45_000L)
+                delay(30_000L)
                 if (!isActive || !isAdded) break
                 if (record.get()) continue
                 // Jangan restart dalam 10 detik setelah user capture foto

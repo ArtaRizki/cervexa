@@ -560,11 +560,17 @@ class VideoFragmentMobile : Fragment() {
     private fun stopVlcStream() {
         liveResyncJob?.cancel()
         liveFrameJob?.cancel()
-        runCatching {
-            ijkPlayer?.stop()
-            ijkPlayer?.release()
-        }
+        val oldPlayer = ijkPlayer
         ijkPlayer = null
+        
+        // Hancurkan player lama di background thread agar UI tidak macet (ANR/Freeze)
+        Thread {
+            runCatching {
+                oldPlayer?.stop()
+                oldPlayer?.release()
+            }
+        }.start()
+        
         setKeepScreenOn(false)
         baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
@@ -579,11 +585,13 @@ class VideoFragmentMobile : Fragment() {
     private fun autoResyncStream() {
         if (!isAdded || ijkPlayer?.isPlaying != true) return
         activity?.runOnUiThread {
-            Log.d(TAG, "[Auto-Resync] Restarting stream to flush CPU-induced delay")
+            Log.d(TAG, "[Auto-Resync] Restarting stream safely to flush CPU-induced delay")
             stopVlcStream()
+            
+            // Beri jeda 500ms (bukan 300ms) agar socket UDP RTSP server sempat ter-close
             binding.root.postDelayed({
-                if (isAdded) startVlcStream()
-            }, 300)
+                if (isAdded && ijkPlayer == null) startVlcStream()
+            }, 500)
         }
     }
 

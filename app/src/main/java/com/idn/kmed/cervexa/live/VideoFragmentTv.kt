@@ -707,11 +707,16 @@ class VideoFragmentTv : Fragment() {
 
     private fun stopIjkStream() {
         liveResyncJob?.cancel()
-        runCatching {
-            ijkPlayer?.stop()
-            ijkPlayer?.release()
-        }
+        val oldPlayer = ijkPlayer
         ijkPlayer = null
+        
+        Thread {
+            runCatching {
+                oldPlayer?.stop()
+                oldPlayer?.release()
+            }
+        }.start()
+        
         binding.tvStatusImage?.text = "Disconnected"
         binding.vShutterImage.visibility = View.VISIBLE
         setKeepScreenOn(false)
@@ -724,11 +729,12 @@ class VideoFragmentTv : Fragment() {
     private fun autoResyncStream() {
         if (!isAdded || ijkPlayer?.isPlaying != true) return
         activity?.runOnUiThread {
-            Log.d(TAG, "[Auto-Resync TV] Restarting stream to flush CPU-induced delay")
+            Log.d(TAG, "[Auto-Resync TV] Restarting stream safely to flush CPU-induced delay")
             stopIjkStream()
+            
             binding.root.postDelayed({
-                if (isAdded) startIjkStream()
-            }, 300)
+                if (isAdded && ijkPlayer == null) startIjkStream()
+            }, 500)
         }
     }
 

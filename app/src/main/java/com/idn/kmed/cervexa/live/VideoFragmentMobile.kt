@@ -478,18 +478,17 @@ class VideoFragmentMobile : Fragment() {
                 // Zero buffer — paket langsung dirender tanpa ditahan
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
-                // Batasi cache maksimum 500ms — nilai 0 = unlimited, harus pakai nilai ms
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 500L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
+                
                 // RTSP via TCP (lebih stabil di WiFi lokal, hindari packet loss UDP)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp")
-                // Frame drop agresif agar tidak tertinggal saat CPU sibuk
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
+                // Frame drop standar agar tidak freeze di STB
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1L)
                 // Filter brightness saja (tanpa kontras & saturasi agar warna natural seperti layar MS2)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
-                // Analisis stream lebih cepat
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
+                // Analisis stream secepat mungkin agar loading instan
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 2048L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 0L)
                 // HW decoder (kalau tidak tersedia, fallback SW otomatis)
                 val useHw = prefs.getBoolean(KEY_USE_HW_DECODER, false)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", if (useHw) 1L else 0L)
@@ -564,37 +563,12 @@ class VideoFragmentMobile : Fragment() {
     }
 
     /**
-     * Anti-drift watchdog: setelah 2 menit stream berjalan, cek setiap 45 detik.
-     * Jika player masih hidup, restart stream dengan jeda 500ms agar SurfaceTexture
-     * sempat melepas surface lama (mencegah preview freeze setelah restart).
-     * Tidak aktif saat merekam video atau dalam 10 detik setelah capture.
+     * Anti-drift watchdog dimatikan sementara karena menyebabkan preview freeze 
+     * setelah reconnect pada beberapa STB.
      */
     private fun startLiveResyncWatchdog() {
         liveResyncJob?.cancel()
-        liveResyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            // Tunggu 90 detik pertama sebelum mulai mengawasi
-            delay(90_000L)
-            while (isActive) {
-                delay(30_000L) // cek setiap 30 detik
-                if (!isActive || !isAdded) break
-                // Jangan restart saat sedang merekam — bisa merusak file video
-                if (record.get()) continue
-                // Jangan restart dalam 10 detik setelah user capture foto
-                if (System.currentTimeMillis() - lastSnapshotMs < 10_000L) continue
-                if (ijkPlayer?.isPlaying == true) {
-                    Log.d(TAG, "[Resync] Restarting stream to flush live edge drift")
-                    activity?.runOnUiThread {
-                        if (!isAdded) return@runOnUiThread
-                        stopVlcStream()
-                        // Jeda 500ms agar SurfaceTexture sempat melepas surface lama
-                        binding.root.postDelayed({
-                            if (isAdded) startVlcStream()
-                        }, 500)
-                    }
-                    break // watchdog baru akan dibuat oleh startVlcStream
-                }
-            }
-        }
+        // Watchdog dinonaktifkan sementara
     }
 
     /**

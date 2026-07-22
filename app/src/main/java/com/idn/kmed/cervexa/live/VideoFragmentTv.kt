@@ -595,16 +595,12 @@ class VideoFragmentTv : Fragment() {
                 IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
-                // Batasi cache maksimum 500ms — nilai 0 = unlimited, harus pakai nilai ms
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 500L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp")
-                // Frame drop agresif agar tidak tertinggal saat CPU sibuk
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
-                // Filter brightness saja (tanpa kontras & saturasi agar warna natural seperti layar MS2)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 2048L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 0L)
                 val useHw = requireContext().getSharedPreferences("app_prefs", MODE_PRIVATE)
                     .getBoolean("use_hw_decoder", false)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", if (useHw) 1L else 0L)
@@ -721,34 +717,11 @@ class VideoFragmentTv : Fragment() {
     }
 
     /**
-     * Anti-drift watchdog: setelah 90 detik stream berjalan, cek setiap 30 detik.
-     * Restart dengan jeda 500ms agar SurfaceTexture sempat melepas surface lama.
-     * Tidak aktif saat merekam video atau dalam 10 detik setelah capture.
+     * Anti-drift watchdog dimatikan sementara karena menyebabkan preview freeze.
      */
     private fun startLiveResyncWatchdog() {
         liveResyncJob?.cancel()
-        liveResyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(90_000L)
-            while (isActive) {
-                delay(30_000L)
-                if (!isActive || !isAdded) break
-                if (record.get()) continue
-                // Jangan restart dalam 10 detik setelah user capture foto
-                if (System.currentTimeMillis() - lastSnapshotMs < 10_000L) continue
-                if (ijkPlayer?.isPlaying == true) {
-                    Log.d(TAG, "[Resync TV] Restarting stream to flush live edge drift")
-                    activity?.runOnUiThread {
-                        if (!isAdded) return@runOnUiThread
-                        stopIjkStream()
-                        // Jeda 500ms agar SurfaceTexture sempat melepas surface lama
-                        binding.root.postDelayed({
-                            if (isAdded) startIjkStream()
-                        }, 500)
-                    }
-                    break
-                }
-            }
-        }
+        // Watchdog dinonaktifkan sementara
     }
 
 

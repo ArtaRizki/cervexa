@@ -571,10 +571,10 @@ class VideoFragmentMobile : Fragment() {
     private fun startLiveResyncWatchdog() {
         liveResyncJob?.cancel()
         liveResyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            // Tunggu 3 menit pertama sebelum mulai mengawasi
-            delay(3 * 60 * 1000L)
+            // Tunggu 1 menit pertama sebelum mulai mengawasi
+            delay(1 * 60 * 1000L)
             while (isActive) {
-                delay(30_000L) // cek setiap 30 detik
+                delay(20_000L) // cek setiap 20 detik
                 if (!isActive || !isAdded) break
                 // Jangan restart saat sedang merekam — bisa merusak file video
                 if (record.get()) continue

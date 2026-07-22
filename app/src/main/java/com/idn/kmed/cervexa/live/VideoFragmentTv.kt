@@ -727,9 +727,9 @@ class VideoFragmentTv : Fragment() {
     private fun startLiveResyncWatchdog() {
         liveResyncJob?.cancel()
         liveResyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(3 * 60 * 1000L)
+            delay(1 * 60 * 1000L)
             while (isActive) {
-                delay(30_000L)
+                delay(20_000L)
                 if (!isActive || !isAdded) break
                 if (record.get()) continue
                 if (ijkPlayer?.isPlaying == true) {

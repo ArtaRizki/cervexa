@@ -597,13 +597,13 @@ class VideoFragmentTv : Fragment() {
             val player = IjkMediaPlayer().apply {
                 IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024 * 10L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 100L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L) // MATIKAN buffering agar REALTIME
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024 * 5L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 0L) // TANPA CACHE
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 512L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L) // Drop frame agresif jika CPU telat (anti-delay)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 2048L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 0L)

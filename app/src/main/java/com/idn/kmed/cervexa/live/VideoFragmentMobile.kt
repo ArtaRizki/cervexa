@@ -479,9 +479,9 @@ class VideoFragmentMobile : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 
                 // Nyalakan buffer SANGAT kecil untuk mengobati glitch UDP, tapi dibatasi ketat agar tak delay
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024 * 10L) // maks 10 KB
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 100L) // maks 100ms
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L) // MATIKAN buffering
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024 * 5L) 
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 0L) // TANPA CACHE
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
                 
                 // Gunakan UDP agar benar-benar anti-delay (mencegah drift)
@@ -491,7 +491,7 @@ class VideoFragmentMobile : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 512L)
                 
                 // Frame drop standar agar tidak freeze di STB
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L) // Agresif anti-delay
                 // Filter brightness saja (tanpa kontras & saturasi agar warna natural seperti layar MS2)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
                 // Analisis stream secepat mungkin agar loading instan

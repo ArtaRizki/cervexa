@@ -602,10 +602,11 @@ class VideoFragmentTv : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 0L) // TANPA CACHE
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 512L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L) // Paksa RTSP tanpa delay
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L) // Jangan tunggu paket berantakan (langsung render)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L) // Drop frame agresif jika CPU telat (anti-delay)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 2048L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 256L) // Deteksi secepat mungkin
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 0L)
                 val useHw = requireContext().getSharedPreferences("app_prefs", MODE_PRIVATE)
                     .getBoolean("use_hw_decoder", false)

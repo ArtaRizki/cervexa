@@ -486,16 +486,17 @@ class VideoFragmentMobile : Fragment() {
                 
                 // Gunakan UDP agar benar-benar anti-delay (mencegah drift)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L) // Paksa RTSP tanpa delay
                 
                 // Atur antrean UDP agar gambar tak hancur / abu-abu saat paket berantakan
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 512L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L) // Jangan tunggu paket berantakan
                 
                 // Frame drop standar agar tidak freeze di STB
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L) // Agresif anti-delay
                 // Filter brightness saja (tanpa kontras & saturasi agar warna natural seperti layar MS2)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
                 // Analisis stream secepat mungkin agar loading instan
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 2048L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 256L) // Deteksi secepat mungkin
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 0L)
                 // HW decoder (kalau tidak tersedia, fallback SW otomatis)
                 val useHw = prefs.getBoolean(KEY_USE_HW_DECODER, false)

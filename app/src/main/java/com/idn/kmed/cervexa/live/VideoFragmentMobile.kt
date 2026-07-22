@@ -169,22 +169,22 @@ class VideoFragmentMobile : Fragment() {
     // Paint di-cache di class level
     // =====================================================================
     private val paintText = Paint().apply {
-        color = Color.WHITE
+        color = Color.WHITE  // Putih agar terbaca di background hitam
         // textSize JANGAN hardcode (akan diskalakan berdasarkan frame)
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
-        setShadowLayer(3f, 1f, 1f, Color.BLACK)
+        setShadowLayer(2f, 1f, 1f, Color.BLACK)
     }
     private val paintBox = Paint().apply {
-        color = Color.argb(128, 0, 0, 0)
+        color = Color.BLACK  // Hitam pekat untuk info pasien
         style = Paint.Style.FILL
     }
     private val paintDateBg = Paint().apply {
-        color = Color.argb(128, 0, 0, 0)
+        color = Color.BLACK  // Hitam pekat — nutupin timestamp kuning hardware kamera
         style = Paint.Style.FILL
     }
     private val paintDateText = Paint().apply {
-        color = Color.WHITE
+        color = Color.WHITE  // Putih agar kontras di background hitam
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
     }
@@ -768,7 +768,7 @@ class VideoFragmentMobile : Fragment() {
                     if (isSnapshotRequested && ss.compareAndSet(true, false)) {
                         lastSnapshotMs = System.currentTimeMillis() // catat waktu capture
                         processSnapshot(bmWithOverlay)
-                        scheduleAutoResync() // Jadwalkan reset delay (jika beruntun klik, timer terus ke-reset)
+                        // autoResync DIHAPUS — menyebabkan stream stuck
                     }
 
                     if (bmWithOverlay !== sourceBmp && !bmWithOverlay.isRecycled) {
@@ -813,13 +813,7 @@ class VideoFragmentMobile : Fragment() {
                 .show()
         }
 
-        // Auto-resync stream setelah 1.5 detik mesin encoder beristirahat 
-        // untuk membuang delay yg menumpuk selama merekam
-        resyncJob?.cancel()
-        resyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(1500L)
-            if (!record.get()) autoResyncStream()
-        }
+        // autoResync DIHAPUS — menyebabkan stream stuck di perangkat lemah
     }
 
     // =====================================================================
@@ -915,9 +909,11 @@ class VideoFragmentMobile : Fragment() {
         val baselineY = bitmap.height - pad
 
         // === Right-bottom date box (dynamic width) ===
+        // Extra width kiri untuk nutupin timestamp kuning bawaan hardware kamera
+        val dateExtraLeft = bitmap.width * 0.18f  // Tambah 18% lebar frame ke kiri
         val dateTextW = paintDateText.measureText(formatted)
-        val dateBoxW = dateTextW + (pad * 2f)
-        val dateBoxH = (paintDateText.textSize + pad * 1.6f).coerceAtLeast(pad * 2.2f)
+        val dateBoxW = dateTextW + (pad * 2f) + dateExtraLeft
+        val dateBoxH = (paintDateText.textSize + pad * 2.2f).coerceAtLeast(pad * 3f)  // Box lebih tinggi
 
         val right = bitmap.width.toFloat()
         val left = (right - dateBoxW).coerceAtLeast(0f)
@@ -929,7 +925,8 @@ class VideoFragmentMobile : Fragment() {
             android.graphics.RectF(left, top, right + 20f, bottom + 20f),
             pad, pad, paintDateBg
         )
-        canvas.drawText(formatted, left + pad, baselineY, paintDateText)
+        // Teks tanggal di sebelah kanan area (dengan extra space di kiri untuk menutup timestamp)
+        canvas.drawText(formatted, left + dateExtraLeft + pad, baselineY, paintDateText)
 
         // === Left-bottom info box (dynamic width) ===
         val infoTextW = paintText.measureText(info)
@@ -1500,14 +1497,14 @@ class VideoFragmentMobile : Fragment() {
 
 
         // ===== Overlay scaling =====
-        // 0.035f = 3.5% tinggi frame (480 -> ~16.8px)
-        private const val TEXT_SCALE = 0.035f
-        private const val TEXT_MIN_PX = 14f
-        private const val TEXT_MAX_PX = 42f
+        // 0.045f = 4.5% tinggi frame (480 -> ~21.6px) — lebih besar dari sebelumnya
+        private const val TEXT_SCALE = 0.045f
+        private const val TEXT_MIN_PX = 18f
+        private const val TEXT_MAX_PX = 52f
 
         // Padding scale
-        private const val PADDING_SCALE = 0.03f
-        private const val PADDING_MIN_PX = 12f
-        private const val PADDING_MAX_PX = 32f
+        private const val PADDING_SCALE = 0.035f
+        private const val PADDING_MIN_PX = 14f
+        private const val PADDING_MAX_PX = 36f
     }
 }

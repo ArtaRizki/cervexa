@@ -145,20 +145,23 @@ class VideoFragmentTv : Fragment() {
     // Paint objects di-cache di class level
     // =====================================================================
     private val paintDateBg = Paint().apply {
-        color = Color.argb(128, 0, 0, 0)
+        color = Color.BLACK  // Hitam pekat — nutupin timestamp kuning hardware
         style = Paint.Style.FILL
     }
     private val paintDateText = Paint().apply {
-        color = Color.WHITE
+        color = Color.WHITE  // Putih agar kontras di background hitam
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
     }
     private val paintText = Paint().apply {
-        color = Color.WHITE
-        // textSize JANGAN hardcode di sini (nanti diskalakan per frame)
+        color = Color.WHITE  // Putih agar terbaca di background hitam
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
-        setShadowLayer(3f, 1f, 1f, Color.BLACK)
+        setShadowLayer(2f, 1f, 1f, Color.BLACK)
+    }
+    private val paintBox = Paint().apply {
+        color = Color.BLACK  // Hitam pekat untuk info pasien kiri bawah
+        style = Paint.Style.FILL
     }
     private val paintEnhance = Paint().apply { isAntiAlias = false; isDither = false }
 
@@ -726,26 +729,9 @@ class VideoFragmentTv : Fragment() {
 
     private var resyncJob: Job? = null
 
-    private fun autoResyncStream() {
-        if (!isAdded || ijkPlayer?.isPlaying != true) return
-        activity?.runOnUiThread {
-            Log.d(TAG, "[Auto-Resync TV] Restarting stream safely to flush CPU-induced delay")
-            stopIjkStream()
-            
-            binding.root.postDelayed({
-                if (isAdded && ijkPlayer == null) startIjkStream()
-            }, 500)
-        }
-    }
-
-    private fun scheduleAutoResync() {
-        resyncJob?.cancel()
-        resyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(3000L)
-            if (record.get() || !isAdded) return@launch
-            autoResyncStream()
-        }
-    }
+    // autoResyncStream DIHAPUS — restart player di TV/STB menyebabkan hang berkepanjangan.
+    // STB terlalu lemah untuk reconnect RTSP dengan cepat.
+    // User melaporkan stream stuck setelah capture akibat fitur ini.
 
     /**
      * Anti-drift watchdog dimatikan sementara karena menyebabkan preview freeze.
@@ -871,12 +857,7 @@ class VideoFragmentTv : Fragment() {
         } else {
             Toast.makeText(requireContext(), "Gagal menyimpan video", Toast.LENGTH_SHORT).show()
         }
-        
-        resyncJob?.cancel()
-        resyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(1500L)
-            if (!record.get()) autoResyncStream()
-        }
+        // autoResync DIHAPUS — menyebabkan hang di TV/STB
     }
 
     // =====================================================================
@@ -890,7 +871,7 @@ class VideoFragmentTv : Fragment() {
         }
 
         // === Atur proporsi text terhadap tinggi video ===
-        // 0.035f = 3.5% dari tinggi video (480 -> ~16.8px, 1080 -> ~37.8px)
+        // 0.045f = 4.5% dari tinggi video — lebih besar agar terbaca
         val fontPx = (targetHeight * TEXT_SCALE)
             .coerceIn(TEXT_MIN_PX, TEXT_MAX_PX)
 
@@ -911,28 +892,46 @@ class VideoFragmentTv : Fragment() {
             ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
 
-        val pad = (bitmap.height * 0.03f).coerceIn(12f, 32f) // padding juga ikut skala
+        val pad = (bitmap.height * 0.035f).coerceIn(14f, 36f) // padding ikut skala
         val baselineY = bitmap.height - pad
 
         // === Right-bottom date box (dynamic width) ===
+        // Extra width kiri untuk nutupin timestamp kuning bawaan hardware kamera
+        val dateExtraLeft = bitmap.width * 0.18f  // Tambah 18% lebar frame ke kiri
         val dateTextW = paintDateText.measureText(formatted)
-        val dateBoxW = dateTextW + (pad * 2f)
-        val dateBoxH = (paintDateText.textSize + pad * 1.6f).coerceAtLeast(pad * 2.2f)
+        val dateBoxW = dateTextW + (pad * 2f) + dateExtraLeft
+        val dateBoxH = (paintDateText.textSize + pad * 2.2f).coerceAtLeast(pad * 3f)  // Box lebih tinggi
 
         val right = bitmap.width.toFloat()
         val left = (right - dateBoxW).coerceAtLeast(0f)
         val bottom = bitmap.height.toFloat()
-        val top = bottom - dateBoxH
+        val top = (bottom - dateBoxH).coerceAtLeast(0f)
 
         // Draw rounded rectangle, overshooting the right and bottom edges to keep them sharp
         canvas.drawRoundRect(
             android.graphics.RectF(left, top, right + 20f, bottom + 20f),
             pad, pad, paintDateBg
         )
-        canvas.drawText(formatted, left + pad, baselineY - (pad * 0.2f), paintDateText)
+        // Teks tanggal di sebelah kanan area (dengan extra space di kiri untuk menutup timestamp)
+        canvas.drawText(formatted, left + dateExtraLeft + pad, baselineY - (pad * 0.2f), paintDateText)
 
+        // === Left-bottom info box (dynamic width, rounded) ===
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
-        canvas.drawText(info, pad, baselineY, paintText)
+        val infoTextW = paintText.measureText(info)
+        val infoBoxW = (infoTextW + pad * 2f).coerceAtMost(bitmap.width * 0.75f)
+        val infoRight = infoBoxW.coerceAtMost(bitmap.width.toFloat())
+        val infoTop = top // sejajarkan tinggi box bawah
+
+        canvas.drawRoundRect(
+            android.graphics.RectF(-20f, infoTop, infoRight, bottom + 20f),
+            pad, pad, paintBox
+        )
+
+        // Kalau text terlalu panjang, potong
+        val maxTextW = (infoRight - pad * 2f).coerceAtLeast(0f)
+        val infoDraw = if (paintText.measureText(info) <= maxTextW) info
+            else info.substring(0, ((info.length * maxTextW / paintText.measureText(info)).toInt()).coerceAtLeast(0)) + "…"
+        canvas.drawText(infoDraw, pad, baselineY, paintText)
 
         // === AI Detection Overlay ===
         if (abnormalityProb >= 0f) {
@@ -980,26 +979,46 @@ class VideoFragmentTv : Fragment() {
             Toast.makeText(requireContext(), "Gagal membuat direktori snapshot", Toast.LENGTH_LONG)
                 .show(); return
         }
+        // Capture bitmap di main thread (harus dari TextureView di UI thread)
         val bmp = if (usePhoneCamera) phoneCameraView?.bitmap else textureView?.bitmap
         if (bmp == null) {
             Toast.makeText(requireContext(), "Gagal capture bitmap", Toast.LENGTH_SHORT)
                 .show(); return
         }
-        val prob = try {
-            val result = viaModelHelper?.detectAbnormality(bmp)
-            (result as? com.idn.kmed.cervexa.ml.AbnormalityResult.Detected)?.confidenceScore ?: -1f
-        } catch (e: Exception) { -1f }
-        lastSnapshotMs = System.currentTimeMillis() // catat waktu capture
-        runCatching {
-            StorageUtils.saveJpegWithPrefix(dir!!, processTextToBitmapSafe(bmp, prob), prefix = "ss")
-        }.onSuccess { savedFile ->
-            Toast.makeText(requireContext(), "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT).show()
-            refreshThumbs()
-            scheduleAutoResync()
-            // apiDelegate.uploadSnapshot(savedFile) // DIHAPUS - Seperti Commit 1665902
-        }.onFailure {
-            Toast.makeText(requireContext(), "Gagal menyimpan: ${it.message}", Toast.LENGTH_LONG)
-                .show()
+        // Salin bitmap agar aman diproses di background thread
+        val bmpCopy = bmp.copy(Bitmap.Config.ARGB_8888, true)
+        lastSnapshotMs = System.currentTimeMillis()
+        val saveDir = dir!!
+
+        // Pindahkan SEMUA heavy work ke background thread agar UI tidak freeze:
+        // - TF Lite inference (detectAbnormality)
+        // - Canvas overlay drawing (processTextToBitmapSafe)
+        // - Disk I/O (saveJpegWithPrefix)
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            val prob = try {
+                val result = viaModelHelper?.detectAbnormality(bmpCopy)
+                (result as? com.idn.kmed.cervexa.ml.AbnormalityResult.Detected)?.confidenceScore ?: -1f
+            } catch (e: Exception) { -1f }
+
+            runCatching {
+                StorageUtils.saveJpegWithPrefix(saveDir, processTextToBitmapSafe(bmpCopy, prob), prefix = "ss")
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    if (isAdded) {
+                        Toast.makeText(requireContext(), "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT).show()
+                        refreshThumbs()
+                    }
+                }
+            }.onFailure { err ->
+                withContext(Dispatchers.Main) {
+                    if (isAdded) {
+                        Toast.makeText(requireContext(), "Gagal menyimpan: ${err.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+
+            // Recycle copy setelah selesai
+            if (!bmpCopy.isRecycled) bmpCopy.recycle()
         }
     }
 
@@ -1368,11 +1387,11 @@ class VideoFragmentTv : Fragment() {
         const val STB_BITRATE = 1_500_000 // 1.5 Mbps cukup untuk 640×480
 
         // ===== Overlay Text Scaling =====
-        // 0.035f = 3.5% dari tinggi frame
-        private const val TEXT_SCALE = 0.035f
+        // 0.045f = 4.5% dari tinggi frame — lebih besar agar terbaca
+        private const val TEXT_SCALE = 0.045f
 
         // Batas aman agar tidak terlalu kecil / terlalu besar
-        private const val TEXT_MIN_PX = 14f
-        private const val TEXT_MAX_PX = 42f
+        private const val TEXT_MIN_PX = 18f
+        private const val TEXT_MAX_PX = 52f
     }
 }

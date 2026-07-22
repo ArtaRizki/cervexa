@@ -28,14 +28,14 @@
             tools:title="Image_17_06_2025 10:12:49.jpg"/>
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- Konten: ganti isi dengan ViewPager2 -->
+    <!-- Konten: ViewPager2 penuh sampai bawah -->
     <FrameLayout
         android:id="@+id/pagerContainer"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@color/colorWhite"
         app:layout_constraintTop_toBottomOf="@id/appBar"
-        app:layout_constraintBottom_toTopOf="@id/bottomShare"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -58,34 +58,30 @@
             android:elevation="2dp"
             android:text="5/6"
             android:textColor="@android:color/white" />
+
+        <!-- Share floating button (pojok kanan atas, di bawah AI) -->
+        <LinearLayout
+            android:id="@+id/bottomShare"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="108dp"
+            android:layout_marginEnd="8dp"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:background="@drawable/bg_ai_toggle_off"
+            android:elevation="8dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_menu_share_24"
+                android:contentDescription="Bagikan"
+                app:tint="@android:color/white" />
+        </LinearLayout>
+
     </FrameLayout>
-
-    <!-- Bottom share -->
-    <LinearLayout
-        android:id="@+id/bottomShare"
-        android:layout_width="0dp"
-        android:layout_height="88dp"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:background="@color/colorWhite"
-        android:elevation="8dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
-
-        <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_menu_share_24"
-            android:contentDescription="Bagikan"
-            app:tint="#616161" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Bagikan"
-            android:textColor="#616161"
-            android:textSize="12sp"/>
-    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

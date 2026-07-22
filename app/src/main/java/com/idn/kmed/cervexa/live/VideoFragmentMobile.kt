@@ -103,6 +103,8 @@ class VideoFragmentMobile : Fragment() {
 
     private var clockJob: Job? = null
     private var liveFrameJob: Job? = null
+    private var liveResyncJob: Job? = null
+    private var liveStreamStartMs: Long = 0L
 
     // ==== Session / Storage ====
     private var sessionDir: File? = null
@@ -476,10 +478,12 @@ class VideoFragmentMobile : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
+                // Batasi cache maksimum agar buffer tidak menumpuk dari waktu ke waktu
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 0L)
                 // RTSP via TCP (lebih stabil di WiFi lokal, hindari packet loss UDP)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp")
-                // Frame drop agar tidak tertinggal saat CPU sibuk
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1L)
+                // Frame drop agresif agar tidak tertinggal saat CPU sibuk
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
                 // Filter brightness saja (tanpa kontras & saturasi agar warna natural seperti layar MS2)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
                 // Analisis stream lebih cepat
@@ -535,7 +539,9 @@ class VideoFragmentMobile : Fragment() {
             player.dataSource = finalUrl
             player.prepareAsync()
             ijkPlayer = player
+            liveStreamStartMs = android.os.SystemClock.elapsedRealtime()
             startLiveFrameGrabber()
+            startLiveResyncWatchdog()
         }.onFailure {
             Log.e(TAG, "IJK start error", it)
             binding.pbLoadingImage.visibility = View.GONE
@@ -544,6 +550,7 @@ class VideoFragmentMobile : Fragment() {
     }
 
     private fun stopVlcStream() {
+        liveResyncJob?.cancel()
         liveFrameJob?.cancel()
         runCatching {
             ijkPlayer?.stop()
@@ -553,6 +560,36 @@ class VideoFragmentMobile : Fragment() {
         setKeepScreenOn(false)
         baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
+    }
+
+    /**
+     * Anti-drift watchdog: setelah 3 menit stream berjalan, cek setiap 30 detik.
+     * Jika player masih hidup (kemungkinan buffer menumpuk), restart stream secara diam-diam
+     * agar selalu berada di live edge (tidak tertunda).
+     * Tidak aktif saat sedang merekam video agar rekaman tidak terputus.
+     */
+    private fun startLiveResyncWatchdog() {
+        liveResyncJob?.cancel()
+        liveResyncJob = viewLifecycleOwner.lifecycleScope.launch {
+            // Tunggu 3 menit pertama sebelum mulai mengawasi
+            delay(3 * 60 * 1000L)
+            while (isActive) {
+                delay(30_000L) // cek setiap 30 detik
+                if (!isActive || !isAdded) break
+                // Jangan restart saat sedang merekam — bisa merusak file video
+                if (record.get()) continue
+                if (ijkPlayer?.isPlaying == true) {
+                    Log.d(TAG, "[Resync] Restarting stream to flush live edge drift")
+                    activity?.runOnUiThread {
+                        if (isAdded) {
+                            stopVlcStream()
+                            startVlcStream()
+                        }
+                    }
+                    break // stopVlcStream membatalkan job ini via liveResyncJob?.cancel()
+                }
+            }
+        }
     }
 
     /**

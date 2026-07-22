@@ -87,6 +87,7 @@ class VideoFragmentTv : Fragment() {
     private var snapshotsDir: File? = null
 
     private var clockJob: Job? = null
+    private var liveResyncJob: Job? = null
 
     // ==== IJK Components ====
     private var ijkPlayer: IjkMediaPlayer? = null
@@ -594,8 +595,11 @@ class VideoFragmentTv : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
+                // Batasi cache maksimum agar buffer tidak menumpuk dari waktu ke waktu
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1L)
+                // Frame drop agresif agar tidak tertinggal saat CPU sibuk
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
                 // Filter brightness saja (tanpa kontras & saturasi agar warna natural seperti layar MS2)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
@@ -648,6 +652,7 @@ class VideoFragmentTv : Fragment() {
             player.dataSource = finalUrl
             player.prepareAsync()
             ijkPlayer = player
+            startLiveResyncWatchdog()
 
             binding.pbLoadingImage.postDelayed({
                 if (isAdded) {
@@ -701,6 +706,7 @@ class VideoFragmentTv : Fragment() {
     }
 
     private fun stopIjkStream() {
+        liveResyncJob?.cancel()
         runCatching {
             ijkPlayer?.stop()
             ijkPlayer?.release()
@@ -711,6 +717,33 @@ class VideoFragmentTv : Fragment() {
         setKeepScreenOn(false)
         baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
+    }
+
+    /**
+     * Anti-drift watchdog: setelah 3 menit stream berjalan, cek setiap 30 detik.
+     * Jika player masih hidup, restart stream secara diam-diam agar kembali ke live edge.
+     * Tidak aktif saat sedang merekam video.
+     */
+    private fun startLiveResyncWatchdog() {
+        liveResyncJob?.cancel()
+        liveResyncJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(3 * 60 * 1000L)
+            while (isActive) {
+                delay(30_000L)
+                if (!isActive || !isAdded) break
+                if (record.get()) continue
+                if (ijkPlayer?.isPlaying == true) {
+                    Log.d(TAG, "[Resync TV] Restarting stream to flush live edge drift")
+                    activity?.runOnUiThread {
+                        if (isAdded) {
+                            stopIjkStream()
+                            startIjkStream()
+                        }
+                    }
+                    break
+                }
+            }
+        }
     }
 
 

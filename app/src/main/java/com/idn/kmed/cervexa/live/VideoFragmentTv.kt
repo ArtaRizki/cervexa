@@ -860,7 +860,6 @@ class VideoFragmentTv : Fragment() {
         
         val file = videoOutputFile; videoOutputFile = null
         if (file != null && file.exists()) {
-            if (!isMetadataSaved) saveSessionMetadata()
             Toast.makeText(requireContext(), "🎥 VIDEO TERSIMPAN!", Toast.LENGTH_SHORT).show()
             binding.rvThumbs.postDelayed({ refreshThumbs() }, 300)
         } else {

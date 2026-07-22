@@ -105,6 +105,7 @@ class VideoFragmentMobile : Fragment() {
     private var liveFrameJob: Job? = null
     private var liveResyncJob: Job? = null
     private var liveStreamStartMs: Long = 0L
+    private var lastSnapshotMs: Long = 0L  // Catat waktu capture terakhir
 
     // ==== Session / Storage ====
     private var sessionDir: File? = null
@@ -563,30 +564,34 @@ class VideoFragmentMobile : Fragment() {
     }
 
     /**
-     * Anti-drift watchdog: setelah 3 menit stream berjalan, cek setiap 30 detik.
-     * Jika player masih hidup (kemungkinan buffer menumpuk), restart stream secara diam-diam
-     * agar selalu berada di live edge (tidak tertunda).
-     * Tidak aktif saat sedang merekam video agar rekaman tidak terputus.
+     * Anti-drift watchdog: setelah 2 menit stream berjalan, cek setiap 45 detik.
+     * Jika player masih hidup, restart stream dengan jeda 500ms agar SurfaceTexture
+     * sempat melepas surface lama (mencegah preview freeze setelah restart).
+     * Tidak aktif saat merekam video atau dalam 10 detik setelah capture.
      */
     private fun startLiveResyncWatchdog() {
         liveResyncJob?.cancel()
         liveResyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            // Tunggu 1 menit pertama sebelum mulai mengawasi
-            delay(1 * 60 * 1000L)
+            // Tunggu 2 menit pertama sebelum mulai mengawasi
+            delay(2 * 60 * 1000L)
             while (isActive) {
-                delay(20_000L) // cek setiap 20 detik
+                delay(45_000L) // cek setiap 45 detik
                 if (!isActive || !isAdded) break
                 // Jangan restart saat sedang merekam — bisa merusak file video
                 if (record.get()) continue
+                // Jangan restart dalam 10 detik setelah user capture foto
+                if (System.currentTimeMillis() - lastSnapshotMs < 10_000L) continue
                 if (ijkPlayer?.isPlaying == true) {
                     Log.d(TAG, "[Resync] Restarting stream to flush live edge drift")
                     activity?.runOnUiThread {
-                        if (isAdded) {
-                            stopVlcStream()
-                            startVlcStream()
-                        }
+                        if (!isAdded) return@runOnUiThread
+                        stopVlcStream()
+                        // Jeda 500ms agar SurfaceTexture sempat melepas surface lama
+                        binding.root.postDelayed({
+                            if (isAdded) startVlcStream()
+                        }, 500)
                     }
-                    break // stopVlcStream membatalkan job ini via liveResyncJob?.cancel()
+                    break // watchdog baru akan dibuat oleh startVlcStream
                 }
             }
         }
@@ -740,8 +745,8 @@ class VideoFragmentMobile : Fragment() {
                         }.onFailure { Log.e(TAG, "submitBitmap error", it) }
                     }
 
-                    // 4. Snapshot
                     if (isSnapshotRequested && ss.compareAndSet(true, false)) {
+                        lastSnapshotMs = System.currentTimeMillis() // catat waktu capture
                         processSnapshot(bmWithOverlay)
                     }
 

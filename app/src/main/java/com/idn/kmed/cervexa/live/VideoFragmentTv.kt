@@ -88,6 +88,7 @@ class VideoFragmentTv : Fragment() {
 
     private var clockJob: Job? = null
     private var liveResyncJob: Job? = null
+    private var lastSnapshotMs: Long = 0L  // Catat waktu capture terakhir
 
     // ==== IJK Components ====
     private var ijkPlayer: IjkMediaPlayer? = null
@@ -720,25 +721,29 @@ class VideoFragmentTv : Fragment() {
     }
 
     /**
-     * Anti-drift watchdog: setelah 3 menit stream berjalan, cek setiap 30 detik.
-     * Jika player masih hidup, restart stream secara diam-diam agar kembali ke live edge.
-     * Tidak aktif saat sedang merekam video.
+     * Anti-drift watchdog: setelah 2 menit stream berjalan, cek setiap 45 detik.
+     * Restart dengan jeda 500ms agar SurfaceTexture sempat melepas surface lama.
+     * Tidak aktif saat merekam video atau dalam 10 detik setelah capture.
      */
     private fun startLiveResyncWatchdog() {
         liveResyncJob?.cancel()
         liveResyncJob = viewLifecycleOwner.lifecycleScope.launch {
-            delay(1 * 60 * 1000L)
+            delay(2 * 60 * 1000L)
             while (isActive) {
-                delay(20_000L)
+                delay(45_000L)
                 if (!isActive || !isAdded) break
                 if (record.get()) continue
+                // Jangan restart dalam 10 detik setelah user capture foto
+                if (System.currentTimeMillis() - lastSnapshotMs < 10_000L) continue
                 if (ijkPlayer?.isPlaying == true) {
                     Log.d(TAG, "[Resync TV] Restarting stream to flush live edge drift")
                     activity?.runOnUiThread {
-                        if (isAdded) {
-                            stopIjkStream()
-                            startIjkStream()
-                        }
+                        if (!isAdded) return@runOnUiThread
+                        stopIjkStream()
+                        // Jeda 500ms agar SurfaceTexture sempat melepas surface lama
+                        binding.root.postDelayed({
+                            if (isAdded) startIjkStream()
+                        }, 500)
                     }
                     break
                 }
@@ -968,6 +973,7 @@ class VideoFragmentTv : Fragment() {
             val result = viaModelHelper?.detectAbnormality(bmp)
             (result as? com.idn.kmed.cervexa.ml.AbnormalityResult.Detected)?.confidenceScore ?: -1f
         } catch (e: Exception) { -1f }
+        lastSnapshotMs = System.currentTimeMillis() // catat waktu capture
         runCatching {
             StorageUtils.saveJpegWithPrefix(dir!!, processTextToBitmapSafe(bmp, prob), prefix = "ss")
         }.onSuccess { savedFile ->

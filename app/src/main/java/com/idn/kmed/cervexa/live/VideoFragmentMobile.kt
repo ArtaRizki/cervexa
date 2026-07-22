@@ -176,11 +176,13 @@ class VideoFragmentMobile : Fragment() {
         setShadowLayer(2f, 1f, 1f, Color.BLACK)
     }
     private val paintBox = Paint().apply {
-        color = Color.BLACK  // Hitam pekat untuk info pasien
+        color = Color.BLACK
+        alpha = 255
         style = Paint.Style.FILL
     }
     private val paintDateBg = Paint().apply {
-        color = Color.BLACK  // Hitam pekat — nutupin timestamp kuning hardware kamera
+        color = Color.BLACK
+        alpha = 255
         style = Paint.Style.FILL
     }
     private val paintDateText = Paint().apply {

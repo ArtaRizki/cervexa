@@ -145,7 +145,8 @@ class VideoFragmentTv : Fragment() {
     // Paint objects di-cache di class level
     // =====================================================================
     private val paintDateBg = Paint().apply {
-        color = Color.BLACK  // Hitam pekat — nutupin timestamp kuning hardware
+        color = Color.BLACK  // Hitam pekat
+        alpha = 255          // Opacity 100% mutlak
         style = Paint.Style.FILL
     }
     private val paintDateText = Paint().apply {
@@ -161,6 +162,7 @@ class VideoFragmentTv : Fragment() {
     }
     private val paintBox = Paint().apply {
         color = Color.BLACK  // Hitam pekat untuk info pasien kiri bawah
+        alpha = 255          // Opacity 100% mutlak
         style = Paint.Style.FILL
     }
     private val paintEnhance = Paint().apply { isAntiAlias = false; isDither = false }

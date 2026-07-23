@@ -89,9 +89,8 @@ class MediaPageFragment : Fragment() {
             imageMode.visibility = View.VISIBLE
             videoMode.visibility = View.GONE
 
-            photo.minimumScale = 1f
-            photo.mediumScale = 2.5f
-            photo.maximumScale = 5f
+            photo.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            photo.minimumScale = 0.5f
 
             // Decode bitmap with EXIF rotation
             runCatching {

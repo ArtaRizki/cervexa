@@ -95,7 +95,8 @@ class PreviewActivity : AppCompatActivity() {
                 imageMode.visibility = View.VISIBLE
                 videoMode.visibility = View.GONE
 
-                photoView.minimumScale = 1.0f
+                photoView.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                photoView.minimumScale = 0.5f
                 photoView.mediumScale = 2.5f
                 photoView.maximumScale = 5.0f
                 photoView.setImageURI(Uri.fromFile(f))

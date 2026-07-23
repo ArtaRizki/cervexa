@@ -54,7 +54,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:adjustViewBounds="true"
-                android:scaleType="centerInside"
+                android:scaleType="fitCenter"
                 tools:src="@drawable/cervexa_logo" />
 
             <!-- Overlay bawah -->

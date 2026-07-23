@@ -318,8 +318,10 @@ class VideoFragmentMobile : Fragment() {
         observeAiResults()
         requireContext().applicationContext.registerComponentCallbacks(memoryCallback)
 
-        // Ambil TextureView dari layout
-        textureView = binding.root.findViewById(R.id.textureView)
+        // Ambil TextureView dari layout & terapkan brightness GPU tanpa delay
+        textureView = binding.root.findViewById<android.view.TextureView>(R.id.textureView)?.also {
+            applyHardwareBrightness(it, 25f)
+        }
 
         setupGestureDetectors()
         setupButtons()
@@ -1499,6 +1501,19 @@ class VideoFragmentMobile : Fragment() {
         setOnTouchListener { _, ev ->
             sd.onTouchEvent(ev); td.onTouchEvent(ev); sd.isInProgress || scale > 1f
         }
+    }
+
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 25f) {
+        val cm = android.graphics.ColorMatrix(floatArrayOf(
+            1f, 0f, 0f, 0f, brightnessOffset,
+            0f, 1f, 0f, 0f, brightnessOffset,
+            0f, 0f, 1f, 0f, brightnessOffset,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        val paint = android.graphics.Paint().apply {
+            colorFilter = android.graphics.ColorMatrixColorFilter(cm)
+        }
+        tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
     }
 
     companion object {

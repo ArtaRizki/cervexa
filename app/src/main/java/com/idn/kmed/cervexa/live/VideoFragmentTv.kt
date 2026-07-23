@@ -312,7 +312,9 @@ class VideoFragmentTv : Fragment() {
         
         viaModelHelper = com.idn.kmed.cervexa.ml.ViaModelHelper(requireContext())
 
-        textureView = binding.textureView
+        textureView = binding.textureView?.also {
+            applyHardwareBrightness(it, 25f)
+        }
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
 
         scaleDetector = ScaleGestureDetector(
@@ -1386,6 +1388,19 @@ class VideoFragmentTv : Fragment() {
             usePhoneCamera = it.getBoolean("usePhoneCamera", false)
             view?.post { applyZoomAndPan() }
         }
+    }
+
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 25f) {
+        val cm = android.graphics.ColorMatrix(floatArrayOf(
+            1f, 0f, 0f, 0f, brightnessOffset,
+            0f, 1f, 0f, 0f, brightnessOffset,
+            0f, 0f, 1f, 0f, brightnessOffset,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        val paint = android.graphics.Paint().apply {
+            colorFilter = android.graphics.ColorMatrixColorFilter(cm)
+        }
+        tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
     }
 
     companion object {

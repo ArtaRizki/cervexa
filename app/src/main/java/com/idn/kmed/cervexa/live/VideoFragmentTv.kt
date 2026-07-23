@@ -909,42 +909,73 @@ class VideoFragmentTv : Fragment() {
         val baselineY = bitmap.height - pad
 
         // === Right-bottom date box (dynamic width) ===
-        // Tambah sedikit ruang ke kiri (dikurangi agar tidak terlalu panjang)
-        val dateExtraLeft = pad * 2f
+        // Box padding merata agar teks berada tepat di tengah (centered)
+        val boxPadX = pad * 1.5f
         val dateTextW = paintDateText.measureText(formatted)
-        val dateBoxW = dateTextW + (pad * 2f) + dateExtraLeft
-        val dateBoxH = (paintDateText.textSize + pad * 2.2f).coerceAtLeast(pad * 3f)  // Box lebih tinggi
+        val dateBoxW = dateTextW + (boxPadX * 2f)
+        val dateBoxH = (paintDateText.textSize + pad * 2.2f).coerceAtLeast(pad * 3f)
 
         val right = bitmap.width.toFloat()
         val left = (right - dateBoxW).coerceAtLeast(0f)
         val bottom = bitmap.height.toFloat()
         val top = (bottom - dateBoxH).coerceAtLeast(0f)
 
-        // Draw rounded rectangle, overshooting the right and bottom edges to keep them sharp
-        canvas.drawRoundRect(
-            android.graphics.RectF(left, top, right + 20f, bottom + 20f),
-            pad, pad, paintDateBg
+        // Baseline Y untuk menengahkan teks secara vertikal di dalam box
+        val dateCenterY = top + (dateBoxH / 2f) - ((paintDateText.descent() + paintDateText.ascent()) / 2f)
+
+        // Draw specific rounded corners: top-left & bottom-left
+        val cornerRadius = dateBoxH / 2f
+        val rightRadii = floatArrayOf(
+            cornerRadius, cornerRadius, // top-left
+            0f, 0f,                     // top-right
+            0f, 0f,                     // bottom-right
+            cornerRadius, cornerRadius  // bottom-left
         )
-        // Teks tanggal di sebelah kanan area (dengan extra space di kiri untuk menutup timestamp)
-        canvas.drawText(formatted, left + dateExtraLeft + pad, baselineY - (pad * 0.2f), paintDateText)
+        val rightPath = android.graphics.Path().apply {
+            addRoundRect(
+                android.graphics.RectF(left, top, right, bottom),
+                rightRadii,
+                android.graphics.Path.Direction.CW
+            )
+        }
+        canvas.drawPath(rightPath, paintDateBg)
+
+        // Teks ditengah box (centered)
+        canvas.drawText(formatted, left + boxPadX, dateCenterY, paintDateText)
 
         // === Left-bottom info box (dynamic width, rounded) ===
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
         val infoTextW = paintText.measureText(info)
         val infoBoxW = (infoTextW + pad * 2f).coerceAtMost(bitmap.width * 0.75f)
-        val infoRight = infoBoxW.coerceAtMost(bitmap.width.toFloat())
+        val infoLeft = 0f
+        val infoRight = (infoLeft + infoBoxW).coerceAtMost(bitmap.width.toFloat())
         val infoTop = top // sejajarkan tinggi box bawah
+        val infoBottom = bottom
 
-        canvas.drawRoundRect(
-            android.graphics.RectF(-20f, infoTop, infoRight, bottom + 20f),
-            pad, pad, paintBox
+        // Draw specific rounded corners: top-right & bottom-right
+        val leftRadii = floatArrayOf(
+            0f, 0f,                     // top-left
+            cornerRadius, cornerRadius, // top-right
+            cornerRadius, cornerRadius, // bottom-right
+            0f, 0f                      // bottom-left
         )
+        val leftPath = android.graphics.Path().apply {
+            addRoundRect(
+                android.graphics.RectF(infoLeft, infoTop, infoRight, infoBottom),
+                leftRadii,
+                android.graphics.Path.Direction.CW
+            )
+        }
+        canvas.drawPath(leftPath, paintBox)
 
         // Kalau text terlalu panjang, potong
-        val maxTextW = (infoRight - pad * 2f).coerceAtLeast(0f)
+        val maxTextW = (infoRight - infoLeft - pad * 2f).coerceAtLeast(0f)
         val infoDraw = if (paintText.measureText(info) <= maxTextW) info
             else info.substring(0, ((info.length * maxTextW / paintText.measureText(info)).toInt()).coerceAtLeast(0)) + "…"
-        canvas.drawText(infoDraw, pad, baselineY, paintText)
+            
+        // Hitung juga center Y untuk text sebelah kiri agar simetris
+        val infoCenterY = infoTop + ((infoBottom - infoTop) / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
+        canvas.drawText(infoDraw, infoLeft + pad, infoCenterY, paintText)
 
         // === AI Detection Overlay ===
         if (abnormalityProb >= 0f) {

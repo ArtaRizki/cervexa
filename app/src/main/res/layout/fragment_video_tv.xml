@@ -42,7 +42,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|start"
             android:layout_margin="16dp"
-            android:background="#80000000"
+            android:background="#FF000000"
             android:fontFamily="sans-serif-medium"
             android:paddingHorizontal="8dp"
             android:paddingVertical="4dp"

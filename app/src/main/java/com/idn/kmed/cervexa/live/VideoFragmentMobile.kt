@@ -921,8 +921,8 @@ class VideoFragmentMobile : Fragment() {
         val baselineY = bitmap.height - pad
 
         // === Right-bottom date box (dynamic width) ===
-        // Extra width kiri untuk nutupin timestamp kuning bawaan hardware kamera
-        val dateExtraLeft = bitmap.width * 0.18f  // Tambah 18% lebar frame ke kiri
+        // Tambah sedikit ruang ke kiri (dikurangi agar tidak terlalu panjang)
+        val dateExtraLeft = pad * 2f
         val dateTextW = paintDateText.measureText(formatted)
         val dateBoxW = dateTextW + (pad * 2f) + dateExtraLeft
         val dateBoxH = (paintDateText.textSize + pad * 2.2f).coerceAtLeast(pad * 3f)  // Box lebih tinggi

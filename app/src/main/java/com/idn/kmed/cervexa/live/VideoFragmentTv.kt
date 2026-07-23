@@ -598,23 +598,31 @@ class VideoFragmentTv : Fragment() {
 
             val player = IjkMediaPlayer().apply {
                 IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN)
+
+                // ── FORMAT (FFmpeg demuxer) ──
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L) // MATIKAN buffering agar REALTIME
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024 * 5L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 0L) // TANPA CACHE
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L) // Paksa RTSP tanpa delay
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L) // Jangan tunggu paket berantakan (langsung render)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L) // Drop frame agresif jika CPU telat (anti-delay)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 256L) // Deteksi secepat mungkin
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 256L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 0L)
-                val useHw = requireContext().getSharedPreferences("app_prefs", MODE_PRIVATE)
-                    .getBoolean("use_hw_decoder", false)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", if (useHw) 1L else 0L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L)
+
+                // ── PLAYER (IjkPlayer internal) ──
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 1L) // 1ms (0=unlimited!)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "an", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
+
+                // ── CODEC (decoder) ──
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L)
             }
 
             val tv = textureView ?: return

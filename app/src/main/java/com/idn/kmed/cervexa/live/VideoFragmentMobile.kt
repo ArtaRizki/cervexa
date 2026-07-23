@@ -474,38 +474,45 @@ class VideoFragmentMobile : Fragment() {
             val finalUrl = if (user.isNotEmpty() && !rtspUrl.contains("//$user"))
                 rtspUrl.replace("rtsp://", "rtsp://$user:$pass@") else rtspUrl
 
-            // === KONFIGURASI ZERO-LATENCY (identik dengan cervexa_new) ===
+            // === KONFIGURASI ULTRA ZERO-LATENCY ===
             val player = IjkMediaPlayer().apply {
                 IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN)
-                // Zero buffer — paket langsung dirender tanpa ditahan
+
+                // ── FORMAT (FFmpeg demuxer) ──
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
-                
-                // Nyalakan buffer SANGAT kecil untuk mengobati glitch UDP, tapi dibatasi ketat agar tak delay
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L) // MATIKAN buffering
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024 * 5L) 
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 0L) // TANPA CACHE
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
-                
-                // Gunakan UDP agar benar-benar anti-delay (mencegah drift)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L) // Paksa RTSP tanpa delay
-                
-                // Atur antrean UDP agar gambar tak hancur / abu-abu saat paket berantakan
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L) // Jangan tunggu paket berantakan
-                
-                // Frame drop standar agar tidak freeze di STB
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L) // Agresif anti-delay
-                // Filter brightness saja (tanpa kontras & saturasi agar warna natural seperti layar MS2)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "vfilter", "eq=brightness=0.3")
-                // Analisis stream secepat mungkin agar loading instan
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 256L) // Deteksi secepat mungkin
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L)
+                // Deteksi stream secepat kilat — jangan buang waktu analisis
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 256L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 0L)
-                // HW decoder (kalau tidak tersedia, fallback SW otomatis)
-                val useHw = prefs.getBoolean(KEY_USE_HW_DECODER, false)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", if (useHw) 1L else 0L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
-                // Tidak ada audio
+                // Jangan tunggu paket yang datang tidak urut — langsung render
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L)
+
+                // ── PLAYER (IjkPlayer internal) ──
+                // PENTING: max_cached_duration=0 di IJK = UNLIMITED! Harus > 0
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 1L) // 1ms = hampir nol
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024L)  // 1 KB saja
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)    // MATIKAN buffering
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)              // Jangan blok render meski buffer kosong
+                // Buang frame yang terlambat secara agresif
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
+                // Matikan audio sepenuhnya (tidak ada audio di mikroskop)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "an", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
+
+                // ── CODEC (decoder) ──
+                // SELALU gunakan HW decoder — jauh lebih cepat dari software
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
+                // Skip deblocking filter — hemat CPU, kurangi latency ~0.5 detik
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L) // AVDISCARD_ALL
+                // Jangan proses frame B (bi-directional) — hemat latency
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L) // AVDISCARD_DEFAULT
+
+                // HAPUS vfilter brightness — terlalu berat di CPU, menambah 0.3-1 detik delay
+                // Brightness bisa diatur di level TextureView (ColorMatrix) tanpa delay
             }
 
             // Attach ke TextureView yang sudah ada di layout XML

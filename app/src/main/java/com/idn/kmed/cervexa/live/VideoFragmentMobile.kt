@@ -320,7 +320,7 @@ class VideoFragmentMobile : Fragment() {
 
         // Ambil TextureView dari layout & terapkan brightness GPU tanpa delay
         textureView = binding.root.findViewById<android.view.TextureView>(R.id.textureView)?.also {
-            applyHardwareBrightness(it, 25f)
+            applyHardwareBrightness(it, 10f)  // dikurangi dari 25f agar tidak blur/artefak
         }
 
         setupGestureDetectors()
@@ -904,7 +904,14 @@ class VideoFragmentMobile : Fragment() {
 
     private fun processTextToBitmapSafe(src: Bitmap, aiProb: Float = -1f): Bitmap {
         if (src.isRecycled) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-        val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
+        
+        // Crop 4 pixel di atas untuk membuang list/garis biru artefak bawaan hardware kamera MS2
+        val cropTop = 4
+        val safeSrc = if (src.height > cropTop) {
+            Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
+        } else src
+        
+        val bitmap = if (safeSrc.isMutable) safeSrc else safeSrc.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(bitmap)
 
         // >>> FIX UTAMA: font & padding mengikuti ukuran frame <<<

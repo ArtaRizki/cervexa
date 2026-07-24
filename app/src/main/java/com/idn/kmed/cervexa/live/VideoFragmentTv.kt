@@ -128,8 +128,8 @@ class VideoFragmentTv : Fragment() {
 
     // === Image Enhancement ===
     private var brightness = 0f
-    private var contrast = 1.2f
-    private var saturation = 1.1f
+    private var contrast = 1.05f  // dikurangi dari 1.2 agar tidak terlalu kuat
+    private var saturation = 1.0f  // netral, tidak ada saturasi tambahan
     private val colorMatrix = ColorMatrix()
 
     // ====== STATE (BASE CENTER + PAN) ======
@@ -313,7 +313,7 @@ class VideoFragmentTv : Fragment() {
         viaModelHelper = com.idn.kmed.cervexa.ml.ViaModelHelper(requireContext())
 
         textureView = binding.textureView?.also {
-            applyHardwareBrightness(it, 25f)
+            applyHardwareBrightness(it, 10f)  // dikurangi dari 25f agar tidak blur/artefak
         }
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
 
@@ -895,7 +895,15 @@ class VideoFragmentTv : Fragment() {
     }
 
     private fun processTextToBitmapSafe(src: Bitmap, abnormalityProb: Float = -1f): Bitmap {
-        val bitmap = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
+        if (src.isRecycled) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        
+        // Crop 4 pixel di atas untuk membuang list/garis biru artefak bawaan hardware kamera MS2
+        val cropTop = 4
+        val safeSrc = if (src.height > cropTop) {
+            Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
+        } else src
+        
+        val bitmap = if (safeSrc.isMutable) safeSrc else safeSrc.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(bitmap)
 
         // >>> FIX UTAMA: font mengikuti ukuran frame <<<

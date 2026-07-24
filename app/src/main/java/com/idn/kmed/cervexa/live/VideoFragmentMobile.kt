@@ -390,6 +390,8 @@ class VideoFragmentMobile : Fragment() {
         }
         binding.btnSimpanCase.setOnClickListener { showSaveConfirmDialog() }
 
+        // AI toggle: hanya untuk analisis hasil foto/video, tersembunyi saat live stream
+        binding.btnAiToggle.visibility = View.GONE
         binding.btnAiToggle.setOnClickListener { analysisModeManager.toggle() }
         observeAiToggleUi()
 
@@ -1538,16 +1540,8 @@ class VideoFragmentMobile : Fragment() {
     }
 
     private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 25f) {
-        val cm = android.graphics.ColorMatrix(floatArrayOf(
-            1f, 0f, 0f, 0f, brightnessOffset,
-            0f, 1f, 0f, 0f, brightnessOffset,
-            0f, 0f, 1f, 0f, brightnessOffset,
-            0f, 0f, 0f, 1f, 0f
-        ))
-        val paint = android.graphics.Paint().apply {
-            colorFilter = android.graphics.ColorMatrixColorFilter(cm)
-        }
-        tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
+        // Gunakan hardware layer tanpa color filter → warna 100% asli kamera, tidak ada manipulasi
+        tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
     }
 
     companion object {

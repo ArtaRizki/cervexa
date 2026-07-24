@@ -1430,8 +1430,12 @@ class VideoFragmentTv : Fragment() {
     }
 
     private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 25f) {
-        // Gunakan hardware layer tanpa color filter → warna 100% asli kamera, tidak ada manipulasi
-        tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+        // Kurangi saturasi sedikit (1.0 = normal, 0.85 = agak pudar)
+        val cm = android.graphics.ColorMatrix().apply { setSaturation(0.85f) }
+        val paint = android.graphics.Paint().apply {
+            colorFilter = android.graphics.ColorMatrixColorFilter(cm)
+        }
+        tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
     }
 
     companion object {

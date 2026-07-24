@@ -27,7 +27,7 @@ class PreviewActivity : AppCompatActivity() {
     private lateinit var photoView: PhotoView
     private lateinit var vv: VideoView
     private lateinit var toolbar: MaterialToolbar
-    private var chipIndex: Chip? = null
+    private var chipIndex: android.widget.TextView? = null
 
     // overlay image
     private lateinit var tvInfoLeft: TextView

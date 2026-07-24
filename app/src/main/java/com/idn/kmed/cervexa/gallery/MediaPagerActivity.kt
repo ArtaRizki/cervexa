@@ -29,7 +29,7 @@ open class MediaPagerActivity : AppCompatActivity() {
 
     private lateinit var pager: ViewPager2
     private lateinit var toolbar: MaterialToolbar
-    private var chipIndex: Chip? = null
+    private var chipIndex: android.widget.TextView? = null
     private lateinit var bottomShare: View
     private lateinit var btnBackLite: View
 

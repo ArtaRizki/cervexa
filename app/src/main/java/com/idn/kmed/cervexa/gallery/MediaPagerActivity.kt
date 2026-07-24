@@ -43,6 +43,20 @@ open class MediaPagerActivity : AppCompatActivity() {
         // Foto & video dari kamera MS2 selalu landscape (16:9) — paksa landscape
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
+        // Sembunyikan status bar — harus dipanggil SEBELUM setContentView
+        @Suppress("DEPRECATION")
+        window.setFlags(
+            android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN,
+            android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN
+        )
+        // Extra: immersive untuk Android 11+ agar benar-benar hilang
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            window.insetsController?.let {
+                it.hide(android.view.WindowInsets.Type.statusBars())
+                it.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        }
+
         setContentView(R.layout.activity_media_pager)
 
         toolbar = findViewById(R.id.toolbar)

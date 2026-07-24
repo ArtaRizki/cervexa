@@ -15,7 +15,7 @@
     </style>
 
     <!-- Tema fullscreen: sembunyikan status bar sejak sebelum Activity dibuat -->
-    <style name="Theme.Fullscreen" parent="Theme.MaterialComponents.NoActionBar">
+    <style name="Theme.Fullscreen" parent="AppTheme.NoActionBar">
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

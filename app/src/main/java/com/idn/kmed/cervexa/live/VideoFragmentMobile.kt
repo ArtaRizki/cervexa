@@ -320,7 +320,7 @@ class VideoFragmentMobile : Fragment() {
 
         // Ambil TextureView dari layout & terapkan brightness GPU tanpa delay
         textureView = binding.root.findViewById<android.view.TextureView>(R.id.textureView)?.also {
-            applyHardwareBrightness(it, 10f)  // dikurangi dari 25f agar tidak blur/artefak
+            applyHardwareBrightness(it, 0f)  // 0 = tidak ada brightness tambahan, warna asli kamera
         }
 
         setupGestureDetectors()

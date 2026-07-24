@@ -128,8 +128,8 @@ class VideoFragmentTv : Fragment() {
 
     // === Image Enhancement ===
     private var brightness = 0f
-    private var contrast = 1.05f  // dikurangi dari 1.2 agar tidak terlalu kuat
-    private var saturation = 1.0f  // netral, tidak ada saturasi tambahan
+    private var contrast = 1.0f   // netral — tidak ada enhancement warna
+    private var saturation = 1.0f // netral — tidak ada saturasi tambahan
     private val colorMatrix = ColorMatrix()
 
     // ====== STATE (BASE CENTER + PAN) ======
@@ -313,7 +313,7 @@ class VideoFragmentTv : Fragment() {
         viaModelHelper = com.idn.kmed.cervexa.ml.ViaModelHelper(requireContext())
 
         textureView = binding.textureView?.also {
-            applyHardwareBrightness(it, 10f)  // dikurangi dari 25f agar tidak blur/artefak
+            applyHardwareBrightness(it, 0f)  // 0 = tidak ada brightness tambahan, warna asli kamera
         }
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
 

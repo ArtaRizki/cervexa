@@ -49,15 +49,16 @@ open class MediaPagerActivity : AppCompatActivity() {
             android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN,
             android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN
         )
-        // Extra: immersive untuk Android 11+ agar benar-benar hilang
+
+        setContentView(R.layout.activity_media_pager)
+
+        // Extra: immersive untuk Android 11+ agar benar-benar hilang (panggil SETELAH setContentView)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             window.insetsController?.let {
                 it.hide(android.view.WindowInsets.Type.statusBars())
                 it.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         }
-
-        setContentView(R.layout.activity_media_pager)
 
         toolbar = findViewById(R.id.toolbar)
         pager = findViewById(R.id.pager)

@@ -52,12 +52,13 @@ class PreviewActivity : AppCompatActivity() {
             android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN,
             android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN
         )
+
+        setContentView(R.layout.activity_preview)
+
         // Extra: immersive untuk Android 11+ agar benar-benar hilang
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             window.insetsController?.hide(android.view.WindowInsets.Type.statusBars())
         }
-        
-        setContentView(R.layout.activity_preview)
 
         // --- views
         toolbar = findViewById(R.id.toolbar)

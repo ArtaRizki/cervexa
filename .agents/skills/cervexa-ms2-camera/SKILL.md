@@ -375,4 +375,19 @@ Aplikasi mencoba URL satu per satu hingga berhasil terkoneksi.
 - [ ] **Refactor CANDIDATE_URLS**: Tambahkan mekanisme auto-discovery IP kamera MS2
   agar tidak perlu hardcode URL
 - [ ] **Audio Recording**: Saat ini `ViewRecorder` hanya merekam video tanpa audio
+
 ---
+
+## Masalah Umum & Solusi Teknis (Gotchas)
+
+### 1. Artefak Visual (Semut/Retak) pada Live Stream
+- **Penyebab**: Menggunakan `ColorMatrixColorFilter` di `View.LAYER_TYPE_HARDWARE` pada `TextureView` dengan *brightness offset* yang tinggi. Mengangkat brightness secara digital dari stream H.264 (MS2) akan mengekspos noise kompresi secara ekstrem (gambar menjadi pixelated/retak/banyak semut).
+- **Solusi**: Jangan memodifikasi *brightness* (offset = 0f) dan *contrast* (1.0f) di level aplikasi/GPU. Biarkan menampilkan warna "raw" (mentah) dari sensor MS2 agar gambar tetap bersih dan halus. Jika gambar blur, itu karena lensa fisik tidak fokus — arahkan user untuk memutar *dial* fokus di bodi kamera MS2.
+
+### 2. Fullscreen Immersive & Masalah Status Bar
+- **Penyebab**: Memanggil `window.insetsController` *sebelum* `setContentView` menyebabkan `NullPointerException` (karena `DecorView` belum siap).
+- **Solusi**:
+  1. Buat tema di `themes.xml` yang mewarisi tema aplikasi (`AppTheme.NoActionBar`), BUKAN `MaterialComponents` murni (untuk menghindari `InflateException` pada komponen Material 3 seperti `Chip`).
+  2. Tema harus punya: `android:windowFullscreen=true` dan `android:windowNoTitle=true`.
+  3. Panggil `window.setFlags(FLAG_FULLSCREEN)` di `onCreate` **sebelum** `setContentView`.
+  4. Panggil logika `window.insetsController` (untuk Android 11+) **setelah** `setContentView`.

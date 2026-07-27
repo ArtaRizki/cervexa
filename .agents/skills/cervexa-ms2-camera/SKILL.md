@@ -380,14 +380,17 @@ Aplikasi mencoba URL satu per satu hingga berhasil terkoneksi.
 
 ## Masalah Umum & Solusi Teknis (Gotchas)
 
-### 1. Artefak Visual (Semut/Retak) pada Live Stream
-- **Penyebab**: Menggunakan `ColorMatrixColorFilter` di `View.LAYER_TYPE_HARDWARE` pada `TextureView` dengan *brightness offset* yang tinggi. Mengangkat brightness secara digital dari stream H.264 (MS2) akan mengekspos noise kompresi secara ekstrem (gambar menjadi pixelated/retak/banyak semut).
-- **Solusi**: Jangan memodifikasi *brightness* (offset = 0f) dan *contrast* (1.0f) di level aplikasi/GPU. Biarkan menampilkan warna "raw" (mentah) dari sensor MS2 agar gambar tetap bersih dan halus. Jika gambar blur, itu karena lensa fisik tidak fokus — arahkan user untuk memutar *dial* fokus di bodi kamera MS2.
+### 1. Artefak Visual (Semut/Retak) & Warna pada Live Stream
+- **Penyebab Artefak**: Menggunakan `ColorMatrixColorFilter` di `View.LAYER_TYPE_HARDWARE` pada `TextureView` dengan *brightness offset* yang tinggi (+25f). Mengangkat brightness secara digital dari stream H.264 (MS2) akan mengekspos noise kompresi secara ekstrem (gambar menjadi pixelated/retak/banyak semut).
+- **Solusi Brightness & Saturasi**: Jangan memodifikasi *brightness* (offset = 0f) dan *contrast* (1.0f) di level aplikasi/GPU. Untuk mengurangi warna merah/warm yang terlalu kuat pada kamera MS2 tanpa merusak kualitas gambar, cukup turunkan **saturation sedikit (0.85f)** menggunakan `ColorMatrix().apply { setSaturation(0.85f) }` pada Hardware Layer.
+- **Blur / Fokus**: Jika gambar blur secara optik, itu karena lensa fisik tidak fokus — arahkan user untuk memutar *dial* fokus di bodi kamera MS2 (karena MS2 menggunakan fokus manual).
+- **Tombol Analisis AI**: Tombol AI (`btnAiToggle`) disembunyikan (`View.GONE`) pada saat *live stream*, dan hanya digunakan untuk analisis pada hasil foto/video.
 
-### 2. Fullscreen Immersive & Masalah Status Bar
-- **Penyebab**: Memanggil `window.insetsController` *sebelum* `setContentView` menyebabkan `NullPointerException` (karena `DecorView` belum siap).
-- **Solusi**:
-  1. Buat tema di `themes.xml` yang mewarisi tema aplikasi (`AppTheme.NoActionBar`), BUKAN `MaterialComponents` murni (untuk menghindari `InflateException` pada komponen Material 3 seperti `Chip`).
-  2. Tema harus punya: `android:windowFullscreen=true` dan `android:windowNoTitle=true`.
-  3. Panggil `window.setFlags(FLAG_FULLSCREEN)` di `onCreate` **sebelum** `setContentView`.
+### 2. Fullscreen Immersive & Masalah Status Bar / InflateException
+- **Penyebab NPE**: Memanggil `window.insetsController` *sebelum* `setContentView` menyebabkan `NullPointerException` (karena `DecorView` belum siap).
+- **Penyebab InflateException (Chip)**: Penggunaan komponen Material 3 (`com.google.android.material.chip.Chip`) pada layout yang menggunakan tema Fullscreen/custom sering memicu `InflateException` jika tema tidak menyediakan atribut Material3 secara lengkap.
+- **Solusi Lengkap**:
+  1. Ganti komponen `Chip` pada layout preview/media (`activity_media_pager.xml`, `activity_preview.xml`) dengan **`TextView` standar** dengan background drawable untuk memastikan kompatibilitas inflasi di semua tema/versi Android.
+  2. Buat tema di `themes.xml` yang mewarisi tema aplikasi (`AppTheme.NoActionBar`), dengan `android:windowFullscreen=true` dan `android:windowNoTitle=true`.
+  3. Panggil `window.setFlags(FLAG_FULLSCREEN, FLAG_FULLSCREEN)` di `onCreate` **sebelum** `setContentView`.
   4. Panggil logika `window.insetsController` (untuk Android 11+) **setelah** `setContentView`.

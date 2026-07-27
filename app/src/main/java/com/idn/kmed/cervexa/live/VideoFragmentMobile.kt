@@ -176,14 +176,34 @@ class VideoFragmentMobile : Fragment() {
         setShadowLayer(2f, 1f, 1f, Color.BLACK)
     }
     private val paintBox = Paint().apply {
-        color = Color.BLACK
-        alpha = 255
+        color = 0xFF000000.toInt()
         style = Paint.Style.FILL
     }
     private val paintDateBg = Paint().apply {
-        color = Color.BLACK
-        alpha = 255
+        color = 0xFF000000.toInt()
         style = Paint.Style.FILL
+    }
+    private val paintCaptureEnhance = Paint().apply {
+        val cm = android.graphics.ColorMatrix()
+        // Saturation direndahkan sedikit (1.05) & contrast 1.05
+        val contrast = 1.05f
+        val brightness = 0f
+        val scale = contrast
+        val translate = brightness + (1f - contrast) * 128f
+        cm.set(
+            floatArrayOf(
+                scale, 0f, 0f, 0f, translate,
+                0f, scale, 0f, 0f, translate,
+                0f, 0f, scale, 0f, translate,
+                0f, 0f, 0f, 1f, 0f
+            )
+        )
+        val sat = android.graphics.ColorMatrix()
+        sat.setSaturation(1.05f)
+        cm.postConcat(sat)
+        colorFilter = android.graphics.ColorMatrixColorFilter(cm)
+        isAntiAlias = false
+        isDither = false
     }
     private val paintDateText = Paint().apply {
         color = Color.WHITE  // Putih agar kontras di background hitam
@@ -913,8 +933,12 @@ class VideoFragmentMobile : Fragment() {
             Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
         } else src
         
-        val bitmap = if (safeSrc.isMutable) safeSrc else safeSrc.copy(Bitmap.Config.ARGB_8888, true)
+        // Kita buat blank bitmap baru agar bisa menggambar safeSrc dengan Paint (untuk apply filter hasil)
+        val bitmap = Bitmap.createBitmap(safeSrc.width, safeSrc.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
+        
+        // Gambar gambar asli dengan filter enhancement untuk HASIL foto/video
+        canvas.drawBitmap(safeSrc, 0f, 0f, paintCaptureEnhance)
 
         // >>> FIX UTAMA: font & padding mengikuti ukuran frame <<<
         ensureOverlayTextSize(bitmap.height)

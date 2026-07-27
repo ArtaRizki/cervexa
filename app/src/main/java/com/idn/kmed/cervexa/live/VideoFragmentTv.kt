@@ -1320,9 +1320,6 @@ class VideoFragmentTv : Fragment() {
                     1 -> generateAndActionPdf(sessionOnly = true, download = false)
                     2 -> generateAndActionPdf(sessionOnly = true, download = true)
                 }
-                requireActivity().requestedOrientation =
-                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-                stopStreamAndExit()
             }
             .setNegativeButton("Batal") { _, _ ->
                 requireActivity().requestedOrientation =
@@ -1345,6 +1342,8 @@ class VideoFragmentTv : Fragment() {
 
         val snaps = snapshotsDir?.listFiles()?.sortedBy { it.lastModified() } ?: emptyList()
         val videos = videosDir?.listFiles()?.sortedBy { it.lastModified() } ?: emptyList()
+
+        Toast.makeText(ctx, "Memproses PDF, mohon tunggu...", Toast.LENGTH_SHORT).show()
 
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             val pdf = if (sessionOnly) {
@@ -1382,6 +1381,8 @@ class VideoFragmentTv : Fragment() {
             withContext(Dispatchers.Main) {
                 if (pdf == null) {
                     Toast.makeText(ctx, "Gagal membuat PDF", Toast.LENGTH_SHORT).show()
+                    requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    stopStreamAndExit()
                     return@withContext
                 }
                 if (download) {
@@ -1391,9 +1392,15 @@ class VideoFragmentTv : Fragment() {
                         if (ok) "PDF tersimpan di folder Downloads" else "Gagal menyimpan PDF",
                         Toast.LENGTH_LONG
                     ).show()
+                    requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    stopStreamAndExit()
                 } else {
                     val label = if (sessionOnly) "Sesi Pemeriksaan" else "Data Pasien"
                     PrintHelper.printPdf(requireActivity(), pdf, "Cervexa — $label")
+                    
+                    kotlinx.coroutines.delay(1000)
+                    requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    stopStreamAndExit()
                 }
             }
         }

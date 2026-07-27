@@ -1416,7 +1416,6 @@ class VideoFragmentMobile : Fragment() {
                     1 -> generateAndActionPdf(sessionOnly = true, download = false)
                     2 -> generateAndActionPdf(sessionOnly = true, download = true)
                 }
-                stopStreamAndExit()
             }
             .setNegativeButton("Batal") { _, _ -> stopStreamAndExit() }
             .create()
@@ -1436,6 +1435,8 @@ class VideoFragmentMobile : Fragment() {
 
         val snaps = snapshotsDir?.listFiles()?.sortedBy { it.lastModified() } ?: emptyList()
         val videos = videosDir?.listFiles()?.sortedBy { it.lastModified() } ?: emptyList()
+
+        Toast.makeText(ctx, "Memproses PDF, mohon tunggu...", Toast.LENGTH_SHORT).show()
 
         lifecycleScope.launch(Dispatchers.IO) {
             val pdf = if (sessionOnly) {
@@ -1482,6 +1483,7 @@ class VideoFragmentMobile : Fragment() {
             withContext(Dispatchers.Main) {
                 if (pdf == null) {
                     Toast.makeText(ctx, "Gagal membuat PDF", Toast.LENGTH_SHORT).show()
+                    stopStreamAndExit()
                     return@withContext
                 }
                 if (download) {
@@ -1491,9 +1493,14 @@ class VideoFragmentMobile : Fragment() {
                         if (ok) "PDF tersimpan di folder Downloads" else "Gagal menyimpan PDF",
                         Toast.LENGTH_LONG
                     ).show()
+                    stopStreamAndExit()
                 } else {
                     val label = if (sessionOnly) "Sesi Pemeriksaan" else "Data Pasien"
                     PrintHelper.printPdf(requireActivity(), pdf, "Cervexa — $label")
+                    
+                    // Beri jeda sejenak agar Intent Print/Share sempat berjalan sebelum Activity ini dihancurkan
+                    kotlinx.coroutines.delay(1000)
+                    stopStreamAndExit()
                 }
             }
         }

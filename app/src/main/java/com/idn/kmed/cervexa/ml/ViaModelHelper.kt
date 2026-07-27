@@ -68,9 +68,9 @@ class ViaModelHelper(private val context: Context) {
         tensorImage.load(bitmap)
         tensorImage = imageProcessor.process(tensorImage)
 
-        // Prepare output buffer for confidence score (model has shape [1, 1])
+        // Prepare output buffer for confidence score (model has shape [1, 2])
         val outputBuffer = TensorBuffer.createFixedSize(
-            intArrayOf(1, 1),
+            intArrayOf(1, 2),
             org.tensorflow.lite.DataType.FLOAT32
         )
 
@@ -79,7 +79,7 @@ class ViaModelHelper(private val context: Context) {
 
         val scores = outputBuffer.floatArray
         val abnormalScore = scores[0]
-        Log.d(TAG, "Inference raw output: abnormal=$abnormalScore")
+        Log.d(TAG, "Inference raw output: abnormal=$abnormalScore, normal=${scores[1]}")
 
         // Classify based on threshold
         val label = if (abnormalScore > CLASSIFICATION_THRESHOLD) {

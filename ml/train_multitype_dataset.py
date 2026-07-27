@@ -112,26 +112,43 @@ all_filepaths = [str(p) for p in abnormal_paths] + [str(p) for p in normal_paths
 # Label one-hot / integer: 0 untuk abnormal, 1 untuk normal
 all_labels = [0] * total_abnormal + [1] * total_normal
 
+# Memeriksa integritas file (melewati gambar corrupt/rusak/EOF premature)
+print("\n🔍 Memeriksa integritas file gambar (melewati gambar corrupt)...")
+valid_files = []
+valid_labels = []
+for f, l in zip(all_filepaths, all_labels):
+    try:
+        raw = tf.io.read_file(f)
+        _ = tf.image.decode_jpeg(raw, channels=3, try_recover_truncated=True, acceptable_fraction=0.5)
+        valid_files.append(f)
+        valid_labels.append(l)
+    except Exception as e:
+        print(f"   ⚠️ Melewati gambar rusak [{Path(f).name}]: {e}")
+
+all_filepaths = np.array(valid_files)
+all_labels = np.array(valid_labels)
+
 # Shuffle data seed
 np.random.seed(42)
 indices = np.arange(len(all_filepaths))
 np.random.shuffle(indices)
 
-all_filepaths = np.array(all_filepaths)[indices]
-all_labels = np.array(all_labels)[indices]
+all_filepaths = all_filepaths[indices]
+all_labels = all_labels[indices]
 
 # Split 80% Train, 20% Validation
 split_idx = int(len(all_filepaths) * 0.8)
 train_files, val_files = all_filepaths[:split_idx], all_filepaths[split_idx:]
 train_labels, val_labels = all_labels[:split_idx], all_labels[split_idx:]
 
-print(f"\n📑 Pembagian Dataset:")
+print(f"\n📑 Pembagian Dataset (Setelah filter gambar valid):")
 print(f"   - Data Latih (Train) : {len(train_files)} gambar")
 print(f"   - Data Uji   (Val)   : {len(val_files)} gambar")
 
 def parse_image_and_label(filepath, label):
     img = tf.io.read_file(filepath)
-    img = tf.image.decode_jpeg(img, channels=3)
+    # Gunakan try_recover_truncated=True agar tidak crash saat membaca header JPEG yang tidak sempurna
+    img = tf.image.decode_jpeg(img, channels=3, try_recover_truncated=True, acceptable_fraction=0.5)
     img = tf.image.resize(img, IMG_SIZE)
     # One-hot encode: Index 0=Abnormal, Index 1=Normal -> shape (2,)
     label_onehot = tf.one_hot(label, depth=2)

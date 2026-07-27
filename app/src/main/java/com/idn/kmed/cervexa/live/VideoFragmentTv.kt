@@ -129,7 +129,7 @@ class VideoFragmentTv : Fragment() {
     // === Image Enhancement ===
     private var brightness = 0f
     private var contrast = 1.0f   // netral — tidak ada enhancement warna
-    private var saturation = 1.0f // netral — tidak ada saturasi tambahan
+    private var saturation = 0.70f // default saturasi dikurangi
     private val colorMatrix = ColorMatrix()
 
     // ====== STATE (BASE CENTER + PAN) ======
@@ -243,7 +243,7 @@ class VideoFragmentTv : Fragment() {
 
         brightness = prefs.getFloat("image_brightness", 0f)
         contrast = prefs.getFloat("image_contrast", 1.2f)
-        saturation = prefs.getFloat("image_saturation", 1.1f)
+        saturation = prefs.getFloat("image_saturation", 0.70f)
     }
 
     override fun onDestroyView() {
@@ -1421,7 +1421,7 @@ class VideoFragmentTv : Fragment() {
 
     private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 25f) {
         // Kurangi saturasi sedikit (1.0 = normal, 0.85 = agak pudar)
-        val cm = android.graphics.ColorMatrix().apply { setSaturation(0.85f) }
+        val cm = android.graphics.ColorMatrix().apply { setSaturation(0.70f) }
         val paint = android.graphics.Paint().apply {
             colorFilter = android.graphics.ColorMatrixColorFilter(cm)
         }

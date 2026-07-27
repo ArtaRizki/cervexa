@@ -392,7 +392,7 @@ Aplikasi mencoba URL satu per satu hingga berhasil terkoneksi.
 
 ### 1. Artefak Visual (Semut/Retak) & Warna pada Live Stream
 - **Penyebab Artefak**: Menggunakan `ColorMatrixColorFilter` di `View.LAYER_TYPE_HARDWARE` pada `TextureView` dengan *brightness offset* yang tinggi (+25f). Mengangkat brightness secara digital dari stream H.264 (MS2) akan mengekspos noise kompresi secara ekstrem (gambar menjadi pixelated/retak/banyak semut).
-- **Solusi Brightness & Saturasi**: Jangan memodifikasi *brightness* (offset = 0f) dan *contrast* (1.0f) di level aplikasi/GPU. Untuk mengurangi warna merah/warm yang terlalu kuat pada kamera MS2 tanpa merusak kualitas gambar, cukup turunkan **saturation sedikit (0.85f)** menggunakan `ColorMatrix().apply { setSaturation(0.85f) }` pada Hardware Layer.
+- **Solusi Brightness & Saturasi**: Jangan memodifikasi *brightness* (offset = 0f) dan *contrast* (1.0f) di level aplikasi/GPU. Untuk mengurangi warna merah/warm yang terlalu kuat pada kamera MS2 tanpa merusak kualitas gambar, cukup turunkan **saturation lebih banyak (0.70f)** menggunakan `ColorMatrix().apply { setSaturation(0.70f) }` pada Hardware Layer.
 - **Blur / Fokus**: Jika gambar blur secara optik, itu karena lensa fisik tidak fokus — arahkan user untuk memutar *dial* fokus di bodi kamera MS2 (karena MS2 menggunakan fokus manual).
 - **Tombol Analisis AI**: Tombol AI (`btnAiToggle`) disembunyikan (`View.GONE`) pada saat *live stream*, dan hanya digunakan untuk analisis pada hasil foto/video.
 

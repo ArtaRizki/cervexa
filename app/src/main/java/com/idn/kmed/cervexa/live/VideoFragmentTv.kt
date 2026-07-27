@@ -58,7 +58,7 @@ class VideoFragmentTv : Fragment() {
     private lateinit var liveViewModel: LiveViewModel
     private var ivVideoImageResolution = Pair(0, 0)
     
-    private var viaModelHelper: com.idn.kmed.cervexa.ml.ViaModelHelper? = null
+
 
     // ==== Session / Storage ====
     private var sessionDir: File? = null
@@ -250,7 +250,6 @@ class VideoFragmentTv : Fragment() {
         super.onDestroyView()
         clockJob?.cancel()
         stopPhoneCamera()
-        viaModelHelper?.close()
         prefs.edit().apply {
             putFloat("image_brightness", brightness)
             putFloat("image_contrast", contrast)
@@ -310,7 +309,7 @@ class VideoFragmentTv : Fragment() {
         liveViewModel = ViewModelProvider(this)[LiveViewModel::class.java]
         binding = FragmentVideoTvBinding.inflate(inflater, container, false)
         
-        viaModelHelper = com.idn.kmed.cervexa.ml.ViaModelHelper(requireContext())
+
 
         textureView = binding.textureView?.also {
             applyHardwareBrightness(it, 0f)  // 0 = tidak ada brightness tambahan, warna asli kamera
@@ -830,11 +829,7 @@ class VideoFragmentTv : Fragment() {
                     }
 
                     if (sourceBmp != null && !sourceBmp.isRecycled) {
-                        val prob = try {
-                            val result = viaModelHelper?.detectAbnormality(sourceBmp)
-                            (result as? com.idn.kmed.cervexa.ml.AbnormalityResult.Detected)?.confidenceScore ?: -1f
-                        } catch (e: Exception) { -1f }
-                        val finalBmp = processTextToBitmapSafe(sourceBmp, prob)
+                        val finalBmp = processTextToBitmapSafe(sourceBmp)
                         recorder.submitBitmap(finalBmp)
                         if (finalBmp !== sourceBmp && sourceBmp !== poolBitmap && !sourceBmp.isRecycled) {
                             sourceBmp.recycle()
@@ -1047,13 +1042,8 @@ class VideoFragmentTv : Fragment() {
         // - Canvas overlay drawing (processTextToBitmapSafe)
         // - Disk I/O (saveJpegWithPrefix)
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-            val prob = try {
-                val result = viaModelHelper?.detectAbnormality(bmpCopy)
-                (result as? com.idn.kmed.cervexa.ml.AbnormalityResult.Detected)?.confidenceScore ?: -1f
-            } catch (e: Exception) { -1f }
-
             runCatching {
-                StorageUtils.saveJpegWithPrefix(saveDir, processTextToBitmapSafe(bmpCopy, prob), prefix = "ss")
+                StorageUtils.saveJpegWithPrefix(saveDir, processTextToBitmapSafe(bmpCopy), prefix = "ss")
             }.onSuccess {
                 withContext(Dispatchers.Main) {
                     if (isAdded) {

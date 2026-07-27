@@ -99,42 +99,7 @@
         app:layout_constraintBottom_toBottomOf="@id/videoContainer"
         app:layout_constraintEnd_toEndOf="@id/videoContainer" />
 
-    <!-- AI Toggle Button -->
-    <LinearLayout
-        android:id="@+id/btnAiToggle"
-        android:layout_width="wrap_content"
-        android:layout_height="36dp"
-        android:layout_margin="8dp"
-        android:background="@drawable/bg_ai_toggle_off"
-        android:clickable="true"
-        android:elevation="6dp"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="10dp"
-        app:layout_constraintEnd_toEndOf="@id/videoContainer"
-        app:layout_constraintTop_toTopOf="@id/videoContainer">
-
-        <ImageView
-            android:id="@+id/ivAiIcon"
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:layout_marginEnd="4dp"
-            android:contentDescription="AI Icon"
-            android:src="@drawable/ic_ai_toggle"
-            app:tint="#888888" />
-
-        <TextView
-            android:id="@+id/tvAiToggleLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="AI OFF"
-            android:textColor="#888888"
-            android:textSize="11sp"
-            android:textStyle="bold" />
-    </LinearLayout>
-
-    <!-- Progress HANYA di tengah area video -->
+    <!-- RTSP Stream Loading Indicator -->
     <ProgressBar
         android:id="@+id/pbLoadingImage"
         android:layout_width="wrap_content"
@@ -145,6 +110,7 @@
         app:layout_constraintEnd_toEndOf="@id/videoContainer"
         app:layout_constraintStart_toStartOf="@id/videoContainer"
         app:layout_constraintTop_toTopOf="@id/videoContainer" />
+
 
     <TextView
         android:id="@+id/tvStatistics2"

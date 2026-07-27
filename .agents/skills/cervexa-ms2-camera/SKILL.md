@@ -368,10 +368,20 @@ Aplikasi mencoba URL satu per satu hingga berhasil terkoneksi.
 
 ---
 
+## Pelajaran Penting: Analisis AI Realtime pada Video (Gallery / Media Pager)
+
+### Masalah Awal
+- Menjalankan analisis AI (inferensi TFLite) pada saat *Live Streaming* memakan terlalu banyak resource (CPU & Memori), menyebabkan HP cepat panas dan video *live* dari IjkMediaPlayer mengalami lag parah / patah-patah.
+
+### Solusi: Pindahkan AI ke Media Pager (Post-Processing)
+1. **Cabut AI dari Live Stream**: Analisis AI dihilangkan sepenuhnya dari halaman live streaming.
+2. **Ganti VideoView dengan TextureView**: Di halaman galeri/preview (`page_media.xml`), komponen pemutar video standar `VideoView` diganti dengan kombinasi `TextureView` dan `MediaPlayer`. Ini penting karena `TextureView` mendukung metode `.getBitmap()` yang bisa menangkap frame saat video berputar (sedangkan `VideoView` memblokir akses ini dengan *black box* SurfaceView).
+3. **Coroutine Loop AI**: Saat user menekan tombol "Analisis AI" pada video, sebuah *background coroutine* mengambil bitmap dari `TextureView` setiap 500ms, mengirimnya ke TFLite, dan meng-update kotak *bounding box* di atas `ImageView` transparan yang menumpuk di atas video. Ini memberikan efek analisis realtime.
+
+---
+
 ## Hal yang Belum Dikerjakan (Backlog)
 
-- [ ] **Bounding Box / AI Detection**: Deteksi objek dari output model TFLite
-  berdasarkan nilai "Shape" dari hasil inferensi di live stream
 - [ ] **Refactor CANDIDATE_URLS**: Tambahkan mekanisme auto-discovery IP kamera MS2
   agar tidak perlu hardcode URL
 - [ ] **Audio Recording**: Saat ini `ViewRecorder` hanya merekam video tanpa audio

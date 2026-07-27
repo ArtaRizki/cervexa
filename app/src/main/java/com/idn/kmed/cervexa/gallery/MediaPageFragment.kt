@@ -2,22 +2,27 @@ package com.idn.kmed.cervexa.gallery
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.graphics.SurfaceTexture
 import android.media.MediaMetadataRetriever
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.view.LayoutInflater
+import android.view.Surface
+import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.MediaController
 import android.widget.ProgressBar
+import android.widget.SeekBar
 import android.widget.Toast
-import android.widget.VideoView
-import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.exifinterface.media.ExifInterface
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.github.chrisbanes.photoview.PhotoView
 import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.ml.AbnormalityResult
@@ -26,9 +31,10 @@ import com.idn.kmed.cervexa.ml.AiDetector
 import com.idn.kmed.cervexa.ml.AnalysisModeManager
 import com.idn.kmed.cervexa.ml.OverlayRenderer
 import com.idn.kmed.cervexa.ml.ViaModelHelper
-import androidx.exifinterface.media.ExifInterface
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -41,9 +47,16 @@ class MediaPageFragment : Fragment() {
     private var overlayRenderer: OverlayRenderer? = null
     private var originalBitmap: Bitmap? = null
 
+    // Video AI real-time loop
+    private var videoAiJob: Job? = null
+    private var mediaPlayer: MediaPlayer? = null
+    private var videoTextureView: TextureView? = null
+    private var isVideoAiActive = false
+
     companion object {
         private const val TAG = "MediaPageFragment"
         private const val AI_TIMEOUT_MS = 3000L
+        private const val VIDEO_AI_INTERVAL_MS = 500L // analyze every 500ms
 
         fun newInstance(path: String, type: String): MediaPageFragment {
             val f = MediaPageFragment()
@@ -71,9 +84,12 @@ class MediaPageFragment : Fragment() {
         val videoMode = root.findViewById<View>(R.id.videoMode)
 
         val photo = root.findViewById<PhotoView>(R.id.photoView)
-        val video = root.findViewById<VideoView>(R.id.vvPreview)
+        val tvVideoTexture = root.findViewById<TextureView>(R.id.tvVideoTexture)
+        val ivAiOverlayVideo = root.findViewById<ImageView>(R.id.ivAiOverlayVideo)
+        val ivPlayPause = root.findViewById<ImageView>(R.id.ivPlayPause)
+        val sbVideoSeek = root.findViewById<SeekBar>(R.id.sbVideoSeek)
 
-        // AI Views
+        // AI Views (shared)
         val btnAnalisisAi = root.findViewById<LinearLayout>(R.id.btnAnalisisAi)
         val btnHapusOverlay = root.findViewById<LinearLayout>(R.id.btnHapusOverlay)
         val pbAiLoading = root.findViewById<ProgressBar>(R.id.pbAiLoading)
@@ -83,6 +99,9 @@ class MediaPageFragment : Fragment() {
             Toast.makeText(context, "File media rusak/hilang", Toast.LENGTH_SHORT).show()
             return root
         }
+
+        // Initialize AI components (shared for image & video)
+        initAiDetector()
 
         if (type.equals("IMAGE", ignoreCase = true)) {
             // --- MODE GAMBAR ---
@@ -101,17 +120,13 @@ class MediaPageFragment : Fragment() {
                 photo.setImageURI(Uri.fromFile(file))
             }
 
-            // Initialize AI components
-            initAiDetector()
-
-            // --- "Analisis AI" button click ---
+            // --- "Analisis AI" button click (Image) ---
             btnAnalisisAi.setOnClickListener {
-                performAiAnalysis(file, photo, btnAnalisisAi, btnHapusOverlay, pbAiLoading)
+                performImageAiAnalysis(file, photo, btnAnalisisAi, btnHapusOverlay, pbAiLoading)
             }
 
-            // --- "Hapus Overlay" button click ---
+            // --- "Hapus Overlay" button click (Image) ---
             btnHapusOverlay.setOnClickListener {
-                // Restore original image
                 originalBitmap?.let { bmp ->
                     photo.setImageBitmap(bmp)
                 }
@@ -123,10 +138,7 @@ class MediaPageFragment : Fragment() {
             // --- MODE VIDEO ---
             imageMode.visibility = View.GONE
             videoMode.visibility = View.VISIBLE
-
-            // Hide AI buttons in video mode
-            btnAnalisisAi.visibility = View.GONE
-            btnHapusOverlay.visibility = View.GONE
+            videoTextureView = tvVideoTexture
 
             val uri = Uri.fromFile(file)
             val durationStr = getSafeDuration(file)
@@ -134,51 +146,45 @@ class MediaPageFragment : Fragment() {
             if (durationStr == "00:00") {
                 Toast.makeText(context, "Video corrupt", Toast.LENGTH_SHORT).show()
             } else {
-                try {
-                    video.setVideoURI(uri)
+                setupVideoPlayer(file, tvVideoTexture, ivPlayPause, sbVideoSeek)
+            }
 
-                    val mc = MediaController(requireContext())
-                    mc.setAnchorView(video)
-                    video.setMediaController(mc)
-
-                    val togglePlay = {
-                        if (video.isPlaying) {
-                            video.pause()
-                            Toast.makeText(context, "Video paused", Toast.LENGTH_SHORT).show()
-                        } else {
-                            video.start()
-                            Toast.makeText(context, "Video played", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-
-                    video.setOnClickListener { togglePlay() }
-                    videoMode.setOnClickListener { togglePlay() }
-
-                    video.setOnPreparedListener { mp ->
-                        val w = mp.videoWidth
-                        val h = mp.videoHeight
-                        if (w > 0 && h > 0) {
-                            val lp = video.layoutParams as ConstraintLayout.LayoutParams
-                            val rot = getVideoRotationDeg(file)
-                            if (rot == 90 || rot == 270) lp.dimensionRatio = "$h:$w" else lp.dimensionRatio = "$w:$h"
-                            video.layoutParams = lp
-                        }
-
-                        val rot = getVideoRotationDeg(file)
-                        if (rot != 0) video.rotation = rot.toFloat()
-                        mp.isLooping = false
-
-                        video.start()
-                    }
-
-                    video.setOnErrorListener { _, _, _ -> true }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+            // Video tap to play/pause
+            val togglePlay = {
+                val mp = mediaPlayer
+                if (mp != null && mp.isPlaying) {
+                    mp.pause()
+                    ivPlayPause.visibility = View.VISIBLE
+                } else if (mp != null) {
+                    mp.start()
+                    ivPlayPause.visibility = View.GONE
+                    startSeekBarUpdater(mp, sbVideoSeek)
                 }
+            }
+
+            tvVideoTexture.setOnClickListener { togglePlay() }
+            ivPlayPause.setOnClickListener { togglePlay() }
+
+            // --- "Analisis AI" button click (Video) ---
+            btnAnalisisAi.setOnClickListener {
+                startVideoAiAnalysis(tvVideoTexture, ivAiOverlayVideo, btnAnalisisAi, btnHapusOverlay, pbAiLoading)
+            }
+
+            // --- "Hapus Overlay" button click (Video) ---
+            btnHapusOverlay.setOnClickListener {
+                stopVideoAiAnalysis()
+                ivAiOverlayVideo.setImageBitmap(null)
+                ivAiOverlayVideo.visibility = View.GONE
+                btnHapusOverlay.visibility = View.GONE
+                btnAnalisisAi.visibility = View.VISIBLE
             }
         }
         return root
     }
+
+    // =====================================================================
+    // AI DETECTOR INIT
+    // =====================================================================
 
     private fun initAiDetector() {
         val ctx = context ?: return
@@ -190,7 +196,11 @@ class MediaPageFragment : Fragment() {
         overlayRenderer = OverlayRenderer()
     }
 
-    private fun performAiAnalysis(
+    // =====================================================================
+    // IMAGE AI ANALYSIS
+    // =====================================================================
+
+    private fun performImageAiAnalysis(
         file: File,
         photo: PhotoView,
         btnAnalisisAi: LinearLayout,
@@ -200,7 +210,6 @@ class MediaPageFragment : Fragment() {
         val detector = aiDetector ?: return
         val renderer = overlayRenderer ?: return
 
-        // Validate: decode check
         val bitmap = try {
             decodeBitmapWithExifRotation(file)
         } catch (e: Exception) {
@@ -208,14 +217,12 @@ class MediaPageFragment : Fragment() {
             return
         }
 
-        // Validate: minimum size 64x64
         val validationError = detector.validateImage(bitmap.width, bitmap.height)
         if (validationError != null) {
             Toast.makeText(context, validationError, Toast.LENGTH_SHORT).show()
             return
         }
 
-        // Show loading, hide button
         btnAnalisisAi.visibility = View.GONE
         pbAiLoading.visibility = View.VISIBLE
 
@@ -226,11 +233,9 @@ class MediaPageFragment : Fragment() {
                 }
             }
 
-            // Back on main thread
             pbAiLoading.visibility = View.GONE
 
             if (result == null) {
-                // Timeout
                 Toast.makeText(context, "Analisis AI timeout, coba lagi", Toast.LENGTH_SHORT).show()
                 btnAnalisisAi.visibility = View.VISIBLE
                 return@launch
@@ -238,7 +243,6 @@ class MediaPageFragment : Fragment() {
 
             when (result) {
                 is AbnormalityResult.Detected -> {
-                    // Render overlay on top of original bitmap
                     val overlayBitmap = renderer.renderOverlay(bitmap, result)
                     photo.setImageBitmap(overlayBitmap)
                     btnHapusOverlay.visibility = View.VISIBLE
@@ -254,25 +258,168 @@ class MediaPageFragment : Fragment() {
         }
     }
 
+    // =====================================================================
+    // VIDEO PLAYER (TextureView + MediaPlayer)
+    // =====================================================================
+
+    private fun setupVideoPlayer(
+        file: File,
+        textureView: TextureView,
+        ivPlayPause: ImageView,
+        seekBar: SeekBar
+    ) {
+        textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
+                val mp = MediaPlayer()
+                try {
+                    mp.setDataSource(file.absolutePath)
+                    mp.setSurface(Surface(st))
+                    mp.isLooping = false
+                    mp.setOnPreparedListener { player ->
+                        seekBar.max = player.duration
+                        player.start()
+                        ivPlayPause.visibility = View.GONE
+                        startSeekBarUpdater(player, seekBar)
+                    }
+                    mp.setOnCompletionListener {
+                        ivPlayPause.visibility = View.VISIBLE
+                        seekBar.progress = seekBar.max
+                    }
+                    mp.setOnErrorListener { _, _, _ -> true }
+                    mp.prepareAsync()
+                    mediaPlayer = mp
+                } catch (e: Exception) {
+                    Log.e(TAG, "MediaPlayer error", e)
+                }
+            }
+
+            override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) {}
+            override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+                mediaPlayer?.release()
+                mediaPlayer = null
+                return true
+            }
+            override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
+        }
+
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) mediaPlayer?.seekTo(progress)
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+    }
+
+    private fun startSeekBarUpdater(player: MediaPlayer, seekBar: SeekBar) {
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
+            while (isActive && player.isPlaying) {
+                try {
+                    seekBar.progress = player.currentPosition
+                } catch (_: Exception) { break }
+                delay(500)
+            }
+        }
+    }
+
+    // =====================================================================
+    // VIDEO AI REAL-TIME ANALYSIS
+    // =====================================================================
+
+    private fun startVideoAiAnalysis(
+        textureView: TextureView,
+        ivOverlay: ImageView,
+        btnAnalisisAi: LinearLayout,
+        btnHapusOverlay: LinearLayout,
+        pbAiLoading: ProgressBar
+    ) {
+        val detector = aiDetector ?: return
+        val renderer = overlayRenderer ?: return
+
+        isVideoAiActive = true
+        btnAnalisisAi.visibility = View.GONE
+        btnHapusOverlay.visibility = View.VISIBLE
+        ivOverlay.visibility = View.VISIBLE
+        pbAiLoading.visibility = View.VISIBLE
+
+        videoAiJob = viewLifecycleOwner.lifecycleScope.launch {
+            var firstResult = true
+            while (isActive && isVideoAiActive) {
+                // Grab frame from TextureView on main thread
+                val frameBmp = withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext null
+                    textureView.bitmap
+                } ?: run { delay(VIDEO_AI_INTERVAL_MS); continue }
+
+                // Run AI inference on background thread
+                val result = withContext(Dispatchers.Default) {
+                    try {
+                        detector.analyzeImage(frameBmp)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Video AI error", e)
+                        null
+                    }
+                }
+
+                // Render overlay on main thread
+                withContext(Dispatchers.Main) {
+                    if (!isAdded || !isVideoAiActive) return@withContext
+                    if (firstResult) {
+                        pbAiLoading.visibility = View.GONE
+                        firstResult = false
+                    }
+
+                    when (result) {
+                        is AbnormalityResult.Detected -> {
+                            val overlayBmp = renderer.renderOverlay(frameBmp, result)
+                            ivOverlay.setImageBitmap(overlayBmp)
+                        }
+                        else -> {
+                            // Normal / no detection — show frame as-is (clear overlay)
+                            ivOverlay.setImageBitmap(null)
+                        }
+                    }
+                }
+
+                // Don't recycle frameBmp here — TextureView.getBitmap() creates new each call
+                delay(VIDEO_AI_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun stopVideoAiAnalysis() {
+        isVideoAiActive = false
+        videoAiJob?.cancel()
+        videoAiJob = null
+    }
+
+    // =====================================================================
+    // LIFECYCLE
+    // =====================================================================
+
     override fun onPause() {
         super.onPause()
         try {
-            view?.findViewById<VideoView>(R.id.vvPreview)?.pause()
-        } catch (_: Exception) {
-        }
+            mediaPlayer?.pause()
+        } catch (_: Exception) {}
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
+        stopVideoAiAnalysis()
         try {
-            view?.findViewById<VideoView>(R.id.vvPreview)?.stopPlayback()
-        } catch (_: Exception) {
-        }
-        // Clean up AI resources
+            mediaPlayer?.release()
+            mediaPlayer = null
+        } catch (_: Exception) {}
         aiDetector = null
         overlayRenderer = null
         originalBitmap = null
+        videoTextureView = null
     }
+
+    // =====================================================================
+    // HELPERS
+    // =====================================================================
 
     private fun getSafeDuration(file: File): String {
         val retriever = MediaMetadataRetriever()
@@ -314,19 +461,5 @@ class MediaPageFragment : Fragment() {
 
         val m = Matrix().apply { postRotate(rot.toFloat()) }
         return android.graphics.Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
-    }
-
-    private fun getVideoRotationDeg(file: File): Int {
-        val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(file.absolutePath)
-            val rot = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
-                ?.toIntOrNull() ?: 0
-            ((rot % 360) + 360) % 360
-        } catch (_: Exception) {
-            0
-        } finally {
-            runCatching { retriever.release() }
-        }
     }
 }

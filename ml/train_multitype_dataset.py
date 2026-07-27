@@ -54,10 +54,10 @@ import numpy as np
 # ==============================================================================
 # Daftar direktori dataset (bisa di-uncomment sesuai folder yang diunduh di PC/Server)
 DATASET_DIRECTORIES = [
-    r"C:\Users\it-arta\Downloads\TYPE1\Type_1",
-    # r"C:\Users\it-arta\Downloads\TYPE_2",                 # <-- Dari ekstrak TYPE_2.zip
-    # r"C:\Users\it-arta\Downloads\Type_3",                 # <-- Folder Type_3
-    # r"C:\Users\it-arta\Downloads\additional_Type_3_v2",   # <-- Folder additional_Type_3_v2
+    r"C:\Users\it-arta\Downloads\TYPE1",
+    r"C:\Users\it-arta\Downloads\TYPE2",
+    r"C:\Users\it-arta\Downloads\TYPE3",
+    r"C:\Users\it-arta\Downloads\TYPE3V2ADDITIONAL",
 ]
 
 IMG_SIZE         = (224, 224)

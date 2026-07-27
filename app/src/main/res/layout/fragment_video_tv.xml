@@ -81,6 +81,7 @@
         app:layout_constraintStart_toStartOf="@id/videoContainer"
         app:layout_constraintTop_toTopOf="@id/videoContainer" />
 
+    <!-- RTSP Stream Loading Indicator -->
     <ProgressBar
         android:id="@+id/pbLoadingImage"
         android:layout_width="wrap_content"

@@ -39,18 +39,23 @@ Skrip resmi untuk melakukan training dan evaluasi ada di dalam repositori:
 - **Script File**: [`ml/train_multitype_dataset.py`](file:///C:/Users/it-arta/projects/cervexa/ml/train_multitype_dataset.py)
 - **Launcher Batch**: [`ml/run_training.bat`](file:///C:/Users/it-arta/projects/cervexa/ml/run_training.bat)
 
-### A. Mendukung Multi-Tipe Dataset (Type 1, Type 2, Type 3)
-Skrip sudah dilengkapi fitur *Multi-Directory Scanner*. Untuk menambahkan dataset baru (misalnya ketika dataset Type 2 atau Type 3 sudah diunduh):
-1. Buka file `ml/train_multitype_dataset.py`
-2. Pada blok `DATASET_DIRECTORIES`, cukup tambahkan atau buka komentar path folder dataset:
-   ```python
-   DATASET_DIRECTORIES = [
-       r"C:\Users\it-arta\Downloads\TYPE1\Type_1",
-       r"C:\Users\it-arta\Downloads\TYPE2",  # <-- Tambahkan path Type 2
-       r"C:\Users\it-arta\Downloads\TYPE3",  # <-- Tambahkan path Type 3
-   ]
-   ```
-3. Skrip akan otomatis memindai dan menggabungkan seluruh subfolder berawalan `abnormal*` ke Kelas 0, dan subfolder berawalan `normal*` ke Kelas 1 dari semua direktori yang ada di dalam list.
+### A. Mendukung 4 Sumber Dataset (Type 1, Type 2, Type 3, additional_Type_3_v2)
+Skrip sudah dilengkapi fitur *Multi-Directory Scanner* untuk menggabungkan 4 sumber dataset servis yang ada:
+1. `Type_1` (Dataset utama awal)
+2. `TYPE_2` (Hasil ekstraksi dari `TYPE_2.zip`)
+3. `Type_3` (Dataset tipe 3)
+4. `additional_Type_3_v2` (Tambahan variasi tipe 3 versi 2)
+
+Untuk melatih keempatnya sekaligus, cukup buka komentar path pada `DATASET_DIRECTORIES` di `ml/train_multitype_dataset.py`:
+```python
+DATASET_DIRECTORIES = [
+    r"C:\Users\it-arta\Downloads\TYPE1\Type_1",
+    r"C:\Users\it-arta\Downloads\TYPE_2",                 # <-- Dari ekstrak TYPE_2.zip
+    r"C:\Users\it-arta\Downloads\Type_3",                 # <-- Folder Type_3
+    r"C:\Users\it-arta\Downloads\additional_Type_3_v2",   # <-- Folder additional_Type_3_v2
+]
+```
+Skrip akan otomatis memindai, menyaring gambar rusak, dan menggabungkan seluruh subfolder berawalan `abnormal*` ke Kelas 0, dan subfolder berawalan `normal*` ke Kelas 1 dari semua direktori yang ada di dalam list.
 
 ---
 
@@ -151,3 +156,32 @@ Saat proses evaluasi di akhir training, perhatikan 3 metrik medis utama:
 1. **Sensitivity (Recall Abnormal)**: Kemampuan model mendeteksi pasien dengan lesi VIA abnormal. **Target minimal: > 85% - 90%**.
 2. **Specificity (Recall Normal)**: Kemampuan model mengenali pasien sehat tanpa memberi alarm palsu berlebih.
 3. **False Negative (FN)**: Jumlah kasus aktual Abnormal yang diprediksi Normal. Angka ini **harus serendah mungkin** karena kesalahan negatif palsu sangat berbahaya dalam diagnosa kanker serviks.
+
+---
+
+## 7. Strategi & Workflow Training di PC Terpisah / Cloud GPU (Sangat Direkomendasikan!)
+
+Ketika dataset berkembang menjadi 4 sumber (`Type_1`, `TYPE_2`, `Type_3`, dan `additional_Type_3_v2`), jumlah gambar bisa mencapai **10.000+ gambar medis**. Melatih dataset sebesar ini di laptop/PC pengembangan kerja biasa dengan CPU (*tanpa GPU NVIDIA CUDA*) memiliki beberapa kelemahan:
+- **Waktu Training Sangat Lama**: Pada CPU native Windows, 1 epoch memakan waktu ~5–10 menit. Total 60 epoch bisa memakan waktu 6–10 jam.
+- **Konsumsi RAM/CPU Tinggi**: Membuat PC terasa lambat untuk aktivitas pengembangan Android Studio sekaligus.
+
+### Keuntungan Melakukan Training di PC Terpisah / Server GPU:
+1. **Akselerasi Ekstrem (GPU NVIDIA / Colab / Linux / WSL2)**: Pada GPU seperti RTX 3060/4060 atau Google Colab T4/V100, 1 epoch hanya memakan waktu **5–15 detik**. Seluruh proses 60 epoch selesai dalam **< 15 menit**.
+2. **Isolasi Beban Kerja**: PC utama Anda tetap ringan untuk koding Android, testing perangkat MS2, dan debugging APK.
+
+### Alur Kerja (Workflow) Pemindahan Training ke PC Terpisah:
+```
+[PC TERPISAH / CLOUD GPU]
+ ├── 1. Unduh 4 folder dataset (Type_1, TYPE_2, Type_3, additional_Type_3_v2)
+ ├── 2. Jalankan skrip: py -3.12 -u ml/train_multitype_dataset.py
+ └── 3. Skrip menghasilkan model optimal: via_model.tflite (~6.9 MB)
+        │
+        │  (Cukup kirim / unduh file via_model.tflite saja!)
+        ▼
+[PC PENGEMBANGAN UTAMA / REPO ANDROID]
+ ├── 1. Ganti file di: app/src/main/assets/via_model.tflite
+ └── 2. Build APK: .\gradlew assembleDebug
+```
+
+> [!TIP]
+> **Anda tidak perlu menyalin ribuan gambar dataset kembali ke PC pengembangan utama ini!** Cukup salin **hanya 1 file hasil akhir (`via_model.tflite` berukuran ~6.9 MB)** dari PC Terpisah ke folder `app/src/main/assets/` di repositori ini, dan langsung build APK. Aplikasi Android Cervexa akan langsung mendapatkan seluruh peningkatan kecerdasan dari 4 dataset tersebut!

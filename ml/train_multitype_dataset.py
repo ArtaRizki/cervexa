@@ -52,11 +52,12 @@ import numpy as np
 # ==============================================================================
 # 1. KONFIGURASI DIREKTORI & PARAMETER TRAINING
 # ==============================================================================
-# Daftar direktori dataset (bisa ditambahkan TYPE2, TYPE3 nanti saat sudah diunduh)
+# Daftar direktori dataset (bisa di-uncomment sesuai folder yang diunduh di PC/Server)
 DATASET_DIRECTORIES = [
     r"C:\Users\it-arta\Downloads\TYPE1\Type_1",
-    # r"C:\Users\it-arta\Downloads\TYPE2",  # <-- Buka komen & sesuaikan path saat Type 2 tersedia
-    # r"C:\Users\it-arta\Downloads\TYPE3",  # <-- Buka komen & sesuaikan path saat Type 3 tersedia
+    # r"C:\Users\it-arta\Downloads\TYPE_2",                 # <-- Dari ekstrak TYPE_2.zip
+    # r"C:\Users\it-arta\Downloads\Type_3",                 # <-- Folder Type_3
+    # r"C:\Users\it-arta\Downloads\additional_Type_3_v2",   # <-- Folder additional_Type_3_v2
 ]
 
 IMG_SIZE         = (224, 224)

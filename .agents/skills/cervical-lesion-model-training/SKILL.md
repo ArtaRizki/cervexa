@@ -185,3 +185,30 @@ Ketika dataset berkembang menjadi 4 sumber (`Type_1`, `TYPE_2`, `Type_3`, dan `a
 
 > [!TIP]
 > **Anda tidak perlu menyalin ribuan gambar dataset kembali ke PC pengembangan utama ini!** Cukup salin **hanya 1 file hasil akhir (`via_model.tflite` berukuran ~6.9 MB)** dari PC Terpisah ke folder `app/src/main/assets/` di repositori ini, dan langsung build APK. Aplikasi Android Cervexa akan langsung mendapatkan seluruh peningkatan kecerdasan dari 4 dataset tersebut!
+
+---
+
+### 7.1 Cara Menggabungkan Hasil jika 2 Developer Melatih Dataset Berbeda (Type 1+2 dan Type 3+Additional)
+Dalam *Deep Learning*, dua file model (`.tflite` atau `.h5`) yang dilatih secara terpisah **tidak bisa digabungkan/dijumlahkan secara file fisik begitu saja** karena representasi bobot sarafnya berbeda.
+
+Berikut 2 strategi untuk menggabungkan hasil kerjanya:
+
+#### Strategi 1: "Gabungkan Datanya di 1 Mesin Final" (Sangat Direkomendasikan & Paling Akurat)
+- **Cara Kerja**:
+  1. Selama masa eksperimen, Anda boleh melatih Type 1 & 2 di PC Anda, dan teman Anda melatih Type 3 & Additional di PC miliknya untuk pengujian awal.
+  2. **Saat ingin merilis Model Akhir (`via_model.tflite`) untuk Aplikasi Android Cervexa**:
+     - Kumpulkan ke-4 folder tersebut (`Type_1`, `TYPE_2`, `Type_3`, `additional_Type_3_v2`) dalam **1 tempat (misal di Google Drive / Google Colab / 1 PC GPU)**.
+     - Jalankan skrip `train_multitype_dataset.py` **satu kali** dengan ke-4 folder diaktifkan di dalam `DATASET_DIRECTORIES`.
+- **Keunggulan**: Model AI melihat 100% variasi lesi medis sekaligus selama proses gradient descent, menghasilkan akurasi medis tertinggi tanpa risiko *Catastrophic Forgetting*.
+
+#### Strategi 2: "Transfer Learning / Sequential Fine-Tuning" (Tanpa Mengirim Ribuan Gambar)
+Jika tidak memungkinkan mengumpulkan seluruh folder gambar di satu tempat:
+1. Anda melatih Type 1 & 2 di PC Anda -> menghasilkan file bobot **`ml/via_model_multitype.h5`** (~23 MB).
+2. Anda cukup mengirimkan 1 file `via_model_multitype.h5` tersebut ke teman Anda.
+3. Teman Anda memuat bobot model Anda di skrip Python miliknya dengan mengubah pembuatan model awal menjadi:
+   ```python
+   # Load bobot dari hasil training teman sebelumnya
+   model = tf.keras.models.load_model("via_model_multitype.h5")
+   ```
+   Lalu melatihnya (*fine-tuning*) menggunakan data **Type 3 & Additional** dengan *learning rate* sangat kecil (`1e-5`).
+4. Hasil akhir ekspor TFLite dari teman Anda akan membawa pengetahuan dari Type 1 & 2 sebelumnya ditambah pengetahuan baru dari Type 3 & Additional.

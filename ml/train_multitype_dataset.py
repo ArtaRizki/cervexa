@@ -30,9 +30,16 @@ Cara Pakai:
 
 import os
 import sys
+import io
 import warnings
 import shutil
 from pathlib import Path
+
+# Ensure utf-8 output on Windows console
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 warnings.filterwarnings('ignore')
@@ -73,10 +80,10 @@ normal_paths = []
 for base_dir in DATASET_DIRECTORIES:
     p = Path(base_dir)
     if not p.exists():
-        print(f"⚠️  Peringatan: Direktori '{base_dir}' tidak ditemukan, dilewati.")
+        print(f"[WARN] Peringatan: Direktori '{base_dir}' tidak ditemukan, dilewati.")
         continue
     
-    print(f"\n📂 Memindai direktori: {base_dir}")
+    print(f"\n[SCAN] Memindai direktori: {base_dir}")
     for sub in p.iterdir():
         if sub.is_dir():
             name_lower = sub.name.lower()
@@ -94,13 +101,13 @@ total_abnormal = len(abnormal_paths)
 total_normal = len(normal_paths)
 total_imgs = total_abnormal + total_normal
 
-print(f"\n📊 TOTAL KESELURUHAN DATASET:")
+print(f"\n[INFO] TOTAL KESELURUHAN DATASET:")
 print(f"   - ABNORMAL (Index 0) : {total_abnormal} gambar")
 print(f"   - NORMAL   (Index 1) : {total_normal} gambar")
 print(f"   - Total Keseluruhan  : {total_imgs} gambar")
 
 if total_imgs < 10:
-    print("\n❌ Error: Jumlah gambar terlalu sedikit untuk dilatih!")
+    print("\n[ERROR] Jumlah gambar terlalu sedikit untuk dilatih!")
     sys.exit(1)
 
 # ==============================================================================
@@ -113,7 +120,7 @@ all_filepaths = [str(p) for p in abnormal_paths] + [str(p) for p in normal_paths
 all_labels = [0] * total_abnormal + [1] * total_normal
 
 # Memeriksa integritas file (melewati gambar corrupt/rusak/EOF premature)
-print("\n🔍 Memeriksa integritas file gambar (melewati gambar corrupt)...")
+print("\n[CHECK] Memeriksa integritas file gambar (melewati gambar corrupt)...")
 valid_files = []
 valid_labels = []
 for f, l in zip(all_filepaths, all_labels):
@@ -123,7 +130,7 @@ for f, l in zip(all_filepaths, all_labels):
         valid_files.append(f)
         valid_labels.append(l)
     except Exception as e:
-        print(f"   ⚠️ Melewati gambar rusak [{Path(f).name}]: {e}")
+        print(f"   [SKIP] Melewati gambar rusak [{Path(f).name}]: {e}")
 
 all_filepaths = np.array(valid_files)
 all_labels = np.array(valid_labels)
@@ -141,7 +148,7 @@ split_idx = int(len(all_filepaths) * 0.8)
 train_files, val_files = all_filepaths[:split_idx], all_filepaths[split_idx:]
 train_labels, val_labels = all_labels[:split_idx], all_labels[split_idx:]
 
-print(f"\n📑 Pembagian Dataset (Setelah filter gambar valid):")
+print(f"\n[SPLIT] Pembagian Dataset (Setelah filter gambar valid):")
 print(f"   - Data Latih (Train) : {len(train_files)} gambar")
 print(f"   - Data Uji   (Val)   : {len(val_files)} gambar")
 
@@ -173,14 +180,14 @@ class_weight = {
     0: total_imgs / (2.0 * max(1, total_abnormal)),  # Bobot Abnormal
     1: total_imgs / (2.0 * max(1, total_normal))     # Bobot Normal (lebih tinggi)
 }
-print(f"\n⚖️  Bobot Kelas (Class Weights):")
+print(f"\n[WEIGHTS] Bobot Kelas (Class Weights):")
 print(f"   - Kelas 0 (Abnormal) : {class_weight[0]:.2f}")
 print(f"   - Kelas 1 (Normal)   : {class_weight[1]:.2f}")
 
 # ==============================================================================
 # 5. ARSITEKTUR MODEL (EFFICIENTNET-LITE / EFFICIENTNETV2B0 + SOFTMAX 2-CLASS)
 # ==============================================================================
-print("\n🏗️  Membangun arsitektur model EfficientNetV2B0...")
+print("\n[MODEL] Membangun arsitektur model EfficientNetV2B0...")
 
 base_model = tf.keras.applications.EfficientNetV2B0(
     weights='imagenet',
@@ -228,7 +235,7 @@ callbacks = [
     ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=1e-6, verbose=1)
 ]
 
-print(f"\n🚀 [PHASE 1] Melatih Head Classification ({EPOCHS_PHASE_1} epoch)...")
+print(f"\n[PHASE 1] Melatih Head Classification ({EPOCHS_PHASE_1} epoch)...")
 model.fit(
     train_ds,
     validation_data=val_ds,
@@ -241,7 +248,7 @@ model.fit(
 # ==============================================================================
 # 7. TRAINING PHASE 2: FINE-TUNING TOP LAYERS
 # ==============================================================================
-print(f"\n🚀 [PHASE 2] Fine-Tuning Top Layers ({EPOCHS_PHASE_2} epoch)...")
+print(f"\n[PHASE 2] Fine-Tuning Top Layers ({EPOCHS_PHASE_2} epoch)...")
 base_model.trainable = True
 # Bekukan sebagian besar layer awal, hanya latih 40 layer terakhir
 for layer in base_model.layers[:-40]:
@@ -293,12 +300,12 @@ accuracy = np.mean(y_true == y_pred) * 100.0
 sensitivity = (TP / max(1, TP + FN)) * 100.0  # Recall untuk Abnormal
 specificity = (TN / max(1, TN + FP)) * 100.0  # Kemampuan mendeteksi Normal
 
-print(f"\n📊 Hasil Statistik Validation Set ({len(y_true)} gambar):")
+print(f"\n[STATS] Hasil Statistik Validation Set ({len(y_true)} gambar):")
 print(f"   - Akurasi Keseluruhan (Accuracy) : {accuracy:.2f}%")
 print(f"   - Sensitivitas (Recall Abnormal) : {sensitivity:.2f}%  <-- Krusial untuk diagnosa kanker!")
 print(f"   - Spesifisitas (Recall Normal)   : {specificity:.2f}%")
 
-print(f"\n📋 Confusion Matrix:")
+print(f"\n[MATRIX] Confusion Matrix:")
 print(f"   {'':17} | Prediksi ABNORMAL | Prediksi NORMAL")
 print(f"   {'-'*54}")
 print(f"   {'Aktual ABNORMAL':17} | {TP:17} | {FN:15} (False Negative - Bahaya!)")
@@ -307,7 +314,7 @@ print(f"   {'Aktual NORMAL':17} | {FP:17} | {TN:15}")
 # ==============================================================================
 # 9. EKSPOR KE TFLITE & AUTOMATIC DEPLOY KE ANDROID ASSETS
 # ==============================================================================
-print("\n🔄 Mengonversi model ke format TensorFlow Lite (Mobile Optimized)...")
+print("\n[EXPORT] Mengonversi model ke format TensorFlow Lite (Mobile Optimized)...")
 converter = tf.lite.TFLiteConverter.from_keras_model(best_model)
 converter.optimizations = [tf.lite.Optimize.DEFAULT]
 tflite_model = converter.convert()
@@ -316,15 +323,15 @@ with open(MODEL_TFLITE_PATH, 'wb') as f:
     f.write(tflite_model)
 
 size_mb = len(tflite_model) / (1024 * 1024)
-print(f"✅ Berhasil mengekspor model: {MODEL_TFLITE_PATH} (Ukuran: {size_mb:.2f} MB)")
+print(f"[OK] Berhasil mengekspor model: {MODEL_TFLITE_PATH} (Ukuran: {size_mb:.2f} MB)")
 
 # Salin otomatis ke direktori app/src/main/assets jika ada
 assets_path = Path(ASSETS_DIR) / "via_model.tflite"
 if assets_path.parent.exists():
     shutil.copy(MODEL_TFLITE_PATH, assets_path)
-    print(f"🚀 Model otomatis dipasang (deploy) ke dalam aplikasi: {assets_path}")
+    print(f"[DEPLOY] Model otomatis dipasang (deploy) ke dalam aplikasi: {assets_path}")
 else:
-    print(f"ℹ️  Silakan salin manual file '{MODEL_TFLITE_PATH}' ke folder assets aplikasi Android Anda.")
+    print(f"[INFO] Silakan salin manual file '{MODEL_TFLITE_PATH}' ke folder assets aplikasi Android Anda.")
 
-print("\n🎉 SEMUA PROSES SELESAI DENGAN SUKSES!")
+print("\n[DONE] SEMUA PROSES SELESAI DENGAN SUKSES!")
 print("=" * 70)

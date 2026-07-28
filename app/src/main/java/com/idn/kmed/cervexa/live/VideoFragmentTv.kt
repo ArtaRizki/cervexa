@@ -332,7 +332,7 @@ class VideoFragmentTv : Fragment() {
 
 
         textureView = binding.textureView?.also {
-            applyHardwareBrightness(it, 40f)  // 40f brightness tambahan agar cerah seperti layar MS2
+            applyHardwareBrightness(it, 55f)  // 55f brightness tambahan (lebih cerah dari 40f)
         }
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
 
@@ -1336,10 +1336,10 @@ class VideoFragmentTv : Fragment() {
         }
     }
 
-    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 40f) {
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 55f) {
         val cm = android.graphics.ColorMatrix()
-        // Saturasi dinaikkan ke 60% (0.60f) agar warna lebih keluar
-        cm.setSaturation(0.60f)
+        // Saturasi diturunkan kembali ke 40% (0.40f)
+        cm.setSaturation(0.40f)
         
         // Tambahkan brightness / exposure
         val brightnessMatrix = android.graphics.ColorMatrix(floatArrayOf(

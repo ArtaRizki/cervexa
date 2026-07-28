@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Typeface
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -76,6 +77,34 @@ class OverlayRenderer {
         if (includeTimestamp) {
             drawTimestamp(canvas, textSize, padding, width, height)
         }
+
+        return overlay
+    }
+
+    /**
+     * Renders an error message directly on the frame for debugging.
+     */
+    fun renderError(frame: Bitmap, errorMessage: String): Bitmap {
+        val overlay = frame.copy(Bitmap.Config.ARGB_8888, true)
+        val canvas = Canvas(overlay)
+        val width = canvas.width
+        val height = canvas.height
+
+        val paintText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = calculateTextSize(height) * 1.5f
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            setShadowLayer(4f, 2f, 2f, Color.BLACK)
+        }
+
+        val paintBox = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#80FF0000") // Semi-transparent red
+            style = Paint.Style.FILL
+        }
+
+        canvas.drawRect(0f, 0f, width.toFloat(), calculateTextSize(height) * 3f, paintBox)
+        canvas.drawText(errorMessage, width / 2f, calculateTextSize(height) * 1.5f, paintText)
 
         return overlay
     }

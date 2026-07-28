@@ -145,8 +145,7 @@ class VideoFragmentTv : Fragment() {
     // Paint objects di-cache di class level
     // =====================================================================
     private val paintDateBg = Paint().apply {
-        color = Color.BLACK  // Hitam pekat
-        alpha = 255          // Opacity 100% mutlak
+        color = 0xFF000000.toInt()
         style = Paint.Style.FILL
     }
     private val paintDateText = Paint().apply {
@@ -161,9 +160,30 @@ class VideoFragmentTv : Fragment() {
         setShadowLayer(2f, 1f, 1f, Color.BLACK)
     }
     private val paintBox = Paint().apply {
-        color = Color.BLACK  // Hitam pekat untuk info pasien kiri bawah
-        alpha = 255          // Opacity 100% mutlak
+        color = 0xFF000000.toInt()
         style = Paint.Style.FILL
+    }
+    private val paintCaptureEnhance = Paint().apply {
+        val cm = android.graphics.ColorMatrix()
+        // Saturation direndahkan sedikit (1.05) & contrast 1.05
+        val contrast = 1.05f
+        val brightness = 0f
+        val scale = contrast
+        val translate = brightness + (1f - contrast) * 128f
+        cm.set(
+            floatArrayOf(
+                scale, 0f, 0f, 0f, translate,
+                0f, scale, 0f, 0f, translate,
+                0f, 0f, scale, 0f, translate,
+                0f, 0f, 0f, 1f, 0f
+            )
+        )
+        val sat = android.graphics.ColorMatrix()
+        sat.setSaturation(1.05f)
+        cm.postConcat(sat)
+        colorFilter = android.graphics.ColorMatrixColorFilter(cm)
+        isAntiAlias = false
+        isDither = false
     }
     private val paintEnhance = Paint().apply { isAntiAlias = false; isDither = false }
 
@@ -898,8 +918,12 @@ class VideoFragmentTv : Fragment() {
             Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
         } else src
         
-        val bitmap = if (safeSrc.isMutable) safeSrc else safeSrc.copy(Bitmap.Config.ARGB_8888, true)
+        // Kita buat blank bitmap baru agar bisa menggambar safeSrc dengan Paint (untuk apply filter hasil)
+        val bitmap = Bitmap.createBitmap(safeSrc.width, safeSrc.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
+        
+        // Gambar gambar asli dengan filter enhancement untuk HASIL foto/video
+        canvas.drawBitmap(safeSrc, 0f, 0f, paintCaptureEnhance)
 
         // >>> FIX UTAMA: font mengikuti ukuran frame <<<
         ensureOverlayTextSize(bitmap.height)
@@ -1286,9 +1310,6 @@ class VideoFragmentTv : Fragment() {
                     1 -> generateAndActionPdf(sessionOnly = true, download = false)
                     2 -> generateAndActionPdf(sessionOnly = true, download = true)
                 }
-                requireActivity().requestedOrientation =
-                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-                stopStreamAndExit()
             }
             .setNegativeButton("Batal") { _, _ ->
                 requireActivity().requestedOrientation =
@@ -1311,6 +1332,8 @@ class VideoFragmentTv : Fragment() {
 
         val snaps = snapshotsDir?.listFiles()?.sortedBy { it.lastModified() } ?: emptyList()
         val videos = videosDir?.listFiles()?.sortedBy { it.lastModified() } ?: emptyList()
+
+        Toast.makeText(ctx, "Memproses PDF, mohon tunggu...", Toast.LENGTH_SHORT).show()
 
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             val pdf = if (sessionOnly) {
@@ -1348,6 +1371,8 @@ class VideoFragmentTv : Fragment() {
             withContext(Dispatchers.Main) {
                 if (pdf == null) {
                     Toast.makeText(ctx, "Gagal membuat PDF", Toast.LENGTH_SHORT).show()
+                    requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    stopStreamAndExit()
                     return@withContext
                 }
                 if (download) {
@@ -1357,9 +1382,15 @@ class VideoFragmentTv : Fragment() {
                         if (ok) "PDF tersimpan di folder Downloads" else "Gagal menyimpan PDF",
                         Toast.LENGTH_LONG
                     ).show()
+                    requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    stopStreamAndExit()
                 } else {
                     val label = if (sessionOnly) "Sesi Pemeriksaan" else "Data Pasien"
                     PrintHelper.printPdf(requireActivity(), pdf, "Cervexa — $label")
+                    
+                    kotlinx.coroutines.delay(1000)
+                    requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    stopStreamAndExit()
                 }
             }
         }

@@ -23,6 +23,15 @@ android {
         }
     }
 
+    aaptOptions {
+        noCompress "tflite"
+    }
+    
+    // For AGP 8.0+
+    androidResources {
+        noCompress "tflite"
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -138,8 +147,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // TensorFlow Lite for AI Inference
-    implementation 'org.tensorflow:tensorflow-lite:2.14.0'
-    implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
+    implementation 'org.tensorflow:tensorflow-lite:2.17.0'
+    implementation('org.tensorflow:tensorflow-lite-support:0.4.4') {
+        exclude group: 'org.tensorflow', module: 'tensorflow-lite-api'
+        exclude group: 'org.tensorflow', module: 'tensorflow-lite'
+    }
 
     // Kotest for property-based testing
     testImplementation 'io.kotest:kotest-runner-junit5:5.8.0'

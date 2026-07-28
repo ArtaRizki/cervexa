@@ -25,6 +25,7 @@ import java.nio.MappedByteBuffer
  */
 class ViaModelHelper(private val context: Context) {
     private var interpreter: Interpreter? = null
+    private var initException: Exception? = null
     private val modelName = "via_model.tflite"
     private var isClosed = false
 
@@ -43,8 +44,8 @@ class ViaModelHelper(private val context: Context) {
             options.setNumThreads(4)
             interpreter = Interpreter(tfliteModel, options)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load TFLite model: ${e.message}")
-            // Don't catch — interpreter remains null, detectAbnormality will throw
+            Log.e(TAG, "Failed to load TFLite model", e)
+            initException = e
         }
     }
 
@@ -61,7 +62,7 @@ class ViaModelHelper(private val context: Context) {
      */
     fun detectAbnormality(bitmap: Bitmap): AbnormalityResult.Detected {
         val currentInterpreter = interpreter
-            ?: throw IllegalStateException("TFLite interpreter not loaded — model file may be missing or corrupted")
+            ?: throw IllegalStateException("TFLite interpreter not loaded — ${initException?.message ?: "model file may be missing or corrupted"}", initException)
 
         // Prepare input
         var tensorImage = TensorImage(org.tensorflow.lite.DataType.FLOAT32)
@@ -78,11 +79,9 @@ class ViaModelHelper(private val context: Context) {
         currentInterpreter.run(tensorImage.buffer, outputBuffer.buffer.rewind())
 
         val scores = outputBuffer.floatArray
-        // Class 0 = abnormal (alphabetically 'abnormal' comes before 'normal')
-        // Class 1 = normal
-        val abnormalScore = scores[0]
-        val normalScore = scores[1]
-        Log.d(TAG, "Inference raw output: abnormal=$abnormalScore, normal=$normalScore")
+        // Swap label index: Actual tflite model output has Index 1 as ABNORMAL
+        val abnormalScore = scores[1]
+        Log.d(TAG, "Inference raw output: abnormal=${scores[1]}, normal=${scores[0]}")
 
         // Classify based on threshold
         val label = if (abnormalScore > CLASSIFICATION_THRESHOLD) {

@@ -69,8 +69,13 @@ class OverlayRenderer {
             }
         }
 
+        val subText = when (result.label) {
+            Classification.ABNORMAL -> "Harap lakukan pemeriksaan lebih lanjut"
+            Classification.NORMAL -> "Tidak terdeteksi indikasi abnormal"
+        }
+
         // Draw label with background
-        drawLabel(canvas, labelText, labelColor, textSize, padding, width)
+        drawLabel(canvas, labelText, subText, labelColor, textSize, padding, width)
 
         // Draw timestamp if requested
         if (includeTimestamp) {
@@ -210,6 +215,7 @@ class OverlayRenderer {
     private fun drawLabel(
         canvas: Canvas,
         text: String,
+        subText: String,
         color: Int,
         textSize: Float,
         padding: Float,
@@ -222,6 +228,12 @@ class OverlayRenderer {
             isFakeBoldText = true
         }
 
+        val subTextPaint = Paint().apply {
+            this.color = Color.WHITE
+            this.textSize = textSize * 0.7f
+            isAntiAlias = true
+        }
+
         val bgPaint = Paint().apply {
             this.color = Color.BLACK
             alpha = LABEL_BG_ALPHA
@@ -229,23 +241,29 @@ class OverlayRenderer {
         }
 
         val textWidth = textPaint.measureText(text)
+        val subTextWidth = subTextPaint.measureText(subText)
+        val maxWidth = maxOf(textWidth, subTextWidth)
+
         val textHeight = textPaint.descent() - textPaint.ascent()
+        val subTextHeight = subTextPaint.descent() - subTextPaint.ascent()
 
         // Position label at top-left with padding
         val labelX = padding
         val labelY = padding + textHeight
+        val subLabelY = labelY + subTextHeight + (padding / 2)
 
         // Draw background rectangle
         val bgRect = RectF(
             labelX - padding / 2,
             labelY - textHeight - padding / 4,
-            labelX + textWidth + padding / 2,
-            labelY + padding / 4
+            labelX + maxWidth + padding,
+            subLabelY + padding / 4
         )
         canvas.drawRect(bgRect, bgPaint)
 
         // Draw text
         canvas.drawText(text, labelX, labelY - textPaint.descent(), textPaint)
+        canvas.drawText(subText, labelX, subLabelY - subTextPaint.descent(), subTextPaint)
     }
 
     /**

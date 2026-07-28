@@ -1338,8 +1338,8 @@ class VideoFragmentTv : Fragment() {
 
     private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 20f) {
         val cm = android.graphics.ColorMatrix()
-        // Saturasi diturunkan lagi ke 35% (0.35f) agar warna tidak terlalu ngejreng
-        cm.setSaturation(0.35f)
+        // Saturasi diset di 30% (0.30f) agar tidak ngejreng tapi juga tidak terlalu pucat
+        cm.setSaturation(0.30f)
         
         // Trik mengurangi semut: Gunakan Contrast (skala) daripada sekadar Brightness (offset)
         // Contrast 1.05x (halus) membuat warna terang makin cerah tanpa berlebihan

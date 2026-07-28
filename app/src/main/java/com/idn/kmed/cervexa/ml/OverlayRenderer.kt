@@ -71,7 +71,7 @@ class OverlayRenderer {
 
         val subText = when (result.label) {
             Classification.ABNORMAL -> "Harap lakukan pemeriksaan lebih lanjut"
-            Classification.NORMAL -> "Tidak terdeteksi indikasi abnormal"
+            Classification.NORMAL -> ""
         }
 
         // Draw label with background
@@ -241,29 +241,31 @@ class OverlayRenderer {
         }
 
         val textWidth = textPaint.measureText(text)
-        val subTextWidth = subTextPaint.measureText(subText)
+        val subTextWidth = if (subText.isNotEmpty()) subTextPaint.measureText(subText) else 0f
         val maxWidth = maxOf(textWidth, subTextWidth)
 
         val textHeight = textPaint.descent() - textPaint.ascent()
-        val subTextHeight = subTextPaint.descent() - subTextPaint.ascent()
+        val subTextHeight = if (subText.isNotEmpty()) subTextPaint.descent() - subTextPaint.ascent() else 0f
 
         // Position label at top-left with padding
         val labelX = padding
         val labelY = padding + textHeight
-        val subLabelY = labelY + subTextHeight + (padding / 2)
+        val subLabelY = if (subText.isNotEmpty()) labelY + subTextHeight + (padding / 2) else labelY
 
         // Draw background rectangle
         val bgRect = RectF(
             labelX - padding / 2,
             labelY - textHeight - padding / 4,
             labelX + maxWidth + padding,
-            subLabelY + padding / 4
+            if (subText.isNotEmpty()) subLabelY + padding / 4 else labelY + padding / 4
         )
         canvas.drawRect(bgRect, bgPaint)
 
         // Draw text
         canvas.drawText(text, labelX, labelY - textPaint.descent(), textPaint)
-        canvas.drawText(subText, labelX, subLabelY - subTextPaint.descent(), subTextPaint)
+        if (subText.isNotEmpty()) {
+            canvas.drawText(subText, labelX, subLabelY - subTextPaint.descent(), subTextPaint)
+        }
     }
 
     /**

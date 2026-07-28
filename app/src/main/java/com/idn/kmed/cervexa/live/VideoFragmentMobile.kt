@@ -257,7 +257,7 @@ class VideoFragmentMobile : Fragment() {
 
         // Ambil TextureView dari layout & terapkan brightness GPU tanpa delay
         textureView = binding.root.findViewById<android.view.TextureView>(R.id.textureView)?.also {
-            applyHardwareBrightness(it, 0f)  // 0 = tidak ada brightness tambahan, warna asli kamera
+            applyHardwareBrightness(it, 40f)  // 40f brightness tambahan agar cerah seperti layar MS2
         }
 
         setupGestureDetectors()
@@ -1242,9 +1242,20 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 25f) {
-        // Kurangi saturasi sedikit (1.0 = normal, 0.85 = agak pudar)
-        val cm = android.graphics.ColorMatrix().apply { setSaturation(0.70f) }
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 40f) {
+        val cm = android.graphics.ColorMatrix()
+        // Saturasi diturunkan ke 40% (0.40f) sesuai permintaan klien
+        cm.setSaturation(0.40f)
+        
+        // Tambahkan brightness / exposure
+        val brightnessMatrix = android.graphics.ColorMatrix(floatArrayOf(
+            1f, 0f, 0f, 0f, brightnessOffset,
+            0f, 1f, 0f, 0f, brightnessOffset,
+            0f, 0f, 1f, 0f, brightnessOffset,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        cm.postConcat(brightnessMatrix)
+
         val paint = android.graphics.Paint().apply {
             colorFilter = android.graphics.ColorMatrixColorFilter(cm)
         }

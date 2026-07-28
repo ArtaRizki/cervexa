@@ -59,14 +59,13 @@ class OverlayRenderer {
         val labelColor = getLabelColor(result)
         val labelText = formatLabel(result)
 
-        // Draw bounding box or border based on classification
+        // Draw frame border based on classification color
         when (result.label) {
             Classification.ABNORMAL -> {
-                val box = result.boundingBox ?: RectF(0.28f, 0.28f, 0.72f, 0.72f)
-                drawBoundingBox(canvas, box, width, height, strokeWidth, labelColor)
+                drawFrameBorder(canvas, width, height, strokeWidth, labelColor)
             }
             Classification.NORMAL -> {
-                drawNormalBorder(canvas, width, height, strokeWidth)
+                drawFrameBorder(canvas, width, height, strokeWidth, COLOR_GREEN)
             }
         }
 
@@ -178,12 +177,10 @@ class OverlayRenderer {
     }
 
     /**
-     * Draws a bounding box around the detected abnormal area.
-     * Coordinates in boundingBox are normalized (0-1) and scaled to frame dimensions.
+     * Draws a border around the entire frame indicating the classification result globally.
      */
-    private fun drawBoundingBox(
+    private fun drawFrameBorder(
         canvas: Canvas,
-        boundingBox: RectF,
         frameWidth: Int,
         frameHeight: Int,
         strokeWidth: Float,
@@ -191,33 +188,6 @@ class OverlayRenderer {
     ) {
         val paint = Paint().apply {
             this.color = color
-            style = Paint.Style.STROKE
-            this.strokeWidth = strokeWidth
-            isAntiAlias = true
-        }
-
-        // Scale normalized coordinates to frame dimensions
-        val scaledRect = RectF(
-            boundingBox.left * frameWidth,
-            boundingBox.top * frameHeight,
-            boundingBox.right * frameWidth,
-            boundingBox.bottom * frameHeight
-        )
-
-        canvas.drawRect(scaledRect, paint)
-    }
-
-    /**
-     * Draws a green border around the entire frame for NORMAL classification.
-     */
-    private fun drawNormalBorder(
-        canvas: Canvas,
-        frameWidth: Int,
-        frameHeight: Int,
-        strokeWidth: Float
-    ) {
-        val paint = Paint().apply {
-            color = COLOR_GREEN
             style = Paint.Style.STROKE
             this.strokeWidth = strokeWidth
             isAntiAlias = true

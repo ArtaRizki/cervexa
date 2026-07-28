@@ -332,7 +332,7 @@ class VideoFragmentTv : Fragment() {
 
 
         textureView = binding.textureView?.also {
-            applyHardwareBrightness(it, 55f)  // 55f brightness tambahan (lebih cerah dari 40f)
+            applyHardwareBrightness(it, 0f)  // 0f brightness untuk menghindari noise/semut
         }
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
 
@@ -1336,20 +1336,13 @@ class VideoFragmentTv : Fragment() {
         }
     }
 
-    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 55f) {
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 0f) {
         val cm = android.graphics.ColorMatrix()
         // Saturasi diturunkan kembali ke 40% (0.40f)
         cm.setSaturation(0.40f)
         
-        // Tambahkan brightness / exposure
-        val brightnessMatrix = android.graphics.ColorMatrix(floatArrayOf(
-            1f, 0f, 0f, 0f, brightnessOffset,
-            0f, 1f, 0f, 0f, brightnessOffset,
-            0f, 0f, 1f, 0f, brightnessOffset,
-            0f, 0f, 0f, 1f, 0f
-        ))
-        cm.postConcat(brightnessMatrix)
-
+        // JANGAN tambah brightness (offset=0) karena akan mengekspos noise kompresi H264 (semut)
+        
         val paint = android.graphics.Paint().apply {
             colorFilter = android.graphics.ColorMatrixColorFilter(cm)
         }

@@ -1338,8 +1338,8 @@ class VideoFragmentTv : Fragment() {
 
     private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 40f) {
         val cm = android.graphics.ColorMatrix()
-        // Saturasi diturunkan ke 40% (0.40f) sesuai permintaan klien
-        cm.setSaturation(0.40f)
+        // Saturasi dinaikkan ke 60% (0.60f) agar warna lebih keluar
+        cm.setSaturation(0.60f)
         
         // Tambahkan brightness / exposure
         val brightnessMatrix = android.graphics.ColorMatrix(floatArrayOf(

@@ -236,3 +236,9 @@ Karena menggambar manual ribuan poligon sangat menguras waktu dan layanan *cloud
 3. **Format Export**
    - Setelah selesai mengotakkan 300-500 gambar (sebagai dataset awal), lakukan **Export** ke format **YOLO Segmentation**.
    - Dataset baru ini siap dilatih menggunakan *script* Python khusus YOLOv8-Seg untuk kemudian di-export kembali menjadi `yolov8_segmentation.tflite` untuk Android.
+
+### 8.3 Peringatan: Jangan Gunakan LLM Cloud (Gemini/ChatGPT) untuk Auto-Anotasi
+Jangan mencoba mengirimkan gambar medis serviks ke AI Bahasa berbasis Cloud (seperti Gemini Pro 1.5 atau ChatGPT Plus) dengan harapan mereka bisa mengeluarkan koordinat poligon (*YOLO format*) secara otomatis. Ini akan **Gagal Total** karena dua hal:
+1. **Safety Filters (Pemblokiran Medis):** AI Cloud memiliki protokol keamanan ketat dan akan menolak permintaan dengan pesan: *"Sebagai AI, saya tidak dapat memberikan anotasi, segmentasi, atau interpretasi presisi pada gambar medis..."* untuk menghindari risiko malapraktik.
+2. **Limitasi Spasial AI Bahasa:** Walaupun AI tersebut bisa membuat *bounding box* kasar, mereka tidak memiliki arsitektur *Vision* murni untuk mengekstrak puluhan/ratusan titik koordinat (X,Y) poligon presisi yang menempel pada kurva biologis.
+**Kesimpulan:** Ground truth untuk *Image Segmentation* medis **wajib** dilakukan secara lokal menggunakan alat dedikasi *Vision* seperti AnyLabeling (SAM). Tidak ada jalan pintas *prompting* ke LLM.

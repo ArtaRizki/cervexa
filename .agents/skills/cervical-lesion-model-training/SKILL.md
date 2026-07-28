@@ -212,3 +212,27 @@ Jika tidak memungkinkan mengumpulkan seluruh folder gambar di satu tempat:
    ```
    Lalu melatihnya (*fine-tuning*) menggunakan data **Type 3 & Additional** dengan *learning rate* sangat kecil (`1e-5`).
 4. Hasil akhir ekspor TFLite dari teman Anda akan membawa pengetahuan dari Type 1 & 2 sebelumnya ditambah pengetahuan baru dari Type 3 & Additional.
+
+---
+
+## 8. Persiapan Migrasi ke AI "Image Segmentation" (Rekomendasi Klien)
+
+Jika klien meminta AI untuk **"melacak alur/bentuk spesifik objek lesi secara presisi"**, maka model **Image Classification (Klasifikasi Global)** yang saat ini kita gunakan harus ditingkatkan menjadi model **Image Segmentation** (seperti YOLOv8-Seg atau U-Net). Segmentasi akan menghasilkan output berupa poligon/masker yang benar-benar menempel pada garis tepi bercak putih.
+
+### 8.1 Syarat Utama (Anotasi Poligon Data Ulang)
+Untuk melatih model Segmentasi, **seluruh dataset 8.000+ gambar harus dianotasi (digambar) ulang**. Kita tidak bisa lagi menggunakan struktur folder `normal` / `abnormal`. Setiap gambar harus memiliki file `.txt` berisi koordinat titik-titik garis tepi (poligon) dari lesi.
+
+### 8.2 Solusi Auto-Annotation Offline (100% Aman untuk Medis)
+Karena menggambar manual ribuan poligon sangat menguras waktu dan layanan *cloud* tidak diperbolehkan demi privasi data pasien medis, gunakan **AnyLabeling**:
+
+1. **AnyLabeling (Software Desktop Gratis)**
+   - Unduh versi `.exe` atau `.dmg` dan instal di laptop PC lokal.
+   - AnyLabeling sudah terintegrasi dengan **SAM (Segment Anything Model)** bawaan Meta.
+2. **Cara Kerja Semi-Otomatis (Zero-Shot)**
+   - Buka kumpulan gambar di AnyLabeling.
+   - Klik ikon **Auto-Segmentation (Brain)** dan muat model SAM.
+   - Cukup **Klik 1 titik** di tengah-tengah lesi putih *acetowhite*. SAM akan otomatis membaca kontur medis dan menggambar poligon presisi yang melingkari lesi tersebut dalam hitungan detik.
+   - Tekan Spasi/Enter untuk menyimpan label (misal: `abnormal_lesion`).
+3. **Format Export**
+   - Setelah selesai mengotakkan 300-500 gambar (sebagai dataset awal), lakukan **Export** ke format **YOLO Segmentation**.
+   - Dataset baru ini siap dilatih menggunakan *script* Python khusus YOLOv8-Seg untuk kemudian di-export kembali menjadi `yolov8_segmentation.tflite` untuk Android.

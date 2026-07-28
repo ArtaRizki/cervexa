@@ -113,6 +113,7 @@
         android:id="@+id/btnAiToggle"
         android:layout_width="wrap_content"
         android:layout_height="48dp"
+        android:visibility="gone"
         android:layout_margin="20dp"
         android:background="@drawable/bg_ai_toggle_off"
         android:clickable="true"

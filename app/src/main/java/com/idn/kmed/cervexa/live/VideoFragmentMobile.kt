@@ -257,7 +257,7 @@ class VideoFragmentMobile : Fragment() {
 
         // Ambil TextureView dari layout & terapkan brightness GPU tanpa delay
         textureView = binding.root.findViewById<android.view.TextureView>(R.id.textureView)?.also {
-            applyHardwareBrightness(it, 0f)  // 0f brightness untuk menghindari noise/semut
+            applyHardwareBrightness(it, 20f)  // Brightness halus + contrast agar cerah tapi tidak banyak semut
         }
 
         setupGestureDetectors()
@@ -1242,14 +1242,21 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 0f) {
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 20f) {
         val cm = android.graphics.ColorMatrix()
         // Saturasi diturunkan kembali ke 40% (0.40f)
         cm.setSaturation(0.40f)
         
-        // JANGAN tambah brightness (offset=0) karena akan mengekspos noise kompresi H264 (semut)
-        // val brightnessMatrix = android.graphics.ColorMatrix(...)
-        // cm.postConcat(brightnessMatrix)
+        // Trik mengurangi semut: Gunakan Contrast (skala) daripada sekadar Brightness (offset)
+        // Contrast 1.15x membuat warna terang makin cerah, tapi area gelap (tempat semut) tetap gelap
+        val contrast = 1.15f
+        val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
+            contrast, 0f, 0f, 0f, brightnessOffset,
+            0f, contrast, 0f, 0f, brightnessOffset,
+            0f, 0f, contrast, 0f, brightnessOffset,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        cm.postConcat(brightnessAndContrast)
 
         val paint = android.graphics.Paint().apply {
             colorFilter = android.graphics.ColorMatrixColorFilter(cm)

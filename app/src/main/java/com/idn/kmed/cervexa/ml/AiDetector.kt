@@ -107,19 +107,12 @@ class AiDetector(
             // Primary: TFLite inference — returns AbnormalityResult.Detected directly
             viaModelHelper.detectAbnormality(bitmap)
         } catch (e: Exception) {
-            Log.w(TAG, "TFLite inference failed, falling back to AcetowhiteDetector: ${e.message}")
-            // Fallback: AcetowhiteDetector
-            try {
-                acetowhiteDetector.detect(bitmap)
-            } catch (acetowhiteException: Exception) {
-                Log.e(TAG, "AcetowhiteDetector also failed: ${acetowhiteException.message}")
-                // Both TFLite and Acetowhite failed — disable AnalysisMode for this session
-                analysisModeManager.deactivate()
-                AbnormalityResult.Error(
-                    message = "AI: ERROR",
-                    errorCode = ERROR_CODE_ALL_DETECTORS_FAILED
-                )
-            }
+            Log.w(TAG, "TFLite inference failed, returning error for debugging: ${e.message}")
+            // Temporarily returning error to see the exact crash reason on UI
+            return AbnormalityResult.Error(
+                message = "AI Error: ${e.javaClass.simpleName} - ${e.message}",
+                errorCode = 999
+            )
         }
     }
 

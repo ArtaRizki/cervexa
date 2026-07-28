@@ -185,7 +185,7 @@ class VideoFragmentMobile : Fragment() {
     }
     private val paintCaptureEnhance = Paint().apply {
         val cm = android.graphics.ColorMatrix()
-        // Saturation direndahkan sedikit (1.05) & contrast 1.05
+        // Saturation diturunkan ke 0.7 & contrast 1.05
         val contrast = 1.05f
         val brightness = 0f
         val scale = contrast
@@ -199,7 +199,7 @@ class VideoFragmentMobile : Fragment() {
             )
         )
         val sat = android.graphics.ColorMatrix()
-        sat.setSaturation(1.05f)
+        sat.setSaturation(0.7f)
         cm.postConcat(sat)
         colorFilter = android.graphics.ColorMatrixColorFilter(cm)
         isAntiAlias = false
@@ -778,31 +778,23 @@ class VideoFragmentMobile : Fragment() {
                         poolBitmap
                     } ?: continue
 
-                    // 1. Submit to AI
-                    if (isAiActive) {
-                        aiDetector?.submitFrame(sourceBmp)
-                    }
+                    // 1. We no longer submit frames to AI continuously for the live stream.
+                    // The live stream will remain clean.
 
-                    // 2. Prepare Overlay
-                    val bmWithOverlay = when (val result = latestAiResult) {
-                        is com.idn.kmed.cervexa.ml.AbnormalityResult.Detected -> {
-                            val overlaid = overlayRenderer.renderOverlay(sourceBmp, result)
-                            processTextToBitmapSafe(overlaid)
-                        }
-                        else -> processTextToBitmapSafe(sourceBmp)
-                    }
+                    // 2. Prepare Overlay for Video Recording (no AI overlay)
+                    val bmWithOverlay = processTextToBitmapSafe(sourceBmp)
 
-                    // 3. Record Video
+                    // 3. Record Video (without AI overlay)
                     if (isRecording && ::recorder.isInitialized) {
                         runCatching {
                             recorder.submitBitmap(bmWithOverlay.copy(Bitmap.Config.ARGB_8888, false))
                         }.onFailure { Log.e(TAG, "submitBitmap error", it) }
                     }
 
+                    // 4. Capture Snapshot (tanpa AI)
                     if (isSnapshotRequested && ss.compareAndSet(true, false)) {
                         lastSnapshotMs = System.currentTimeMillis() // catat waktu capture
                         processSnapshot(bmWithOverlay)
-                        // autoResync DIHAPUS — menyebabkan stream stuck
                     }
 
                     if (bmWithOverlay !== sourceBmp && !bmWithOverlay.isRecycled) {

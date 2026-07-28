@@ -74,9 +74,27 @@ class MediaPageFragment : Fragment() {
         val video = root.findViewById<VideoView>(R.id.vvPreview)
 
         // AI Views
-        val btnAnalisisAi = root.findViewById<LinearLayout>(R.id.btnAnalisisAi)
-        val btnHapusOverlay = root.findViewById<LinearLayout>(R.id.btnHapusOverlay)
+        val btnAiToggle = root.findViewById<LinearLayout>(R.id.btnAiToggle)
+        val ivAiIcon = root.findViewById<android.widget.ImageView>(R.id.ivAiIcon)
+        val tvAiToggleLabel = root.findViewById<android.widget.TextView>(R.id.tvAiToggleLabel)
         val pbAiLoading = root.findViewById<ProgressBar>(R.id.pbAiLoading)
+
+        // State AI lokal untuk fragment ini
+        var isAiOn = false
+
+        fun updateToggleUi(isOn: Boolean) {
+            if (isOn) {
+                btnAiToggle.setBackgroundResource(R.drawable.bg_ai_toggle_on)
+                ivAiIcon.setColorFilter(0xFF00C853.toInt()) // Hijau
+                tvAiToggleLabel.text = "AI ON"
+                tvAiToggleLabel.setTextColor(0xFF00C853.toInt())
+            } else {
+                btnAiToggle.setBackgroundResource(R.drawable.bg_ai_toggle_off)
+                ivAiIcon.setColorFilter(0xFF888888.toInt()) // Abu-abu
+                tvAiToggleLabel.text = "AI OFF"
+                tvAiToggleLabel.setTextColor(0xFF888888.toInt())
+            }
+        }
 
         // --- Cek Validitas File ---
         if (!file.exists() || file.length() == 0L) {
@@ -104,19 +122,20 @@ class MediaPageFragment : Fragment() {
             // Initialize AI components
             initAiDetector()
 
-            // --- "Analisis AI" button click ---
-            btnAnalisisAi.setOnClickListener {
-                performAiAnalysis(file, photo, btnAnalisisAi, btnHapusOverlay, pbAiLoading)
-            }
-
-            // --- "Hapus Overlay" button click ---
-            btnHapusOverlay.setOnClickListener {
-                // Restore original image
-                originalBitmap?.let { bmp ->
-                    photo.setImageBitmap(bmp)
+            // --- AI Toggle Click ---
+            btnAiToggle.setOnClickListener {
+                if (isAiOn) {
+                    // Turn OFF
+                    isAiOn = false
+                    updateToggleUi(false)
+                    originalBitmap?.let { bmp -> photo.setImageBitmap(bmp) }
+                } else {
+                    // Turn ON and run Analysis
+                    performAiAnalysis(file, photo, btnAiToggle, pbAiLoading) { success ->
+                        isAiOn = success
+                        updateToggleUi(success)
+                    }
                 }
-                btnHapusOverlay.visibility = View.GONE
-                btnAnalisisAi.visibility = View.VISIBLE
             }
 
         } else {
@@ -124,9 +143,8 @@ class MediaPageFragment : Fragment() {
             imageMode.visibility = View.GONE
             videoMode.visibility = View.VISIBLE
 
-            // Hide AI buttons in video mode
-            btnAnalisisAi.visibility = View.GONE
-            btnHapusOverlay.visibility = View.GONE
+            // Hide AI toggle in video mode
+            btnAiToggle.visibility = View.GONE
 
             val uri = Uri.fromFile(file)
             val durationStr = getSafeDuration(file)
@@ -193,18 +211,24 @@ class MediaPageFragment : Fragment() {
     private fun performAiAnalysis(
         file: File,
         photo: PhotoView,
-        btnAnalisisAi: LinearLayout,
-        btnHapusOverlay: LinearLayout,
-        pbAiLoading: ProgressBar
+        btnAiToggle: LinearLayout,
+        pbAiLoading: ProgressBar,
+        onComplete: (Boolean) -> Unit
     ) {
-        val detector = aiDetector ?: return
-        val renderer = overlayRenderer ?: return
+        val detector = aiDetector
+        val renderer = overlayRenderer
+        
+        if (detector == null || renderer == null) {
+            onComplete(false)
+            return
+        }
 
         // Validate: decode check
         val bitmap = try {
             decodeBitmapWithExifRotation(file)
         } catch (e: Exception) {
             Toast.makeText(context, "Gambar rusak atau format tidak didukung", Toast.LENGTH_SHORT).show()
+            onComplete(false)
             return
         }
 
@@ -212,11 +236,12 @@ class MediaPageFragment : Fragment() {
         val validationError = detector.validateImage(bitmap.width, bitmap.height)
         if (validationError != null) {
             Toast.makeText(context, validationError, Toast.LENGTH_SHORT).show()
+            onComplete(false)
             return
         }
 
         // Show loading, hide button
-        btnAnalisisAi.visibility = View.GONE
+        btnAiToggle.visibility = View.GONE
         pbAiLoading.visibility = View.VISIBLE
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -232,7 +257,8 @@ class MediaPageFragment : Fragment() {
             if (result == null) {
                 // Timeout
                 Toast.makeText(context, "Analisis AI timeout, coba lagi", Toast.LENGTH_SHORT).show()
-                btnAnalisisAi.visibility = View.VISIBLE
+                btnAiToggle.visibility = View.VISIBLE
+                onComplete(false)
                 return@launch
             }
 
@@ -241,14 +267,17 @@ class MediaPageFragment : Fragment() {
                     // Render overlay on top of original bitmap
                     val overlayBitmap = renderer.renderOverlay(bitmap, result)
                     photo.setImageBitmap(overlayBitmap)
-                    btnHapusOverlay.visibility = View.VISIBLE
+                    btnAiToggle.visibility = View.VISIBLE
+                    onComplete(true)
                 }
                 is AbnormalityResult.Error -> {
                     Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
-                    btnAnalisisAi.visibility = View.VISIBLE
+                    btnAiToggle.visibility = View.VISIBLE
+                    onComplete(false)
                 }
                 is AbnormalityResult.Idle -> {
-                    btnAnalisisAi.visibility = View.VISIBLE
+                    btnAiToggle.visibility = View.VISIBLE
+                    onComplete(false)
                 }
             }
         }

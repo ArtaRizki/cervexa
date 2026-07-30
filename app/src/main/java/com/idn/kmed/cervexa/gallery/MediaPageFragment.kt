@@ -24,13 +24,18 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.github.chrisbanes.photoview.PhotoView
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.ml.AbnormalityResult
 import com.idn.kmed.cervexa.ml.AcetowhiteDetector
 import com.idn.kmed.cervexa.ml.AiDetector
 import com.idn.kmed.cervexa.ml.AnalysisModeManager
+import com.idn.kmed.cervexa.ml.Classification
 import com.idn.kmed.cervexa.ml.OverlayRenderer
 import com.idn.kmed.cervexa.ml.ViaModelHelper
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -246,6 +251,7 @@ class MediaPageFragment : Fragment() {
                     val overlayBitmap = renderer.renderOverlay(bitmap, result)
                     photo.setImageBitmap(overlayBitmap)
                     btnHapusOverlay.visibility = View.VISIBLE
+                    showAiReportDialog(result)
                 }
                 is AbnormalityResult.Error -> {
                     Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
@@ -256,6 +262,51 @@ class MediaPageFragment : Fragment() {
                 }
             }
         }
+    }
+
+    private fun showAiReportDialog(result: AbnormalityResult.Detected) {
+        val ctx = context ?: return
+        val percentage = (if (result.label == Classification.ABNORMAL) {
+            result.confidenceScore * 100
+        } else {
+            (1 - result.confidenceScore) * 100
+        }).roundToInt()
+
+        val statusText = if (result.label == Classification.ABNORMAL) "ABNORMAL" else "NORMAL"
+        val rekomendasiText = if (result.label == Classification.ABNORMAL) {
+            "• Terdeteksi pola visual indikasi lesi serviks / Acetowhite.\n• Harap lakukan pemeriksaan klinis lanjutan (Kolposkopi / Biopsi) untuk konfirmasi diagnosis."
+        } else {
+            "• Jaringan serviks tampak normal (tidak ditemukan tanda lesi signifikan).\n• Lanjutkan pemeriksaan rutin sesuai jadwal."
+        }
+        val modeText = if (result.isFallback) "Deteksi Acetowhite (Fallback)" else "Cervex AI Model (TFLite)"
+        val timeStr = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+
+        val message = """
+            |Status Diagnosis: $statusText ($percentage%)
+            |Mode Analisis: $modeText
+            |Waktu Pemeriksaan: $timeStr
+            |
+            |KETERANGAN KLINIS:
+            |• Tipe Analisis: Klasifikasi Citra Keseluruhan (Whole-Image)
+            |• Catatan: Model menganalisis keseluruhan gambar serviks secara klasifikasi medis.
+            |
+            |REKOMENDASI:
+            |$rekomendasiText
+        """.trimMargin()
+
+        AlertDialog.Builder(ctx)
+            .setTitle("Laporan Hasil Analisis AI")
+            .setMessage(message)
+            .setPositiveButton("Tutup / Mengerti") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .setNeutralButton("Salin Laporan") { _, _ ->
+                val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                val clip = ClipData.newPlainText("Laporan AI Cervexa", message)
+                clipboard?.setPrimaryClip(clip)
+                Toast.makeText(ctx, "Laporan berhasil disalin", Toast.LENGTH_SHORT).show()
+            }
+            .show()
     }
 
     // =====================================================================

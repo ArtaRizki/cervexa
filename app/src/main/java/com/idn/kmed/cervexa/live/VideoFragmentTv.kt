@@ -332,7 +332,7 @@ class VideoFragmentTv : Fragment() {
 
 
         textureView = binding.textureView?.also {
-            applyHardwareBrightness(it, 35f)  // Brightness 35f + contrast agar cerah menyamai layar MS2
+            applyHardwareBrightness(it, 65f)  // Brightness 65f (dinaikkan) agar cerah menyamai layar MS2
         }
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
 
@@ -1336,14 +1336,14 @@ class VideoFragmentTv : Fragment() {
         }
     }
 
-    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 55f) {
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 65f) {
         val cm = android.graphics.ColorMatrix()
-        // Saturasi diturunkan sedikit ke 55% (0.55f) agar tidak terlalu merah/pekat
-        cm.setSaturation(0.55f)
+        // Saturasi diturunkan ke 50% (0.50f) agar tidak terlalu merah/pekat menyamai warna MS2 yang pudar
+        cm.setSaturation(0.50f)
         
-        // Trik mengurangi semut: Gunakan Contrast (skala) daripada sekadar Brightness (offset)
-        // Contrast 1.08x membuat warna terang cerah menyeimbangi MS2, brightness dinaikkan
-        val contrast = 1.08f
+        // Trik mengurangi semut & menyamai MS2: MS2 memiliki contrast rendah (washed-out). 
+        // Kita turunkan contrast HP ke 0.95x agar warna tidak terlalu tajam/gelap, lalu brightness naik.
+        val contrast = 0.95f
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
             contrast, 0f, 0f, 0f, brightnessOffset,
             0f, contrast, 0f, 0f, brightnessOffset,

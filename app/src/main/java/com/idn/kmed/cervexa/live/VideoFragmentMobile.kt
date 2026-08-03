@@ -216,7 +216,7 @@ class VideoFragmentMobile : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        updateStatusBarColor()
+        toggleSystemUI()
         liveViewModel.loadParams(requireContext())
 
         if (ijkPlayer?.isPlaying != true) startVlcStream()
@@ -236,7 +236,7 @@ class VideoFragmentMobile : Fragment() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         binding.tvOverlayInfo.text = overlayInfoText()
-        updateStatusBarColor()
+        toggleSystemUI()
         // Re-apply layout setelah orientasi berubah
         textureView?.post { applyIjkLayout() }
         if (clockJob?.isActive != true) startOverlayClock()
@@ -977,9 +977,24 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private fun updateStatusBarColor() {
-        val color = if (isLandscape()) R.color.colorBlack else R.color.colorButton
-        requireActivity().window.statusBarColor = ContextCompat.getColor(requireContext(), color)
+    private fun toggleSystemUI() {
+        val window = requireActivity().window
+        if (isLandscape()) {
+            // Landscape: sembunyikan status bar + navigation bar (full immersive)
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).let {
+                it.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                it.systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            // Portrait: tampilkan kembali status bar + navigation bar
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+            androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+                .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            val color = ContextCompat.getColor(requireContext(), R.color.colorButton)
+            window.statusBarColor = color
+        }
     }
 
     private fun startOverlayClock() {

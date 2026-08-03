@@ -587,14 +587,9 @@ class VideoFragmentMobile : Fragment() {
         val vH = videoH.toFloat()
         if (sarNum > 0 && sarDen > 0) vW = vW * sarNum / sarDen
 
-        // CENTER CROP: video memenuhi seluruh layar tanpa bar hitam
-        val vAspect = vW / vH
-        val cAspect = cW.toFloat() / cH.toFloat()
-        val (finalW, finalH) = if (cAspect > vAspect) {
-            cW to (cW / vAspect).toInt()          // layar lebih lebar → paskan lebar
-        } else {
-            (cH * vAspect).toInt() to cH           // layar lebih tinggi → paskan tinggi
-        }
+        // STRETCH: video ditarik penuh memenuhi seluruh layar, abaikan rasio aspek
+        val finalW = cW
+        val finalH = cH
 
         tv.layoutParams = android.widget.FrameLayout.LayoutParams(finalW, finalH).also {
             it.gravity = android.view.Gravity.CENTER

@@ -1338,12 +1338,12 @@ class VideoFragmentTv : Fragment() {
 
     private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 65f) {
         val cm = android.graphics.ColorMatrix()
-        // Saturasi diturunkan ke 50% (0.50f) agar tidak terlalu merah/pekat menyamai warna MS2 yang pudar
-        cm.setSaturation(0.50f)
-        
-        // Trik mengurangi semut & menyamai MS2: MS2 memiliki contrast rendah (washed-out). 
-        // Kita turunkan contrast HP ke 0.95x agar warna tidak terlalu tajam/gelap, lalu brightness naik.
-        val contrast = 0.95f
+        // Saturasi 60% — lebih cerah dari 50% sebelumnya agar warna biru muda seperti layar MS2
+        cm.setSaturation(0.60f)
+
+        // Contrast kembali ke 1.0 (netral) agar tidak ada kanal warna yang diredam.
+        // Brightness 65f membuat semua kanal (R, G, B) naik seragam → biru jadi lebih muda/cerah.
+        val contrast = 1.0f
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
             contrast, 0f, 0f, 0f, brightnessOffset,
             0f, contrast, 0f, 0f, brightnessOffset,

@@ -587,13 +587,16 @@ class VideoFragmentMobile : Fragment() {
         val vH = videoH.toFloat()
         if (sarNum > 0 && sarDen > 0) vW = vW * sarNum / sarDen
 
-        // CENTER CROP: video memenuhi seluruh layar
+        // FIT CENTER: video proporsional sesuai rasio aslinya (seperti layar MS2 fisik)
+        // Video tidak terpotong dan tidak zoom — ada letterbox/pillarbox di sisi yang kosong.
         val vAspect = vW / vH
         val cAspect = cW.toFloat() / cH.toFloat()
         val (finalW, finalH) = if (cAspect > vAspect) {
-            cW to (cW / vAspect).toInt()          // layar lebih lebar → paskan lebar
+            // Layar lebih lebar dari video → paskan TINGGI, biarkan sisi kiri-kanan kosong
+            (cH * vAspect).toInt() to cH
         } else {
-            (cH * vAspect).toInt() to cH           // layar lebih tinggi → paskan tinggi
+            // Layar lebih tinggi dari video → paskan LEBAR, biarkan sisi atas-bawah kosong
+            cW to (cW / vAspect).toInt()
         }
 
         tv.layoutParams = android.widget.FrameLayout.LayoutParams(finalW, finalH).also {

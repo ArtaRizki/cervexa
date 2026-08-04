@@ -1340,13 +1340,12 @@ class VideoFragmentTv : Fragment() {
         val cm = android.graphics.ColorMatrix()
         cm.setSaturation(0.55f)
 
-        // Contrast kembali ke 1.0 (netral) agar tidak ada kanal warna yang diredam.
-        // Brightness 65f membuat semua kanal (R, G, B) naik seragam → biru jadi lebih muda/cerah.
+        // Filter hijau tipis: Red -8% (0.92) & Green +5% (1.05) — sinkron dengan Mobile
         val contrast = 1.0f
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
-            contrast, 0f, 0f, 0f, brightnessOffset,
-            0f, contrast, 0f, 0f, brightnessOffset,
-            0f, 0f, contrast, 0f, brightnessOffset,
+            contrast * 0.92f, 0f, 0f, 0f, brightnessOffset,  // Red -8%
+            0f, contrast * 1.05f, 0f, 0f, brightnessOffset,  // Green +5%
+            0f, 0f, contrast, 0f, brightnessOffset,           // Blue netral
             0f, 0f, 0f, 1f, 0f
         ))
         cm.postConcat(brightnessAndContrast)

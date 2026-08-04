@@ -1257,12 +1257,13 @@ class VideoFragmentMobile : Fragment() {
         cm.setSaturation(0.55f)  // Saturasi 55% — merah lebih bata/redup seperti layar MS2
 
         // Contrast kembali ke 1.0 (netral) agar tidak ada kanal warna yang diredam.
-        // Brightness 65f membuat semua kanal (R, G, B) naik seragam → biru jadi lebih muda/cerah.
+        // Filter hijau tipis: Red dikurangi 8% (0.92) & Green dinaikkan 5% (1.05)
+        // agar warna tidak kuning dan lebih mendekati tone layar MS2.
         val contrast = 1.0f
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
-            contrast, 0f, 0f, 0f, brightnessOffset,
-            0f, contrast, 0f, 0f, brightnessOffset,
-            0f, 0f, contrast, 0f, brightnessOffset,
+            contrast * 0.92f, 0f, 0f, 0f, brightnessOffset,  // Red -8%
+            0f, contrast * 1.05f, 0f, 0f, brightnessOffset,  // Green +5%
+            0f, 0f, contrast, 0f, brightnessOffset,           // Blue netral
             0f, 0f, 0f, 1f, 0f
         ))
         cm.postConcat(brightnessAndContrast)

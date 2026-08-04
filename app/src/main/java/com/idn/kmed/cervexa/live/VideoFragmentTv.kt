@@ -1343,7 +1343,7 @@ class VideoFragmentTv : Fragment() {
         // Red -8% (kurangi kuning), Green netral, Blue +8% (matching cool tone MS2)
         val contrast = 1.0f
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
-            contrast * 0.92f, 0f, 0f, 0f, brightnessOffset,  // Red -8%
+            contrast * 1.0f, 0f, 0f, 0f, brightnessOffset,   // Red netral (merah bata)
             0f, contrast * 1.0f, 0f, 0f, brightnessOffset,   // Green netral
             0f, 0f, contrast * 1.08f, 0f, brightnessOffset,  // Blue +8%
             0f, 0f, 0f, 1f, 0f

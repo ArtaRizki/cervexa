@@ -1260,7 +1260,7 @@ class VideoFragmentMobile : Fragment() {
         // Red dikurangi 8% (kurangi yellow/warm), Green netral, Blue naik 8% (matching cool tone MS2)
         val contrast = 1.0f
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
-            contrast * 0.92f, 0f, 0f, 0f, brightnessOffset,  // Red -8% (kurangi kuning)
+            contrast * 1.0f, 0f, 0f, 0f, brightnessOffset,   // Red netral (merah bata kembali)
             0f, contrast * 1.0f, 0f, 0f, brightnessOffset,   // Green netral
             0f, 0f, contrast * 1.08f, 0f, brightnessOffset,  // Blue +8% (matching biru MS2)
             0f, 0f, 0f, 1f, 0f

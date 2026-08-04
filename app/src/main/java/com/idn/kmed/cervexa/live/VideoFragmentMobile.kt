@@ -240,6 +240,16 @@ class VideoFragmentMobile : Fragment() {
         // Re-apply layout setelah orientasi berubah
         textureView?.post { applyIjkLayout() }
         if (clockJob?.isActive != true) startOverlayClock()
+        
+        // Debug panel logic
+        val btnToggleDebug = binding.root.findViewById<android.view.View>(R.id.btnToggleDebug)
+        val svDebugPanel = binding.root.findViewById<android.view.View>(R.id.svDebugPanel)
+        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            btnToggleDebug?.visibility = View.VISIBLE
+        } else {
+            btnToggleDebug?.visibility = View.GONE
+            svDebugPanel?.visibility = View.GONE
+        }
     }
 
     // =====================================================================
@@ -1366,9 +1376,20 @@ class VideoFragmentMobile : Fragment() {
         })
 
         val btnHideDebug = binding.root.findViewById<android.widget.Button>(R.id.btnHideDebug)
+        val btnToggleDebug = binding.root.findViewById<android.view.View>(R.id.btnToggleDebug)
         val svDebugPanel = binding.root.findViewById<android.view.View>(R.id.svDebugPanel)
+        
         btnHideDebug?.setOnClickListener {
             svDebugPanel?.visibility = android.view.View.GONE
+        }
+        
+        btnToggleDebug?.setOnClickListener {
+            svDebugPanel?.visibility = if (svDebugPanel?.visibility == android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE
+        }
+
+        // Set initial visibility of toggle button
+        if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            btnToggleDebug?.visibility = View.VISIBLE
         }
     }
 

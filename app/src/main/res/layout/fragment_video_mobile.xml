@@ -69,7 +69,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="#A8000000"
-            android:visibility="visible">
+            android:visibility="gone">
             
             <LinearLayout
                 android:layout_width="match_parent"
@@ -105,6 +105,20 @@
                 
             </LinearLayout>
         </ScrollView>
+        
+        <!-- Toggle Debug Panel (Landscape Only) -->
+        <ImageButton
+            android:id="@+id/btnToggleDebug"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="16dp"
+            android:background="@drawable/bg_overlay_black"
+            android:src="@drawable/ic_edit"
+            android:tint="@android:color/white"
+            android:visibility="gone"
+            android:contentDescription="Toggle Color Tuning" />
+            
     </FrameLayout>
 
     <TextView

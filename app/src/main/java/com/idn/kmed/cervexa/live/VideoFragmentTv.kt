@@ -332,7 +332,7 @@ class VideoFragmentTv : Fragment() {
 
 
         textureView = binding.textureView?.also {
-            applyHardwareBrightness(it, 95f)
+            applyHardwareBrightness(it, 25f)
         }
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
 
@@ -1336,16 +1336,16 @@ class VideoFragmentTv : Fragment() {
         }
     }
 
-    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 95f) {
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 25f) {
         val cm = android.graphics.ColorMatrix()
-        cm.setSaturation(0.60f)
+        cm.setSaturation(0.85f)
 
-        // Red -8% (kurangi kuning), Green netral, Blue +8% (matching cool tone MS2)
-        val contrast = 1.0f
+        // MS2 memiliki contrast tinggi dan warna punchy/warm (kekuningan).
+        val contrast = 1.25f
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
             contrast * 1.05f, 0f, 0f, 0f, brightnessOffset,  // Red +5%
-            0f, contrast * 0.95f, 0f, 0f, brightnessOffset,  // Green -5%
-            0f, 0f, contrast * 1.15f, 0f, brightnessOffset,  // Blue +15%
+            0f, contrast * 1.05f, 0f, 0f, brightnessOffset,  // Green +5% (R+G = yellow warmth)
+            0f, 0f, contrast * 0.95f, 0f, brightnessOffset,  // Blue -5%
             0f, 0f, 0f, 1f, 0f
         ))
         cm.postConcat(brightnessAndContrast)

@@ -114,7 +114,7 @@
             android:layout_gravity="top|end"
             android:layout_margin="16dp"
             android:background="@drawable/bg_overlay_black"
-            android:src="@drawable/ic_edit"
+            android:src="@android:drawable/ic_menu_edit"
             android:tint="@android:color/white"
             android:visibility="gone"
             android:contentDescription="Toggle Color Tuning" />

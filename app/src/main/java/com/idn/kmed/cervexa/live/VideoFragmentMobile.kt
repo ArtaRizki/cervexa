@@ -257,7 +257,7 @@ class VideoFragmentMobile : Fragment() {
 
         // Ambil TextureView dari layout & terapkan brightness GPU tanpa delay
         textureView = binding.root.findViewById<android.view.TextureView>(R.id.textureView)?.also {
-            applyHardwareBrightness(it, 70f)  // Brightness 70f
+            applyHardwareBrightness(it, 35f)  // Brightness 35f — hitam lebih pekat
         }
 
         setupGestureDetectors()
@@ -1252,15 +1252,15 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 70f) {
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 35f) {
         val cm = android.graphics.ColorMatrix()
-        cm.setSaturation(0.55f)  // Saturasi 55% — merah lebih bata/redup seperti layar MS2
+        cm.setSaturation(0.65f)  // Saturasi 65% untuk merah bata lebih terasa
 
         // Contrast kembali ke 1.0 (netral) agar tidak ada kanal warna yang diredam.
         // Red dikurangi 8% (kurangi yellow/warm), Green netral, Blue naik 8% (matching cool tone MS2)
         val contrast = 1.0f
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
-            contrast * 1.0f, 0f, 0f, 0f, brightnessOffset,   // Red netral (merah bata kembali)
+            contrast * 1.10f, 0f, 0f, 0f, brightnessOffset,  // Red +10% (merah bata)
             0f, contrast * 1.0f, 0f, 0f, brightnessOffset,   // Green netral
             0f, 0f, contrast * 1.08f, 0f, brightnessOffset,  // Blue +8% (matching biru MS2)
             0f, 0f, 0f, 1f, 0f

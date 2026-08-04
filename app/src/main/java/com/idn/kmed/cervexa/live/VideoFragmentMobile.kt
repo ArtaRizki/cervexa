@@ -257,7 +257,7 @@ class VideoFragmentMobile : Fragment() {
 
         // Ambil TextureView dari layout & terapkan brightness GPU tanpa delay
         textureView = binding.root.findViewById<android.view.TextureView>(R.id.textureView)?.also {
-            applyHardwareBrightness(it, 60f)
+            applyHardwareBrightness(it, 65f)
         }
 
         setupGestureDetectors()
@@ -1252,7 +1252,7 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 60f) {
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 65f) {
         val cm = android.graphics.ColorMatrix()
         cm.setSaturation(0.65f)
 
@@ -1260,7 +1260,7 @@ class VideoFragmentMobile : Fragment() {
         // Red dikurangi 8% (kurangi yellow/warm), Green netral, Blue naik 8% (matching cool tone MS2)
         val contrast = 1.0f
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
-            contrast * 1.0f,  0f, 0f, 0f, brightnessOffset,  // Red netral
+            contrast * 1.10f,  0f, 0f, 0f, brightnessOffset,  // Red +10% (merah bata)
             0f, contrast * 0.88f, 0f, 0f, brightnessOffset,  // Green -12% → hilangkan kuning
             0f, 0f, contrast * 1.0f,  0f, brightnessOffset,  // Blue netral
             0f, 0f, 0f, 1f, 0f

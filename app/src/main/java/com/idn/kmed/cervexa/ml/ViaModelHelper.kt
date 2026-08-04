@@ -79,9 +79,8 @@ class ViaModelHelper(private val context: Context) {
         currentInterpreter.run(tensorImage.buffer, outputBuffer.buffer.rewind())
 
         val scores = outputBuffer.floatArray
-        // Swap label index: Actual tflite model output has Index 1 as ABNORMAL
-        val abnormalScore = scores[1]
-        Log.d(TAG, "Inference raw output: abnormal=${scores[1]}, normal=${scores[0]}")
+        val abnormalScore = scores[0]
+        Log.d(TAG, "Inference raw output: abnormal=${scores[0]}, normal=${scores[1]}")
 
         // Classify based on threshold
         val label = if (abnormalScore > CLASSIFICATION_THRESHOLD) {

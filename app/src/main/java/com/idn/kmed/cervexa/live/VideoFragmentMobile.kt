@@ -1269,6 +1269,7 @@ class VideoFragmentMobile : Fragment() {
     private var currentRed = 1.05f
     private var currentGreen = 1.05f
     private var currentBlue = 0.95f
+    private var currentHue = 0f
 
     private fun applyHardwareBrightness(
         tv: android.view.TextureView, 
@@ -1277,10 +1278,26 @@ class VideoFragmentMobile : Fragment() {
         saturation: Float = currentSaturation,
         redBoost: Float = currentRed,
         greenBoost: Float = currentGreen,
-        blueBoost: Float = currentBlue
+        blueBoost: Float = currentBlue,
+        hueOffset: Float = currentHue
     ) {
         val cm = android.graphics.ColorMatrix()
         cm.setSaturation(saturation)
+
+        // Hue rotation
+        if (hueOffset != 0f) {
+            val theta = Math.PI * hueOffset / 180.0
+            val c = Math.cos(theta).toFloat()
+            val s = Math.sin(theta).toFloat()
+
+            val hueMatrix = android.graphics.ColorMatrix(floatArrayOf(
+                0.213f + 0.787f * c - 0.213f * s, 0.715f - 0.715f * c - 0.715f * s, 0.072f - 0.072f * c + 0.928f * s, 0f, 0f,
+                0.213f - 0.213f * c + 0.143f * s, 0.715f + 0.285f * c + 0.140f * s, 0.072f - 0.072f * c - 0.283f * s, 0f, 0f,
+                0.213f - 0.213f * c - 0.787f * s, 0.715f - 0.715f * c + 0.715f * s, 0.072f + 0.928f * c + 0.072f * s, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f
+            ))
+            cm.postConcat(hueMatrix)
+        }
 
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
             contrast * redBoost, 0f, 0f, 0f, brightnessOffset,
@@ -1369,6 +1386,18 @@ class VideoFragmentMobile : Fragment() {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentBlue = progress / 100f
                 tvBlueVal?.text = String.format("%.2f", currentBlue)
+                updateFilter()
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        val sbHue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbHue)
+        val tvHueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvHueVal)
+        sbHue?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                currentHue = (progress - 180).toFloat()
+                tvHueVal?.text = currentHue.toInt().toString()
                 updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}

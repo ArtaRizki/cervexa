@@ -63,6 +63,10 @@
                 <SeekBar android:id="@+id/sbBlue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="95" />
                 <TextView android:id="@+id/tvBlueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0.95" />
 
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Hue (-180 to 180)" android:layout_marginTop="8dp" />
+                <SeekBar android:id="@+id/sbHue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="360" android:progress="180" />
+                <TextView android:id="@+id/tvHueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0" />
+
                 <Button android:id="@+id/btnHideDebug" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Hide Panel" android:layout_gravity="center" android:layout_marginTop="16dp"/>
                 
             </LinearLayout>

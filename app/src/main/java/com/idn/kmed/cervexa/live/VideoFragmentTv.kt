@@ -332,7 +332,7 @@ class VideoFragmentTv : Fragment() {
 
 
         textureView = binding.textureView?.also {
-            applyHardwareBrightness(it, 75f)  // Brightness 75f
+            applyHardwareBrightness(it, 50f)  // Brightness 50f
         }
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
 
@@ -1336,9 +1336,9 @@ class VideoFragmentTv : Fragment() {
         }
     }
 
-    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 75f) {
+    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 50f) {
         val cm = android.graphics.ColorMatrix()
-        cm.setSaturation(0.70f)
+        cm.setSaturation(0.55f)
 
         // Contrast kembali ke 1.0 (netral) agar tidak ada kanal warna yang diredam.
         // Brightness 65f membuat semua kanal (R, G, B) naik seragam → biru jadi lebih muda/cerah.

@@ -263,6 +263,7 @@ class VideoFragmentMobile : Fragment() {
         setupGestureDetectors()
         setupButtons()
         setupThumbs()
+        setupDebugPanel()
 
         binding.tvMediaTgl?.text = formattedDate
         binding.tvOverlayInfo.text = overlayInfoText()
@@ -1252,17 +1253,29 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private fun applyHardwareBrightness(tv: android.view.TextureView, brightnessOffset: Float = 25f) {
-        val cm = android.graphics.ColorMatrix()
-        cm.setSaturation(0.85f)
+    private var currentBrightness = 25f
+    private var currentContrast = 1.25f
+    private var currentSaturation = 0.85f
+    private var currentRed = 1.05f
+    private var currentGreen = 1.05f
+    private var currentBlue = 0.95f
 
-        // MS2 memiliki contrast tinggi dan warna punchy/warm (kekuningan).
-        // Kita naikkan contrast ke 1.25x, kurangi brightness flat, dan buat tone sedikit hangat (Red & Green naik).
-        val contrast = 1.25f
+    private fun applyHardwareBrightness(
+        tv: android.view.TextureView, 
+        brightnessOffset: Float = currentBrightness,
+        contrast: Float = currentContrast,
+        saturation: Float = currentSaturation,
+        redBoost: Float = currentRed,
+        greenBoost: Float = currentGreen,
+        blueBoost: Float = currentBlue
+    ) {
+        val cm = android.graphics.ColorMatrix()
+        cm.setSaturation(saturation)
+
         val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
-            contrast * 1.05f, 0f, 0f, 0f, brightnessOffset,  // Red +5%
-            0f, contrast * 1.05f, 0f, 0f, brightnessOffset,  // Green +5% (R+G = yellow warmth)
-            0f, 0f, contrast * 0.95f, 0f, brightnessOffset,  // Blue -5% (kurangi kesan dingin/ungu)
+            contrast * redBoost, 0f, 0f, 0f, brightnessOffset,
+            0f, contrast * greenBoost, 0f, 0f, brightnessOffset,
+            0f, 0f, contrast * blueBoost, 0f, brightnessOffset,
             0f, 0f, 0f, 1f, 0f
         ))
         cm.postConcat(brightnessAndContrast)
@@ -1271,6 +1284,92 @@ class VideoFragmentMobile : Fragment() {
             colorFilter = android.graphics.ColorMatrixColorFilter(cm)
         }
         tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
+    }
+
+    private fun setupDebugPanel() {
+        val updateFilter = {
+            textureView?.let { 
+                applyHardwareBrightness(it) 
+            }
+        }
+        
+        val sbContrast = binding.root.findViewById<android.widget.SeekBar>(R.id.sbContrast)
+        val tvContrastVal = binding.root.findViewById<android.widget.TextView>(R.id.tvContrastVal)
+        sbContrast?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                currentContrast = progress / 100f
+                tvContrastVal?.text = String.format("%.2f", currentContrast)
+                updateFilter()
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        val sbBrightness = binding.root.findViewById<android.widget.SeekBar>(R.id.sbBrightness)
+        val tvBrightnessVal = binding.root.findViewById<android.widget.TextView>(R.id.tvBrightnessVal)
+        sbBrightness?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                currentBrightness = (progress - 100).toFloat()
+                tvBrightnessVal?.text = currentBrightness.toString()
+                updateFilter()
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        val sbSaturation = binding.root.findViewById<android.widget.SeekBar>(R.id.sbSaturation)
+        val tvSaturationVal = binding.root.findViewById<android.widget.TextView>(R.id.tvSaturationVal)
+        sbSaturation?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                currentSaturation = progress / 100f
+                tvSaturationVal?.text = String.format("%.2f", currentSaturation)
+                updateFilter()
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        val sbRed = binding.root.findViewById<android.widget.SeekBar>(R.id.sbRed)
+        val tvRedVal = binding.root.findViewById<android.widget.TextView>(R.id.tvRedVal)
+        sbRed?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                currentRed = progress / 100f
+                tvRedVal?.text = String.format("%.2f", currentRed)
+                updateFilter()
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        val sbGreen = binding.root.findViewById<android.widget.SeekBar>(R.id.sbGreen)
+        val tvGreenVal = binding.root.findViewById<android.widget.TextView>(R.id.tvGreenVal)
+        sbGreen?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                currentGreen = progress / 100f
+                tvGreenVal?.text = String.format("%.2f", currentGreen)
+                updateFilter()
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        val sbBlue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbBlue)
+        val tvBlueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvBlueVal)
+        sbBlue?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                currentBlue = progress / 100f
+                tvBlueVal?.text = String.format("%.2f", currentBlue)
+                updateFilter()
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+
+        val btnHideDebug = binding.root.findViewById<android.widget.Button>(R.id.btnHideDebug)
+        val svDebugPanel = binding.root.findViewById<android.view.View>(R.id.svDebugPanel)
+        btnHideDebug?.setOnClickListener {
+            svDebugPanel?.visibility = android.view.View.GONE
+        }
     }
 
     companion object {

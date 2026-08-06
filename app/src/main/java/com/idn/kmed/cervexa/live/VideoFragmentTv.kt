@@ -342,7 +342,7 @@ class VideoFragmentTv : Fragment() {
 
 
         textureView = binding.textureView?.also {
-            applyHardwareBrightness(it, 25f)
+            applyHardwareBrightness(it)
         }
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
 
@@ -1347,11 +1347,11 @@ class VideoFragmentTv : Fragment() {
         }
     }
 
-    private var currentBrightness = 25f
-    private var currentContrast = 1.25f
-    private var currentSaturation = 0.85f
-    private var currentRed = 1.05f
-    private var currentGreen = 1.05f
+    private var currentBrightness = 33f
+    private var currentContrast = 1.06f
+    private var currentSaturation = 1.06f
+    private var currentRed = 0.87f
+    private var currentGreen = 1.07f
     private var currentBlue = 0.95f
     private var currentHue = 0f
 

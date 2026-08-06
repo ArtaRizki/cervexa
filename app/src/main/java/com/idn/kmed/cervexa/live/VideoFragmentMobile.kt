@@ -267,7 +267,7 @@ class VideoFragmentMobile : Fragment() {
 
         // Ambil TextureView dari layout & terapkan brightness GPU tanpa delay
         textureView = binding.root.findViewById<android.view.TextureView>(R.id.textureView)?.also {
-            applyHardwareBrightness(it, 25f)
+            applyHardwareBrightness(it)
         }
 
         setupGestureDetectors()
@@ -1263,11 +1263,11 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private var currentBrightness = 25f
-    private var currentContrast = 1.25f
-    private var currentSaturation = 0.85f
-    private var currentRed = 1.05f
-    private var currentGreen = 1.05f
+    private var currentBrightness = 33f
+    private var currentContrast = 1.06f
+    private var currentSaturation = 1.06f
+    private var currentRed = 0.87f
+    private var currentGreen = 1.07f
     private var currentBlue = 0.95f
     private var currentHue = 0f
 

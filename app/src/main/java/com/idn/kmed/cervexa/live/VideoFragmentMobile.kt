@@ -598,9 +598,16 @@ class VideoFragmentMobile : Fragment() {
         val vH = videoH.toFloat()
         if (sarNum > 0 && sarDen > 0) vW = vW * sarNum / sarDen
 
-        // STRETCH: video ditarik penuh memenuhi seluruh layar, abaikan rasio aspek
-        val finalW = cW
-        val finalH = cH
+        val vAspect = vW / vH
+        val cAspect = cW.toFloat() / cH.toFloat()
+        
+        val (finalW, finalH) = if (cAspect > vAspect) {
+            // Container is wider than video, match height
+            (cH * vAspect).toInt() to cH
+        } else {
+            // Container is taller than video, match width
+            cW to (cW / vAspect).toInt()
+        }
 
         tv.layoutParams = android.widget.FrameLayout.LayoutParams(finalW, finalH).also {
             it.gravity = android.view.Gravity.CENTER
@@ -1413,7 +1420,27 @@ class VideoFragmentMobile : Fragment() {
         }
         
         btnToggleDebug?.setOnClickListener {
-            svDebugPanel?.visibility = if (svDebugPanel?.visibility == android.view.View.VISIBLE) android.view.View.GONE else android.view.View.VISIBLE
+            if (svDebugPanel?.visibility == android.view.View.VISIBLE) {
+                svDebugPanel?.visibility = android.view.View.GONE
+            } else {
+                val input = android.widget.EditText(requireContext()).apply {
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+                    hint = "Masukkan PIN"
+                }
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Autentikasi")
+                    .setMessage("Masukkan PIN untuk kalibrasi warna")
+                    .setView(input)
+                    .setPositiveButton("Buka") { _, _ ->
+                        if (input.text.toString() == "123456") {
+                            svDebugPanel?.visibility = android.view.View.VISIBLE
+                        } else {
+                            android.widget.Toast.makeText(requireContext(), "PIN salah", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .setNegativeButton("Batal", null)
+                    .show()
+            }
         }
 
         // Set initial visibility of toggle button

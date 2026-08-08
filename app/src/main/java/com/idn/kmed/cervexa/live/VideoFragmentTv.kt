@@ -1356,12 +1356,12 @@ class VideoFragmentTv : Fragment() {
         }
     }
 
-    private var currentBrightness = 0f
-    private var currentContrast = 1.0f
-    private var currentSaturation = 0.70f
-    private var currentRed = 1.0f
-    private var currentGreen = 1.0f
-    private var currentBlue = 1.0f
+    private var currentBrightness = 33f
+    private var currentContrast = 1.06f
+    private var currentSaturation = 1.06f
+    private var currentRed = 0.87f
+    private var currentGreen = 1.07f
+    private var currentBlue = 0.95f
     private var currentHue = 0f
 
     private fun applyHardwareBrightness(

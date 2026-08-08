@@ -127,16 +127,16 @@ mVideoView.setRealtime(true);
 mVideoView.setRender(IjkVideoView.RENDER_TEXTURE_VIEW);
 ```
 
-**2. Di `IjkVideoView.java` — tuning parameter buffer:**
+**2. Di `IjkMediaPlayer` — tuning parameter buffer (di VideoFragmentMobile / Tv):**
 ```java
-// Parameter low-latency (dalam createPlayer())
-ijkMediaPlayer.setOption(4, "min-frames", 1L);
-ijkMediaPlayer.setOption(4, "max-buffer-size", 0L);
+// Parameter low-latency
+ijkMediaPlayer.setOption(4, "probesize", 32768L);       // 32KB (cukup cepat tapi tidak jitter)
+ijkMediaPlayer.setOption(4, "analyzeduration", 100L);   // 100ms (cukup agar player siap)
+ijkMediaPlayer.setOption(4, "skip_loop_filter", 16L);   // Skip sebagian deblocking filter, jangan 48 (AVDISCARD_ALL) agar GPU HP tidak kewalahan
+// Sisanya matikan buffering:
+ijkMediaPlayer.setOption(4, "max-buffer-size", 1024L);
 ijkMediaPlayer.setOption(4, "packet-buffering", 0L);
-ijkMediaPlayer.setOption(2, "skip_frame", 8L);
 ijkMediaPlayer.setOption(4, "framedrop", 5L);
-ijkMediaPlayer.setOption(1, "probesize", 32768L);       // 32KB (dari 1MB)
-ijkMediaPlayer.setOption(1, "analyzeduration", 100L);   // 100ms (dari 5000ms)
 ```
 
 Saat `isRealTime = true`, blok di `createPlayer()` otomatis menambahkan:
@@ -391,12 +391,18 @@ Aplikasi mencoba URL satu per satu hingga berhasil terkoneksi.
 ## Masalah Umum & Solusi Teknis (Gotchas)
 
 ### 1. Artefak Visual (Semut/Retak) & Warna pada Live Stream
-- **Penyebab Artefak**: Menggunakan `ColorMatrixColorFilter` di `View.LAYER_TYPE_HARDWARE` pada `TextureView` dengan *brightness offset* yang tinggi (+25f). Mengangkat brightness secara digital dari stream H.264 (MS2) akan mengekspos noise kompresi secara ekstrem (gambar menjadi pixelated/retak/banyak semut).
-- **Solusi Brightness & Saturasi**: Jangan memodifikasi *brightness* (offset = 0f) dan *contrast* (1.0f) di level aplikasi/GPU. Untuk mengurangi warna merah/warm yang terlalu kuat pada kamera MS2 tanpa merusak kualitas gambar, cukup turunkan **saturation lebih banyak (0.70f)** menggunakan `ColorMatrix().apply { setSaturation(0.70f) }` pada Hardware Layer.
+- **Penyebab Artefak**: Menggunakan `ColorMatrixColorFilter` di `View.LAYER_TYPE_HARDWARE` pada `TextureView` dengan offset tinggi membebani rendering tiap frame dan bisa menimbulkan noise kompresi stream.
+- **Racikan Warna Final (Default MS2 Cervexa)**: Setelah ditest oleh user, kalibrasi warna terbaik (yang menetralkan warna kuning/kemerahan MS2 tanpa merusak gambar) adalah:
+  `brightness = 33f`, `contrast = 1.06f`, `saturation = 1.06f`, `red = 0.87f`, `green = 1.07f`, `blue = 0.95f`.
+  *Catatan: Pastikan pengguna perlu memasukkan PIN keamanan (contoh: 123456) jika ingin mengubah slider pengaturan ini secara manual.*
 - **Blur / Fokus**: Jika gambar blur secara optik, itu karena lensa fisik tidak fokus — arahkan user untuk memutar *dial* fokus di bodi kamera MS2 (karena MS2 menggunakan fokus manual).
 - **Tombol Analisis AI**: Tombol AI (`btnAiToggle`) disembunyikan (`View.GONE`) pada saat *live stream*, dan hanya digunakan untuk analisis pada hasil foto/video.
 
-### 2. Fullscreen Immersive & Masalah Status Bar / InflateException
+### 2. Fullscreen Aspect Ratio (Distorsi Objek)
+- **Masalah**: Jika menggunakan Center Crop atau Stretch (menyamakan layout parameter dengan lebar/tinggi *container* secara penuh), saat rotasi *landscape* (fullscreen) objek lingkaran (contoh obyek pemeriksaan serviks) menjadi oval (distorsi aspek rasio).
+- **Solusi**: Terapkan logika **Fit Center** (bukan stretch) pada `applyIjkLayout()`. Hitung rasio *container* vs video; jika container lebih lebar, *match height*; jika container lebih tinggi, *match width*. Biarkan ada *black bars* di pinggir demi mempertahankan bentuk aslinya.
+
+### 3. Fullscreen Immersive & Masalah Status Bar / InflateException
 - **Penyebab NPE**: Memanggil `window.insetsController` *sebelum* `setContentView` menyebabkan `NullPointerException` (karena `DecorView` belum siap).
 - **Penyebab InflateException (Chip)**: Penggunaan komponen Material 3 (`com.google.android.material.chip.Chip`) pada layout yang menggunakan tema Fullscreen/custom sering memicu `InflateException` jika tema tidak menyediakan atribut Material3 secara lengkap.
 - **Solusi Lengkap**:

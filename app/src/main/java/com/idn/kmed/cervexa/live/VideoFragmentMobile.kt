@@ -432,9 +432,10 @@ class VideoFragmentMobile : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L)
-                // Deteksi stream secepat kilat — jangan buang waktu analisis
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 256L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 0L)
+                // Deteksi stream — 32KB cukup cepat tapi tidak menyebabkan jitter koneksi
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
+                // 100ms = cukup untuk player siap tanpa bikin lag di awal
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
                 // Jangan tunggu paket yang datang tidak urut — langsung render
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L)
 
@@ -455,9 +456,8 @@ class VideoFragmentMobile : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
-                // Skip deblocking filter — hemat CPU, kurangi latency ~0.5 detik
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L) // AVDISCARD_ALL
-                // Jangan proses frame B (bi-directional) — hemat latency
+                // Skip_loop_filter=16: hanya skip di frame non-referensi, lebih aman dari =48
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 16L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L) // AVDISCARD_DEFAULT
 
                 // HAPUS vfilter brightness — terlalu berat di CPU, menambah 0.3-1 detik delay
@@ -1270,12 +1270,12 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private var currentBrightness = 33f
-    private var currentContrast = 1.06f
-    private var currentSaturation = 1.06f
-    private var currentRed = 0.87f
-    private var currentGreen = 1.07f
-    private var currentBlue = 0.95f
+    private var currentBrightness = 0f       // 0f = tidak ada offset brightness (mirip base.apk, menghindari delay GPU)
+    private var currentContrast = 1.0f        // 1.0 = netral
+    private var currentSaturation = 0.70f     // 0.70 sesuai rekomendasi skill (mengurangi merah tanpa artefak)
+    private var currentRed = 1.0f
+    private var currentGreen = 1.0f
+    private var currentBlue = 1.0f
     private var currentHue = 0f
 
     private fun applyHardwareBrightness(

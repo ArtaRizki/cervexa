@@ -636,11 +636,15 @@ class VideoFragmentTv : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 256L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 0L)
+                // Deteksi stream — 32KB cukup cepat tapi tidak menyebabkan jitter koneksi
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
+                // 100ms = cukup untuk player siap tanpa bikin lag di awal
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
+                // Jangan tunggu paket yang datang tidak urut — langsung render
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L)
 
                 // ── PLAYER (IjkPlayer internal) ──
+                // PENTING: max_cached_duration=0 di IJK = UNLIMITED! Harus > 0
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 1L) // 1ms (0=unlimited!)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
@@ -650,10 +654,12 @@ class VideoFragmentTv : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
 
                 // ── CODEC (decoder) ──
+                // SELALU gunakan HW decoder — jauh lebih cepat dari software
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
+                // Skip_loop_filter=16: hanya skip di frame non-referensi, lebih aman dari =48
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 16L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L)
             }
 
@@ -1350,12 +1356,12 @@ class VideoFragmentTv : Fragment() {
         }
     }
 
-    private var currentBrightness = 33f
-    private var currentContrast = 1.06f
-    private var currentSaturation = 1.06f
-    private var currentRed = 0.87f
-    private var currentGreen = 1.07f
-    private var currentBlue = 0.95f
+    private var currentBrightness = 0f
+    private var currentContrast = 1.0f
+    private var currentSaturation = 0.70f
+    private var currentRed = 1.0f
+    private var currentGreen = 1.0f
+    private var currentBlue = 1.0f
     private var currentHue = 0f
 
     private fun applyHardwareBrightness(

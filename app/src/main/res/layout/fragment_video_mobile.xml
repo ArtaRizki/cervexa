@@ -78,28 +78,28 @@
                 android:padding="16dp">
                 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Contrast (0.0 - 2.0)" />
-                <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="106" />
-                <TextView android:id="@+id/tvContrastVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.06" />
+                <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" />
+                <TextView android:id="@+id/tvContrastVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.00" />
                 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Brightness (-100 to 100)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="133" />
-                <TextView android:id="@+id/tvBrightnessVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="33" />
+                <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" />
+                <TextView android:id="@+id/tvBrightnessVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0" />
                 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Saturation (0.0 - 2.0)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="106" />
-                <TextView android:id="@+id/tvSaturationVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.06" />
+                <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" />
+                <TextView android:id="@+id/tvSaturationVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.00" />
                 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Red (0.0 - 2.0)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbRed" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="87" />
-                <TextView android:id="@+id/tvRedVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0.87" />
+                <SeekBar android:id="@+id/sbRed" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" />
+                <TextView android:id="@+id/tvRedVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.00" />
                 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Green (0.0 - 2.0)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="107" />
-                <TextView android:id="@+id/tvGreenVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.07" />
+                <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" />
+                <TextView android:id="@+id/tvGreenVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.00" />
                 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Blue (0.0 - 2.0)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbBlue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="95" />
-                <TextView android:id="@+id/tvBlueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0.95" />
+                <SeekBar android:id="@+id/sbBlue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" />
+                <TextView android:id="@+id/tvBlueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.00" />
 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Hue (-180 to 180)" android:layout_marginTop="8dp" />
                 <SeekBar android:id="@+id/sbHue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="360" android:progress="180" />

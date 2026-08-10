@@ -266,9 +266,9 @@ class VideoFragmentMobile : Fragment() {
 
 
         // Ambil TextureView dari layout & terapkan brightness GPU tanpa delay
-        textureView = binding.root.findViewById<android.view.TextureView>(R.id.textureView)?.also {
-            applyHardwareBrightness(it)
-        }
+        // Stream ditampilkan RAW seperti base.apk — tanpa filter warna apapun saat init
+        // Filter hanya aktif jika user buka panel kalibrasi (tombol titik tiga) dan geser slider
+        textureView = binding.root.findViewById<android.view.TextureView>(R.id.textureView)
 
         setupGestureDetectors()
         setupButtons()
@@ -1270,13 +1270,16 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private var currentBrightness = 33f
-    private var currentContrast = 1.06f
-    private var currentSaturation = 1.06f
-    private var currentRed = 0.87f
-    private var currentGreen = 1.07f
-    private var currentBlue = 0.95f
+    // Default netral = raw stream seperti base.apk (tidak ada filter)
+    // User bisa atur via panel kalibrasi (tombol titik tiga, PIN 123456)
+    private var currentBrightness = 0f
+    private var currentContrast = 1.0f
+    private var currentSaturation = 1.0f
+    private var currentRed = 1.0f
+    private var currentGreen = 1.0f
+    private var currentBlue = 1.0f
     private var currentHue = 0f
+    private var colorFilterActive = false
 
     private fun applyHardwareBrightness(
         tv: android.view.TextureView, 
@@ -1318,6 +1321,13 @@ class VideoFragmentMobile : Fragment() {
             colorFilter = android.graphics.ColorMatrixColorFilter(cm)
         }
         tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
+        colorFilterActive = true
+    }
+
+    private fun removeColorFilter() {
+        // Kembalikan ke raw stream tanpa filter (seperti base.apk)
+        textureView?.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+        colorFilterActive = false
     }
 
     private fun setupDebugPanel() {

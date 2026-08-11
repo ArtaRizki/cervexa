@@ -36,50 +36,104 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <!-- Debug Panel for Color Tuning -->
+        <!-- Color Calibration Panel -->
         <ScrollView
             android:id="@+id/svDebugPanel"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#A8000000"
+            android:background="#D9000000"
             android:visibility="gone">
-            
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="16dp">
-                
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Contrast (0.0 - 2.0)" />
-                <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="106" />
-                <TextView android:id="@+id/tvContrastVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.06" />
-                
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Brightness (-100 to 100)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="133" />
-                <TextView android:id="@+id/tvBrightnessVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="33" />
-                
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Saturation (0.0 - 2.0)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="106" />
-                <TextView android:id="@+id/tvSaturationVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.06" />
-                
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Red (0.0 - 2.0)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbRed" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="87" />
-                <TextView android:id="@+id/tvRedVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0.87" />
-                
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Green (0.0 - 2.0)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="107" />
-                <TextView android:id="@+id/tvGreenVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.07" />
-                
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Blue (0.0 - 2.0)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbBlue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="95" />
-                <TextView android:id="@+id/tvBlueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0.95" />
+                android:padding="24dp">
 
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="Hue (-180 to 180)" android:layout_marginTop="8dp" />
-                <SeekBar android:id="@+id/sbHue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="360" android:progress="180" />
-                <TextView android:id="@+id/tvHueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Kalibrasi Warna"
+                    android:textColor="@android:color/white"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:layout_marginBottom="8dp" />
 
-                <Button android:id="@+id/btnHideDebug" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Hide Panel" android:layout_gravity="center" android:layout_marginTop="16dp"/>
+                <!-- Actions dipindah ke atas agar selalu terlihat -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:layout_marginBottom="24dp">
+
+                    <Button 
+                        android:id="@+id/btnExportConfig" 
+                        android:layout_width="wrap_content" 
+                        android:layout_height="wrap_content" 
+                        android:text="Export Config" 
+                        android:layout_marginEnd="8dp" />
+
+                    <Button 
+                        android:id="@+id/btnHideDebug" 
+                        android:layout_width="wrap_content" 
+                        android:layout_height="wrap_content" 
+                        android:text="Tutup Panel" />
+
+                </LinearLayout>
+
+                <!-- Basic Settings -->
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#BBBBBB" android:text="BASIC SETTINGS" android:textSize="12sp" android:textStyle="bold" />
                 
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Brightness" />
+                    <TextView android:id="@+id/tvBrightnessVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="33" />
+                </LinearLayout>
+                <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="133" android:layout_marginBottom="12dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Contrast" />
+                    <TextView android:id="@+id/tvContrastVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.06" />
+                </LinearLayout>
+                <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="106" android:layout_marginBottom="24dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
+
+                <!-- Color Settings -->
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#BBBBBB" android:text="COLOR SETTINGS" android:textSize="12sp" android:textStyle="bold" />
+                
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Saturation" />
+                    <TextView android:id="@+id/tvSaturationVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.06" />
+                </LinearLayout>
+                <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="106" android:layout_marginBottom="12dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Hue" />
+                    <TextView android:id="@+id/tvHueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0" />
+                </LinearLayout>
+                <SeekBar android:id="@+id/sbHue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="360" android:progress="180" android:layout_marginBottom="24dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
+
+                <!-- RGB Settings -->
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#BBBBBB" android:text="RGB CHANNELS" android:textSize="12sp" android:textStyle="bold" />
+                
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#FF8888" android:text="Red" />
+                    <TextView android:id="@+id/tvRedVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF8888" android:text="0.87" />
+                </LinearLayout>
+                <SeekBar android:id="@+id/sbRed" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="87" android:layout_marginBottom="12dp" android:progressTint="#FF8888" android:thumbTint="@android:color/white"/>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#66E0D7" android:text="Green" />
+                    <TextView android:id="@+id/tvGreenVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#66E0D7" android:text="1.07" />
+                </LinearLayout>
+                <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="107" android:layout_marginBottom="12dp" android:progressTint="#66E0D7" android:thumbTint="@android:color/white"/>
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#5CC9E6" android:text="Blue" />
+                    <TextView android:id="@+id/tvBlueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#5CC9E6" android:text="0.95" />
+                </LinearLayout>
+                <SeekBar android:id="@+id/sbBlue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="95" android:layout_marginBottom="24dp" android:progressTint="#5CC9E6" android:thumbTint="@android:color/white"/>
+
             </LinearLayout>
         </ScrollView>
         

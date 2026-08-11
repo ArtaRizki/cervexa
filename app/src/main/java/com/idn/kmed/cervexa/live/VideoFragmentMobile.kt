@@ -1414,32 +1414,36 @@ class VideoFragmentMobile : Fragment() {
         val btnHideDebug = binding.root.findViewById<android.widget.Button>(R.id.btnHideDebug)
         val btnToggleDebug = binding.root.findViewById<android.view.View>(R.id.btnToggleDebug)
         val svDebugPanel = binding.root.findViewById<android.view.View>(R.id.svDebugPanel)
+        val btnExportConfig = binding.root.findViewById<android.widget.Button>(R.id.btnExportConfig)
         
         btnHideDebug?.setOnClickListener {
             svDebugPanel?.visibility = android.view.View.GONE
+        }
+        
+        btnExportConfig?.setOnClickListener {
+            val configJson = """
+                {
+                    "brightness": $currentBrightness,
+                    "contrast": $currentContrast,
+                    "saturation": $currentSaturation,
+                    "red": $currentRed,
+                    "green": $currentGreen,
+                    "blue": $currentBlue,
+                    "hue": $currentHue
+                }
+            """.trimIndent()
+            
+            val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("Color Calibration Config", configJson)
+            clipboard.setPrimaryClip(clip)
+            android.widget.Toast.makeText(requireContext(), "Pengaturan warna berhasil disalin ke clipboard", android.widget.Toast.LENGTH_SHORT).show()
         }
         
         btnToggleDebug?.setOnClickListener {
             if (svDebugPanel?.visibility == android.view.View.VISIBLE) {
                 svDebugPanel?.visibility = android.view.View.GONE
             } else {
-                val input = android.widget.EditText(requireContext()).apply {
-                    inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
-                    hint = "Masukkan PIN"
-                }
-                androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                    .setTitle("Autentikasi")
-                    .setMessage("Masukkan PIN untuk kalibrasi warna")
-                    .setView(input)
-                    .setPositiveButton("Buka") { _, _ ->
-                        if (input.text.toString() == "123456") {
-                            svDebugPanel?.visibility = android.view.View.VISIBLE
-                        } else {
-                            android.widget.Toast.makeText(requireContext(), "PIN salah", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    .setNegativeButton("Batal", null)
-                    .show()
+                svDebugPanel?.visibility = android.view.View.VISIBLE
             }
         }
 

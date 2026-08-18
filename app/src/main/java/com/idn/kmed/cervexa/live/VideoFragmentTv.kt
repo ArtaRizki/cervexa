@@ -654,10 +654,12 @@ class VideoFragmentTv : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
 
                 // ── CODEC (decoder) ──
-                // SELALU gunakan HW decoder — jauh lebih cepat dari software
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
+                // PENTING: TV / STB hardware decoder sering melakukan buffering (delay 1-3 detik)
+                // dan format warnanya sering ngaco (BT.601 vs BT.709).
+                // Gunakan Software Decoder (0) untuk TV agar latensi nol dan warna konsisten!
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 0L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 0L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 0L)
                 // Skip_loop_filter=16: hanya skip di frame non-referensi, lebih aman dari =48
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 16L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L)

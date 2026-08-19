@@ -648,8 +648,11 @@ class VideoFragmentTv : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 1L) // 1ms (0=unlimited!)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
+                // Hati-hati infbuf=1, jika CPU lemah buffer akan menumpuk. Kita balance dengan framedrop agresif.
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
+                // framedrop=60: Buang frame secara agresif jika audio/video tidak sinkron atau telat
+                // Default 5 sering kurang agresif untuk mencegah delay menumpuk di Smart TV
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 60L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "an", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
 
@@ -665,7 +668,9 @@ class VideoFragmentTv : Fragment() {
                 // Skip_loop_filter=48 (AVDISCARD_ALL): Membuang proses deblocking pada software decoder
                 // Ini mengurangi beban CPU hingga 40%, sangat vital untuk menghilangkan delay di Smart TV
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L)
+                // skip_frame=8 (AVDISCARD_NONREF): Membuang frame B/non-referensi saat CPU kewalahan
+                // Ini kunci utama menghilangkan penumpukan delay (5-25 detik) di STB/TV yang CPU-nya lemah
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 8L)
             }
 
             val tv = textureView ?: return

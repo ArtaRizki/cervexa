@@ -1469,4 +1469,4 @@ class VideoFragmentMobile : Fragment() {
         private const val PADDING_MIN_PX = 14f
         private const val PADDING_MAX_PX = 36f
     }
-}
+}               

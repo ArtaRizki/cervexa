@@ -646,10 +646,11 @@ class VideoFragmentTv : Fragment() {
                 // ── PLAYER (IjkPlayer internal) ──
                 // PENTING: max_cached_duration=0 di IJK = UNLIMITED! Harus > 0
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 1L) // 1ms (0=unlimited!)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1048576L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
+                // Sangat agresif drop frame jika CPU TV telat decode
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 120L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "an", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
 
@@ -665,7 +666,8 @@ class VideoFragmentTv : Fragment() {
                 // Skip_loop_filter=48 (AVDISCARD_ALL): Membuang proses deblocking pada software decoder
                 // Ini mengurangi beban CPU hingga 40%, sangat vital untuk menghilangkan delay di Smart TV
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L)
+                // 8 = AVDISCARD_NONREF: Lewati frame non-referensi agar frame bisa sedikit turun tapi bebas delay/stuck
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 8L)
             }
 
             val tv = textureView ?: return

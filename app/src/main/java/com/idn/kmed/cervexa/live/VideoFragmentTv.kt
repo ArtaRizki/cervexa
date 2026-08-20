@@ -654,17 +654,15 @@ class VideoFragmentTv : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
 
                 // ── CODEC (decoder) ──
-                // PENTING: TV / STB hardware decoder sering melakukan buffering (delay 1-3 detik)
-                // Gunakan Software Decoder (0) untuk TV agar latensi nol dan warna konsisten!
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 0L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 0L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 0L)
+                // SELALU gunakan HW decoder — lebih cepat dan tidak bikin lag seperti software decoder
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
                 
                 // MULTI-THREADING DECODE: wajib untuk CPU TV yang lemah agar kuat decode 1080p
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "threads", "auto")
-                // Skip_loop_filter=48 (AVDISCARD_ALL): Membuang proses deblocking pada software decoder
-                // Ini mengurangi beban CPU hingga 40%, sangat vital untuk menghilangkan delay di Smart TV
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
+                // Skip_loop_filter=16: hanya skip di frame non-referensi, lebih aman dari =48 agar tidak noise
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 16L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L)
             }
 
@@ -1365,7 +1363,7 @@ class VideoFragmentTv : Fragment() {
     private var currentContrast = 1.06f
     private var currentSaturation = 1.06f
     private var currentRed = 0.87f
-    private var currentGreen = 1.07f
+    private var currentGreen = 0.84f
     private var currentBlue = 0.95f
     private var currentHue = 0f
 

@@ -151,9 +151,9 @@
 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#66E0D7" android:text="Green" />
-                    <TextView android:id="@+id/tvGreenVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#66E0D7" android:text="1.07" />
+                    <TextView android:id="@+id/tvGreenVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#66E0D7" android:text="0.84" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="107" android:layout_marginBottom="12dp" android:progressTint="#66E0D7" android:thumbTint="@android:color/white"/>
+                <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="84" android:layout_marginBottom="12dp" android:progressTint="#66E0D7" android:thumbTint="@android:color/white"/>
 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#5CC9E6" android:text="Blue" />

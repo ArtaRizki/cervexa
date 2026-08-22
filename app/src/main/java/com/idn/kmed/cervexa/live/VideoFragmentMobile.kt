@@ -707,24 +707,21 @@ class VideoFragmentMobile : Fragment() {
                     // Prepare Overlay (text only, no AI)
                     val bmWithOverlay = processTextToBitmapSafe(sourceBmp)
 
+                    // 3. Record Video
+                    if (isRecording && ::recorder.isInitialized) {
+                        runCatching {
+                            recorder.submitBitmap(bmWithOverlay.copy(Bitmap.Config.ARGB_8888, false))
+                        }.onFailure { Log.e(TAG, "submitBitmap error", it) }
+                    }
+
                     if (isSnapshotRequested && ss.compareAndSet(true, false)) {
                         lastSnapshotMs = System.currentTimeMillis() // catat waktu capture
                         processSnapshot(bmWithOverlay)
                         // autoResync DIHAPUS — menyebabkan stream stuck
                     }
 
-                    // 3. Record Video
-                    if (isRecording && ::recorder.isInitialized) {
-                        runCatching {
-                            recorder.submitBitmap(bmWithOverlay)
-                        }.onFailure { 
-                            Log.e(TAG, "submitBitmap error", it) 
-                            if (bmWithOverlay !== sourceBmp && !bmWithOverlay.isRecycled) bmWithOverlay.recycle()
-                        }
-                    } else {
-                        if (bmWithOverlay !== sourceBmp && !bmWithOverlay.isRecycled) {
-                            bmWithOverlay.recycle()
-                        }
+                    if (bmWithOverlay !== sourceBmp && !bmWithOverlay.isRecycled) {
+                        bmWithOverlay.recycle()
                     }
 
                     val loopEndNs = System.nanoTime()
@@ -845,16 +842,14 @@ class VideoFragmentMobile : Fragment() {
     private fun processTextToBitmapSafe(src: Bitmap, aiProb: Float = -1f): Bitmap {
         if (src.isRecycled) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         
-        // Crop 4 pixel di atas secara efisien untuk membuang list biru (menghindari GC thrashing HP kentang)
+        // Crop 4 pixel di atas untuk membuang list/garis biru artefak bawaan hardware kamera MS2
         val cropTop = 4
-        val h = if (src.height > cropTop) src.height - cropTop else src.height
-        val bitmap = Bitmap.createBitmap(src.width, h, Bitmap.Config.ARGB_8888)
+        val safeSrc = if (src.height > cropTop) {
+            Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
+        } else src
+        
+        val bitmap = if (safeSrc.isMutable) safeSrc else safeSrc.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(bitmap)
-        if (src.height > cropTop) {
-            canvas.drawBitmap(src, 0f, -cropTop.toFloat(), null)
-        } else {
-            canvas.drawBitmap(src, 0f, 0f, null)
-        }
 
         // >>> FIX UTAMA: font & padding mengikuti ukuran frame <<<
         ensureOverlayTextSize(bitmap.height)

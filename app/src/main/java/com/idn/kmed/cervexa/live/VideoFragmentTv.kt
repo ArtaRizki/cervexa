@@ -634,9 +634,7 @@ class VideoFragmentTv : Fragment() {
                 // ── FORMAT (FFmpeg demuxer) ──
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
-                // PENTING: TV sering freeze/stuck HW decodernya jika pakai UDP karena ada packet loss di WiFi.
-                // Pakai TCP agar HW Decoder TV menerima frame utuh dan tidak crash/stuck.
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp")
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L)
                 // Deteksi stream — 32KB cukup cepat tapi tidak menyebabkan jitter koneksi
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
@@ -648,25 +646,25 @@ class VideoFragmentTv : Fragment() {
                 // ── PLAYER (IjkPlayer internal) ──
                 // PENTING: max_cached_duration=0 di IJK = UNLIMITED! Harus > 0
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 1L) // 1ms (0=unlimited!)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1048576L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
-                // Sangat agresif drop frame jika CPU TV telat decode
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 120L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "an", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
 
                 // ── CODEC (decoder) ──
-                // Gunakan HW Decoder (1) karena kita sekarang pakai TCP, jadi stream aman dan tidak akan stuck.
-                // HW Decoder akan membuat delay menjadi NOL karena CPU TV tidak lagi terbebani.
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
+                // PENTING: TV / STB hardware decoder sering melakukan buffering (delay 1-3 detik)
+                // Gunakan Software Decoder (0) untuk TV agar latensi nol dan warna konsisten!
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 0L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 0L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 0L)
                 
-                // MULTI-THREADING DECODE
+                // MULTI-THREADING DECODE: wajib untuk CPU TV yang lemah agar kuat decode 1080p
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "threads", "auto")
-                // Karena HW Decoder sangat kuat, kita bisa gunakan skip_loop_filter 16 (standar)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 16L)
+                // Skip_loop_filter=48 (AVDISCARD_ALL): Membuang proses deblocking pada software decoder
+                // Ini mengurangi beban CPU hingga 40%, sangat vital untuk menghilangkan delay di Smart TV
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L)
             }
 

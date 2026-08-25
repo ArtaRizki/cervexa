@@ -86,6 +86,58 @@ class OverlayRenderer {
     }
 
     /**
+     * Renders ONLY the transparent HUD overlay (border box + badge + label) onto a transparent canvas.
+     * Essential for video playback so the TextureView underneath continues playing smoothly at full FPS.
+     *
+     * @param width Width of the target overlay canvas
+     * @param height Height of the target overlay canvas
+     * @param result The AI detection result
+     * @param targetBitmap Optional reusable bitmap to draw into (avoids GC thrashing)
+     * @return A Bitmap with transparent background and overlay elements drawn on top
+     */
+    fun renderTransparentOverlay(
+        width: Int,
+        height: Int,
+        result: AbnormalityResult.Detected,
+        targetBitmap: Bitmap? = null
+    ): Bitmap {
+        if (width <= 0 || height <= 0) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+
+        val overlay = if (targetBitmap != null && !targetBitmap.isRecycled && targetBitmap.width == width && targetBitmap.height == height) {
+            targetBitmap.apply { eraseColor(Color.TRANSPARENT) }
+        } else {
+            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        }
+        val canvas = Canvas(overlay)
+
+        val textSize = calculateTextSize(height)
+        val strokeWidth = calculateStrokeWidth(width)
+        val padding = height * PADDING_RATIO
+        val labelColor = getLabelColor(result)
+        val labelText = formatLabel(result)
+
+        // Draw frame border based on classification color
+        when (result.label) {
+            Classification.ABNORMAL -> {
+                drawFrameBorder(canvas, width, height, strokeWidth, labelColor)
+            }
+            Classification.NORMAL -> {
+                drawFrameBorder(canvas, width, height, strokeWidth, COLOR_GREEN)
+            }
+        }
+
+        val subText = when (result.label) {
+            Classification.ABNORMAL -> "Harap lakukan pemeriksaan lebih lanjut"
+            Classification.NORMAL -> ""
+        }
+
+        // Draw label with background
+        drawLabel(canvas, labelText, subText, labelColor, textSize, padding, width)
+
+        return overlay
+    }
+
+    /**
      * Renders an error message directly on the frame for debugging.
      */
     fun renderError(frame: Bitmap, errorMessage: String): Bitmap {

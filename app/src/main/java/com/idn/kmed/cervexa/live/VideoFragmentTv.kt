@@ -648,8 +648,10 @@ class VideoFragmentTv : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 1L) // 1ms (0=unlimited!)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
+                // PENTING: Matikan infbuf (0) agar antrean paket video tidak menumpuk tanpa batas
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 0L)
+                // Drop frame terlambat secara agresif agar delay nol konstan
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 60L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "an", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
 
@@ -662,9 +664,9 @@ class VideoFragmentTv : Fragment() {
                 
                 // MULTI-THREADING DECODE: wajib untuk CPU TV yang lemah agar kuat decode 1080p
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "threads", "auto")
-                // Skip_loop_filter=48 (AVDISCARD_ALL): Membuang proses deblocking pada software decoder
-                // Ini mengurangi beban CPU hingga 40%, sangat vital untuk menghilangkan delay di Smart TV
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48L)
+                // Skip_loop_filter=16 (AVDISCARD_NONREF): Skip loop filter pada non-reference frame saja
+                // Menghilangkan noise/bintik/artefak kotak-kotak pada layar TV dengan tetap menjaga CPU ringan
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 16L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L)
             }
 
@@ -881,10 +883,15 @@ class VideoFragmentTv : Fragment() {
                         }
                     }
 
-                    nextFrameNs += frameIntervalNs
-                    val sleepNs = nextFrameNs - System.nanoTime()
-                    if (sleepNs > 0) delay(sleepNs / 1_000_000L) else nextFrameNs =
-                        System.nanoTime()
+                    val loopEndNs = System.nanoTime()
+                    if (loopEndNs < nextFrameNs) {
+                        val waitMs = (nextFrameNs - loopEndNs) / 1_000_000L
+                        if (waitMs > 0) delay(waitMs)
+                    } else {
+                        // Jeda kooperatif minimal 10ms agar UI thread & decoder IjkPlayer TV tidak tercekik
+                        delay(10L)
+                    }
+                    nextFrameNs = System.nanoTime() + frameIntervalNs
                 }
             } finally {
                 poolBitmap?.recycle()
@@ -949,6 +956,9 @@ class VideoFragmentTv : Fragment() {
         
         // Gambar gambar asli dengan filter enhancement untuk HASIL foto/video
         canvas.drawBitmap(safeSrc, 0f, 0f, paintCaptureEnhance)
+        if (safeSrc !== src && !safeSrc.isRecycled) {
+            safeSrc.recycle()
+        }
 
         // >>> FIX UTAMA: font mengikuti ukuran frame <<<
         ensureOverlayTextSize(bitmap.height)

@@ -125,6 +125,9 @@ dependencies {
     implementation 'com.github.alexeyvasilyev:rtsp-client-android:1.0.2'
     implementation project(':library-client-rtsp')
 
+    // LibVLC for Android TV low-latency stream
+    implementation 'org.videolan.android:libvlc-all:3.6.5'
+
     // IjkMediaPlayer: source Java sudah dicopy ke app/src/main/java/tv/danmaku/ijk/
     // .so files (libijkffmpeg, libijkplayer, libijksdl) ada di app/src/main/lib/
     // Tidak perlu Maven dependency — source + .so sudah lengkap

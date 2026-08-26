@@ -1274,7 +1274,7 @@ class VideoFragmentMobile : Fragment() {
     private var currentContrast = 1.06f
     private var currentSaturation = 1.06f
     private var currentRed = 0.87f
-    private var currentGreen = 1.07f
+    private var currentGreen = 0.84f
     private var currentBlue = 0.95f
     private var currentHue = 0f
 

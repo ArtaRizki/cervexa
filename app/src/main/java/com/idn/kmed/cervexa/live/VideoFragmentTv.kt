@@ -32,14 +32,13 @@ import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.idn.kmed.cervexa.home.HomeActivity
 import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.databinding.FragmentVideoTvBinding
-
 import com.idn.kmed.cervexa.utils.*
-import com.idn.kmed.cervexa.utils.PdfReportHelper
-import com.idn.kmed.cervexa.utils.PrintHelper
-import tv.danmaku.ijk.media.player.IMediaPlayer
-import tv.danmaku.ijk.media.player.IjkMediaPlayer
 import com.idn.kmed.cervexa.record.RealtimeBitmapEncoder
 import kotlinx.coroutines.*
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IVLCVout
 import java.io.File
 import java.text.SimpleDateFormat
 import java.time.ZonedDateTime
@@ -48,17 +47,17 @@ import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * VideoFragmentTv — OPTIMIZED
+ * VideoFragmentTv — LibVLC Engine (Hardware-Accelerated & TCP for Zero-Delay TV Stream)
  *
- * Fix scaling font overlay berdasarkan ukuran frame (REC_HEIGHT / bitmap.height)
+ * Menggunakan LibVLC untuk stabilitas decoder hardware pada Android TV/STB,
+ * dilengkapi overlay watermark berorientasi rasio frame, background thread snapshot,
+ * serta optimasi perekaman video.
  */
-class VideoFragmentTv : Fragment() {
+class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
     private lateinit var binding: FragmentVideoTvBinding
     private lateinit var liveViewModel: LiveViewModel
     private var ivVideoImageResolution = Pair(0, 0)
-    
-
 
     // ==== Session / Storage ====
     private var sessionDir: File? = null
@@ -67,7 +66,6 @@ class VideoFragmentTv : Fragment() {
     private var patientRs: String = ""
     private var patientNrm: String = ""
     private var patientDobUtc: Long = -1L
-
     private var serverPatientId: Int = -1
 
     private val apiDelegate by lazy {
@@ -87,11 +85,11 @@ class VideoFragmentTv : Fragment() {
     private var snapshotsDir: File? = null
 
     private var clockJob: Job? = null
-    private var liveResyncJob: Job? = null
-    private var lastSnapshotMs: Long = 0L  // Catat waktu capture terakhir
+    private var lastSnapshotMs: Long = 0L
 
-    // ==== IJK Components ====
-    private var ijkPlayer: IjkMediaPlayer? = null
+    // ==== VLC Components ====
+    private var libVlc: LibVLC? = null
+    private var mediaPlayer: MediaPlayer? = null
     private var textureView: TextureView? = null
 
     // ==== PHONE CAMERA (CameraX) ====
@@ -165,11 +163,10 @@ class VideoFragmentTv : Fragment() {
     }
     private val paintCaptureEnhance = Paint().apply {
         val cm = android.graphics.ColorMatrix()
-        // Saturation direndahkan sedikit (1.05) & contrast 1.05
-        val contrast = 1.05f
-        val brightness = 0f
-        val scale = contrast
-        val translate = brightness + (1f - contrast) * 128f
+        val contrastVal = 1.05f
+        val brightnessVal = 0f
+        val scale = contrastVal
+        val translate = brightnessVal + (1f - contrastVal) * 128f
         cm.set(
             floatArrayOf(
                 scale, 0f, 0f, 0f, translate,
@@ -229,7 +226,6 @@ class VideoFragmentTv : Fragment() {
                 args.getString("sessionDirPath")?.takeIf { it.isNotBlank() }?.let { File(it) }
             serverPatientId = args.getInt("patient_id", -1)
         }
-        // apiDelegate.createSession(serverPatientId, patientRs) // DIHAPUS - Seperti Commit 1665902
 
         if (sessionDir == null) {
             val dateFolder = StorageUtils.todayDateFolderWIB()
@@ -270,6 +266,7 @@ class VideoFragmentTv : Fragment() {
         super.onDestroyView()
         clockJob?.cancel()
         stopPhoneCamera()
+        stopVlcStream()
         prefs.edit().apply {
             putFloat("image_brightness", brightness)
             putFloat("image_contrast", contrast)
@@ -290,7 +287,7 @@ class VideoFragmentTv : Fragment() {
         toggleSystemUI()
         binding.tvOverlayInfo.text =
             if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
-        binding.videoContainer.postDelayed({ applyIjkLayout() }, 300)
+        binding.videoContainer.postDelayed({ reattachVlcViews() }, 300)
         view?.post {
             if (usePhoneCamera && phoneCameraView != null) {
                 currentScale = 1f; applyZoomAndPan()
@@ -315,7 +312,7 @@ class VideoFragmentTv : Fragment() {
         toggleSystemUI()
         liveViewModel.loadParams(requireContext())
         if (usePhoneCamera) checkAndStartPhoneCamera()
-        else if (ijkPlayer == null || ijkPlayer?.isPlaying == false) startIjkStream()
+        else if (mediaPlayer == null || mediaPlayer?.isPlaying == false) startVlcStream()
     }
 
     override fun onPause() {
@@ -323,7 +320,7 @@ class VideoFragmentTv : Fragment() {
         updateStatusBarColor()
         liveViewModel.saveParams(requireContext())
         if (record.get()) stopVideoRecording()
-        if (!usePhoneCamera) stopIjkStream()
+        if (!usePhoneCamera) stopVlcStream()
     }
 
     // =====================================================================
@@ -338,12 +335,8 @@ class VideoFragmentTv : Fragment() {
     ): View {
         liveViewModel = ViewModelProvider(this)[LiveViewModel::class.java]
         binding = FragmentVideoTvBinding.inflate(inflater, container, false)
-        
 
-
-        textureView = binding.textureView?.also {
-            applyHardwareBrightness(it)
-        }
+        textureView = binding.textureView
         textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
 
         scaleDetector = ScaleGestureDetector(
@@ -392,8 +385,8 @@ class VideoFragmentTv : Fragment() {
 
         binding.bnStartStopImage?.setOnClickListener {
             if (usePhoneCamera) stopPhoneCamera()
-            else if (ijkPlayer?.isPlaying == true) stopIjkStream()
-            else startIjkStream()
+            else if (mediaPlayer?.isPlaying == true) stopVlcStream()
+            else startVlcStream()
         }
         binding.bnStartStopImage?.setOnLongClickListener { toggleSourceMode(); true }
         binding.btnEnterLandscape?.setOnClickListener {
@@ -591,127 +584,85 @@ class VideoFragmentTv : Fragment() {
     private fun toggleSourceMode() {
         if (usePhoneCamera) {
             usePhoneCamera = false; stopPhoneCamera()
-            binding.videoContainer.postDelayed({ startIjkStream() }, 300)
+            binding.videoContainer.postDelayed({ startVlcStream() }, 300)
             Toast.makeText(requireContext(), "Mode: Alat (RTSP)", Toast.LENGTH_SHORT).show()
         } else {
-            usePhoneCamera = true; stopIjkStream(); checkAndStartPhoneCamera()
+            usePhoneCamera = true; stopVlcStream(); checkAndStartPhoneCamera()
             Toast.makeText(requireContext(), "Mode: Kamera HP", Toast.LENGTH_SHORT).show()
         }
     }
 
     // =====================================================================
-    // IJK STREAM
+    // VLC STREAM
     // =====================================================================
 
-    private val ijkEventListener = IMediaPlayer.OnInfoListener { _, what, _ ->
-        when (what) {
-            IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START -> activity?.runOnUiThread {
-                if (!isAdded) return@runOnUiThread
-                binding.pbLoadingImage.visibility = View.GONE
-                binding.vShutterImage.visibility = View.GONE
-                binding.tvStatusImage?.text = "RTSP Connected"
-                setKeepScreenOn(true)
-            }
-        }
-        true
-    }
-
-    private fun startIjkStream() {
+    private fun startVlcStream() {
         if (usePhoneCamera) return
         binding.pbLoadingImage.visibility = View.VISIBLE
         binding.vShutterImage.visibility = View.VISIBLE
 
         runCatching {
+            val options = arrayListOf(
+                "--rtsp-tcp",
+                "--network-caching=150",
+                "--live-caching=150",
+                "--no-audio",
+                "--drop-late-frames",
+                "--skip-frames",
+                "--video-filter=adjust",
+                "--brightness=1.15",
+                "--contrast=1.2",
+                "--saturation=1.1",
+                "--gamma=1.0"
+            )
+            libVlc = LibVLC(requireContext(), options)
+            mediaPlayer = MediaPlayer(libVlc)
+
+            val vout = mediaPlayer!!.vlcVout
+            vout.setVideoView(textureView)
+            vout.addCallback(this)
+            vout.attachViews(newVideoLayoutListener)
+
             val rawUrl = liveViewModel.rtspRequest.value ?: ""
             val user = liveViewModel.rtspUsername.value ?: ""
             val pass = liveViewModel.rtspPassword.value ?: ""
             val finalUrl = if (user.isNotEmpty() && !rawUrl.contains("//$user"))
                 rawUrl.replace("rtsp://", "rtsp://$user:$pass@") else rawUrl
 
-            val player = IjkMediaPlayer().apply {
-                IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN)
+            val media = Media(libVlc, Uri.parse(finalUrl))
+            media.addOption(":network-caching=300")
+            media.addOption(":no-audio")
+            mediaPlayer?.media = media
+            media.release()
 
-                // ── FORMAT (FFmpeg demuxer) ──
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L)
-                // Deteksi stream — 32KB cukup cepat tapi tidak menyebabkan jitter koneksi
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
-                // 100ms = cukup untuk player siap tanpa bikin lag di awal
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
-                // Jangan tunggu paket yang datang tidak urut — langsung render
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L)
-
-                // ── PLAYER (IjkPlayer internal) ──
-                // PENTING: max_cached_duration=0 di IJK = UNLIMITED! Harus > 0
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 1L) // 1ms (0=unlimited!)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)
-                // PENTING: Matikan infbuf (0) agar antrean paket video tidak menumpuk tanpa batas
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 0L)
-                // Drop frame terlambat secara agresif agar delay nol konstan
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 60L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "an", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
-
-                // ── CODEC (decoder) ──
-                // PENTING: TV / STB hardware decoder sering melakukan buffering (delay 1-3 detik)
-                // Gunakan Software Decoder (0) untuk TV agar latensi nol dan warna konsisten!
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 0L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 0L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 0L)
-                
-                // MULTI-THREADING DECODE: wajib untuk CPU TV yang lemah agar kuat decode 1080p
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "threads", "auto")
-                // Skip_loop_filter=16 (AVDISCARD_NONREF): Skip loop filter pada non-reference frame saja
-                // Menghilangkan noise/bintik/artefak kotak-kotak pada layar TV dengan tetap menjaga CPU ringan
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 16L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L)
-            }
-
-            val tv = textureView ?: return
-            val st = tv.surfaceTexture ?: run {
-                tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                    override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
-                        tv.surfaceTextureListener = null
-                        if (isAdded) startIjkStream()
+            mediaPlayer?.setEventListener { event ->
+                when (event.type) {
+                    MediaPlayer.Event.Playing -> activity?.runOnUiThread {
+                        if (!isAdded) return@runOnUiThread
+                        binding.pbLoadingImage.visibility = View.GONE
+                        binding.vShutterImage.visibility = View.GONE
+                        binding.tvStatusImage?.text = "RTSP Connected"
+                        setKeepScreenOn(true)
                     }
-                    override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
-                    override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture) = false
-                    override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
-                }
-                return
-            }
-            player.setSurface(android.view.Surface(st))
-            player.setOnInfoListener(ijkEventListener)
-            player.setOnErrorListener { _, _, _ ->
-                activity?.runOnUiThread {
-                    if (!isAdded) return@runOnUiThread
-                    binding.tvStatusImage?.text = "Error — Retrying..."
-                    binding.pbLoadingImage.visibility = View.GONE
-                }
-                true
-            }
-            player.setOnCompletionListener {
-                activity?.runOnUiThread {
-                    if (!isAdded) return@runOnUiThread
-                    binding.tvStatusImage?.text = "Disconnected"
-                    binding.vShutterImage.visibility = View.VISIBLE
-                    setKeepScreenOn(false)
-                }
-            }
-            player.setOnVideoSizeChangedListener { _, w, h, sarNum, sarDen ->
-                if (w > 0 && h > 0) {
-                    ivVideoImageResolution = Pair(w, h)
-                    tv.post { if (isAdded) applyIjkLayout(w, h, sarNum, sarDen) }
+
+                    MediaPlayer.Event.EncounteredError -> activity?.runOnUiThread {
+                        if (!isAdded) return@runOnUiThread
+                        binding.tvStatusImage?.text = "Error — Retrying..."
+                        binding.pbLoadingImage.visibility = View.GONE
+                    }
+
+                    MediaPlayer.Event.EndReached -> activity?.runOnUiThread {
+                        if (!isAdded) return@runOnUiThread
+                        binding.tvStatusImage?.text = "Disconnected"
+                        binding.vShutterImage.visibility = View.VISIBLE
+                        setKeepScreenOn(false)
+                    }
+
+                    else -> Unit
                 }
             }
 
-            player.dataSource = finalUrl
-            player.prepareAsync()
-            ijkPlayer = player
-            startLiveResyncWatchdog()
+            mediaPlayer?.play()
 
             binding.pbLoadingImage.postDelayed({
                 if (isAdded) {
@@ -721,40 +672,68 @@ class VideoFragmentTv : Fragment() {
             }, 3000)
             setKeepScreenOn(true)
         }.onFailure {
-            Log.e(TAG, "IJK start error", it)
+            Log.e(TAG, "VLC start error", it)
             binding.pbLoadingImage.visibility = View.GONE
             Toast.makeText(requireContext(), "Gagal konek: ${it.message}", Toast.LENGTH_SHORT)
                 .show()
         }
     }
 
-    private fun applyIjkLayout(
-        width: Int = ivVideoImageResolution.first,
-        height: Int = ivVideoImageResolution.second,
-        sarNum: Int = 0,
-        sarDen: Int = 0
+    /** Lambda extracted so it can be reused in both startVlcStream & reattachVlcViews. */
+    private val newVideoLayoutListener =
+        IVLCVout.OnNewVideoLayoutListener { _, w, h, vw, vh, sn, sd ->
+            if (w * h == 0) return@OnNewVideoLayoutListener
+            ivVideoImageResolution = Pair(w, h)
+            textureView?.post {
+                if (!isAdded || textureView == null) return@post
+                applyVlcLayoutAndBaseTransform(w, h, vw, vh, sn, sd)
+            }
+        }
+
+    private fun reattachVlcViews() {
+        if (usePhoneCamera) return
+        val player = mediaPlayer ?: return
+        val w = binding.videoContainer.width
+        val h = binding.videoContainer.height
+        if (w == 0 || h == 0) return
+        runCatching {
+            val vout = player.vlcVout
+            vout.detachViews()
+            vout.setVideoView(textureView)
+            vout.setWindowSize(w, h)
+            vout.addCallback(this)
+            vout.attachViews(newVideoLayoutListener)
+        }.onFailure { Log.e(TAG, "reattachVlcViews error", it) }
+    }
+
+    private fun applyVlcLayoutAndBaseTransform(
+        width: Int, height: Int, visibleWidth: Int, visibleHeight: Int, sarNum: Int, sarDen: Int
     ) {
         val tv = textureView ?: return
         val cW = binding.videoContainer.width
         val cH = binding.videoContainer.height
         if (cW <= 0 || cH <= 0) {
             binding.videoContainer.postDelayed({
-                applyIjkLayout(width, height, sarNum, sarDen)
+                applyVlcLayoutAndBaseTransform(
+                    width,
+                    height,
+                    visibleWidth,
+                    visibleHeight,
+                    sarNum,
+                    sarDen
+                )
             }, 100); return
         }
-        var videoW = width.toFloat()
-        var videoH = height.toFloat()
+        var videoW = (if (visibleWidth > 0) visibleWidth else width).toFloat()
+        var videoH = (if (visibleHeight > 0) visibleHeight else height).toFloat()
         if (sarNum > 0 && sarDen > 0) videoW = videoW * sarNum / sarDen
 
         val vAspect = videoW / videoH
         val cAspect = cW.toFloat() / cH.toFloat()
-        
-        val (finalW, finalH) = if (cAspect > vAspect) {
-            // Container is wider than video, match height
-            (cH * vAspect).toInt() to cH
+        val (finalW, finalH) = if (isLandscape()) {
+            if (cAspect > vAspect) cW to (cW / vAspect).toInt() else (cH * vAspect).toInt() to cH
         } else {
-            // Container is taller than video, match width
-            cW to (cW / vAspect).toInt()
+            if (cAspect > vAspect) (cH * vAspect).toInt() to cH else cW to (cW / vAspect).toInt()
         }
 
         tv.layoutParams = tv.layoutParams.apply { this.width = finalW; this.height = finalH }
@@ -767,18 +746,22 @@ class VideoFragmentTv : Fragment() {
         applyZoomAndPan()
     }
 
-    private fun stopIjkStream() {
-        liveResyncJob?.cancel()
-        val oldPlayer = ijkPlayer
-        ijkPlayer = null
-        
+    private fun stopVlcStream() {
+        val player = mediaPlayer
+        val vlc = libVlc
+        mediaPlayer = null
+        libVlc = null
+
+        player?.setEventListener(null)
         Thread {
             runCatching {
-                oldPlayer?.stop()
-                oldPlayer?.release()
+                player?.stop()
+                player?.vlcVout?.detachViews()
+                player?.release()
+                vlc?.release()
             }
         }.start()
-        
+
         binding.tvStatusImage?.text = "Disconnected"
         binding.vShutterImage.visibility = View.VISIBLE
         setKeepScreenOn(false)
@@ -786,20 +769,8 @@ class VideoFragmentTv : Fragment() {
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
     }
 
-    private var resyncJob: Job? = null
-
-    // autoResyncStream DIHAPUS — restart player di TV/STB menyebabkan hang berkepanjangan.
-    // STB terlalu lemah untuk reconnect RTSP dengan cepat.
-    // User melaporkan stream stuck setelah capture akibat fitur ini.
-
-    /**
-     * Anti-drift watchdog dimatikan sementara karena menyebabkan preview freeze.
-     */
-    private fun startLiveResyncWatchdog() {
-        liveResyncJob?.cancel()
-        // Watchdog dinonaktifkan sementara
-    }
-
+    override fun onSurfacesCreated(vlcVout: IVLCVout?) {}
+    override fun onSurfacesDestroyed(vlcVout: IVLCVout?) {}
 
     // =====================================================================
     // RECORDING
@@ -888,7 +859,7 @@ class VideoFragmentTv : Fragment() {
                         val waitMs = (nextFrameNs - loopEndNs) / 1_000_000L
                         if (waitMs > 0) delay(waitMs)
                     } else {
-                        // Jeda kooperatif minimal 10ms agar UI thread & decoder IjkPlayer TV tidak tercekik
+                        // Jeda kooperatif minimal 10ms agar UI thread & decoder TV tidak tercekik
                         delay(10L)
                     }
                     nextFrameNs = System.nanoTime() + frameIntervalNs
@@ -909,7 +880,7 @@ class VideoFragmentTv : Fragment() {
         binding.recordHud.visibility = View.GONE
         binding.btnRecordVideo.imageTintList =
             android.content.res.ColorStateList.valueOf(Color.WHITE)
-        
+
         val file = videoOutputFile; videoOutputFile = null
         if (file != null && file.exists()) {
             Toast.makeText(requireContext(), "🎥 VIDEO TERSIMPAN!", Toast.LENGTH_SHORT).show()
@@ -917,7 +888,6 @@ class VideoFragmentTv : Fragment() {
         } else {
             Toast.makeText(requireContext(), "Gagal menyimpan video", Toast.LENGTH_SHORT).show()
         }
-        // autoResync DIHAPUS — menyebabkan hang di TV/STB
     }
 
     // =====================================================================
@@ -926,7 +896,6 @@ class VideoFragmentTv : Fragment() {
     private fun ensureOverlayTextSize(targetHeight: Int) {
         if (targetHeight <= 0) return
         if (targetHeight == lastOverlayTargetHeight && lastOverlayFontPx > 0f) {
-            // sudah sesuai cache
             return
         }
 
@@ -941,19 +910,19 @@ class VideoFragmentTv : Fragment() {
         lastOverlayTargetHeight = targetHeight
     }
 
-    private fun processTextToBitmapSafe(src: Bitmap, abnormalityProb: Float = -1f): Bitmap {
+    private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         if (src.isRecycled) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-        
+
         // Crop 4 pixel di atas untuk membuang list/garis biru artefak bawaan hardware kamera MS2
         val cropTop = 4
         val safeSrc = if (src.height > cropTop) {
             Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
         } else src
-        
+
         // Kita buat blank bitmap baru agar bisa menggambar safeSrc dengan Paint (untuk apply filter hasil)
         val bitmap = Bitmap.createBitmap(safeSrc.width, safeSrc.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        
+
         // Gambar gambar asli dengan filter enhancement untuk HASIL foto/video
         canvas.drawBitmap(safeSrc, 0f, 0f, paintCaptureEnhance)
         if (safeSrc !== src && !safeSrc.isRecycled) {
@@ -968,7 +937,6 @@ class VideoFragmentTv : Fragment() {
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
 
         val pad = (bitmap.height * 0.035f).coerceIn(14f, 36f) // padding ikut skala
-        val baselineY = bitmap.height - pad
 
         // === Right-bottom date box (dynamic width) ===
         // Box padding merata agar teks berada tepat di tengah (centered)
@@ -1033,39 +1001,11 @@ class VideoFragmentTv : Fragment() {
         // Kalau text terlalu panjang, potong
         val maxTextW = (infoRight - infoLeft - pad * 2f).coerceAtLeast(0f)
         val infoDraw = if (paintText.measureText(info) <= maxTextW) info
-            else info.substring(0, ((info.length * maxTextW / paintText.measureText(info)).toInt()).coerceAtLeast(0)) + "…"
-            
+        else info.substring(0, ((info.length * maxTextW / paintText.measureText(info)).toInt()).coerceAtLeast(0)) + "…"
+
         // Hitung juga center Y untuk text sebelah kiri agar simetris
         val infoCenterY = infoTop + ((infoBottom - infoTop) / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
         canvas.drawText(infoDraw, infoLeft + pad, infoCenterY, paintText)
-
-        // === AI Detection Overlay ===
-        if (abnormalityProb >= 0f) {
-            // Threshold klinis: lebih baik over-alert daripada miss kasus kanker
-            // > 0.55 = ABNORMAL (merah)
-            // 0.35 - 0.55 = SUSPECTED (kuning)
-            // < 0.35 = NORMAL (hijau)
-            val isAbnormal = abnormalityProb > 0.55f
-            val isSuspected = abnormalityProb in 0.35f..0.55f
-            val displayProb = if (isAbnormal || isSuspected) abnormalityProb else (1f - abnormalityProb)
-            val label = when {
-                isAbnormal  -> "AI: ABNORMAL (${(abnormalityProb * 100).toInt()}%)"
-                isSuspected -> "AI: DICURIGAI (${(abnormalityProb * 100).toInt()}%)"
-                else        -> "AI: NORMAL (${((1 - abnormalityProb) * 100).toInt()}%)"
-            }
-            val labelColor = when {
-                isAbnormal  -> Color.RED
-                isSuspected -> Color.YELLOW
-                else        -> Color.GREEN
-            }
-            val aiPaintText = Paint(paintText).apply {
-                color = labelColor
-                isFakeBoldText = true
-                setShadowLayer(5f, 0f, 0f, Color.BLACK)
-            }
-            val aiTextW = aiPaintText.measureText(label)
-            canvas.drawText(label, bitmap.width - aiTextW - pad, pad + paintText.textSize, aiPaintText)
-        }
 
         return bitmap
     }
@@ -1097,7 +1037,6 @@ class VideoFragmentTv : Fragment() {
         val saveDir = dir!!
 
         // Pindahkan SEMUA heavy work ke background thread agar UI tidak freeze:
-        // - TF Lite inference (detectAbnormality)
         // - Canvas overlay drawing (processTextToBitmapSafe)
         // - Disk I/O (saveJpegWithPrefix)
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
@@ -1155,7 +1094,8 @@ class VideoFragmentTv : Fragment() {
             if (usePhoneCamera) {
                 if (phoneCameraView?.display == null) view?.post { if (isAdded) startPhoneCamera() }
             } else {
-                // Media player check replaced by IJK check if needed
+                val mp = mediaPlayer
+                if (mp != null && !mp.isPlaying) view?.post { if (isAdded) runCatching { mp.play() } }
             }
         }
     }
@@ -1379,62 +1319,13 @@ class VideoFragmentTv : Fragment() {
     private var currentBlue = 0.95f
     private var currentHue = 0f
 
-    private fun applyHardwareBrightness(
-        tv: android.view.TextureView, 
-        brightnessOffset: Float = currentBrightness,
-        contrast: Float = currentContrast,
-        saturation: Float = currentSaturation,
-        redBoost: Float = currentRed,
-        greenBoost: Float = currentGreen,
-        blueBoost: Float = currentBlue,
-        hueOffset: Float = currentHue
-    ) {
-        val cm = android.graphics.ColorMatrix()
-        cm.setSaturation(saturation)
-
-        // Hue rotation
-        if (hueOffset != 0f) {
-            val theta = Math.PI * hueOffset / 180.0
-            val c = Math.cos(theta).toFloat()
-            val s = Math.sin(theta).toFloat()
-
-            val hueMatrix = android.graphics.ColorMatrix(floatArrayOf(
-                0.213f + 0.787f * c - 0.213f * s, 0.715f - 0.715f * c - 0.715f * s, 0.072f - 0.072f * c + 0.928f * s, 0f, 0f,
-                0.213f - 0.213f * c + 0.143f * s, 0.715f + 0.285f * c + 0.140f * s, 0.072f - 0.072f * c - 0.283f * s, 0f, 0f,
-                0.213f - 0.213f * c - 0.787f * s, 0.715f - 0.715f * c + 0.715f * s, 0.072f + 0.928f * c + 0.072f * s, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-            ))
-            cm.postConcat(hueMatrix)
-        }
-
-        val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
-            contrast * redBoost, 0f, 0f, 0f, brightnessOffset,
-            0f, contrast * greenBoost, 0f, 0f, brightnessOffset,
-            0f, 0f, contrast * blueBoost, 0f, brightnessOffset,
-            0f, 0f, 0f, 1f, 0f
-        ))
-        cm.postConcat(brightnessAndContrast)
-
-        val paint = android.graphics.Paint().apply {
-            colorFilter = android.graphics.ColorMatrixColorFilter(cm)
-        }
-        tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
-    }
-
     private fun setupDebugPanel() {
-        val updateFilter = {
-            textureView?.let { 
-                applyHardwareBrightness(it) 
-            }
-        }
-        
         val sbContrast = binding.root.findViewById<android.widget.SeekBar>(R.id.sbContrast)
         val tvContrastVal = binding.root.findViewById<android.widget.TextView>(R.id.tvContrastVal)
         sbContrast?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentContrast = progress / 100f
                 tvContrastVal?.text = String.format("%.2f", currentContrast)
-                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1446,7 +1337,6 @@ class VideoFragmentTv : Fragment() {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentBrightness = (progress - 100).toFloat()
                 tvBrightnessVal?.text = currentBrightness.toString()
-                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1458,7 +1348,6 @@ class VideoFragmentTv : Fragment() {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentSaturation = progress / 100f
                 tvSaturationVal?.text = String.format("%.2f", currentSaturation)
-                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1470,7 +1359,6 @@ class VideoFragmentTv : Fragment() {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentRed = progress / 100f
                 tvRedVal?.text = String.format("%.2f", currentRed)
-                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1482,7 +1370,6 @@ class VideoFragmentTv : Fragment() {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentGreen = progress / 100f
                 tvGreenVal?.text = String.format("%.2f", currentGreen)
-                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1494,19 +1381,17 @@ class VideoFragmentTv : Fragment() {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentBlue = progress / 100f
                 tvBlueVal?.text = String.format("%.2f", currentBlue)
-                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
-        
+
         val sbHue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbHue)
         val tvHueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvHueVal)
         sbHue?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentHue = (progress - 180).toFloat()
                 tvHueVal?.text = currentHue.toInt().toString()
-                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1516,11 +1401,11 @@ class VideoFragmentTv : Fragment() {
         val btnToggleDebug = binding.root.findViewById<android.view.View>(R.id.btnToggleDebug)
         val svDebugPanel = binding.root.findViewById<android.view.View>(R.id.svDebugPanel)
         val btnExportConfig = binding.root.findViewById<android.widget.Button>(R.id.btnExportConfig)
-        
+
         btnHideDebug?.setOnClickListener {
             svDebugPanel?.visibility = android.view.View.GONE
         }
-        
+
         btnExportConfig?.setOnClickListener {
             val configJson = """
                 {
@@ -1533,13 +1418,13 @@ class VideoFragmentTv : Fragment() {
                     "hue": $currentHue
                 }
             """.trimIndent()
-            
+
             val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
             val clip = android.content.ClipData.newPlainText("Color Calibration Config", configJson)
             clipboard.setPrimaryClip(clip)
             android.widget.Toast.makeText(requireContext(), "Pengaturan warna berhasil disalin ke clipboard", android.widget.Toast.LENGTH_SHORT).show()
         }
-        
+
         btnToggleDebug?.setOnClickListener {
             if (svDebugPanel?.visibility == android.view.View.VISIBLE) {
                 svDebugPanel?.visibility = android.view.View.GONE

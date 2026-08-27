@@ -861,12 +861,12 @@ class VideoFragmentMobile : Fragment() {
 
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
 
-        // === Right-bottom date box (dynamic width) ===
         // Box padding merata agar teks berada tepat di tengah (centered)
-        val boxPadX = pad * 1.5f
+        // Diperbesar agar overlay menutupi timestamp kuning bawaan kamera
+        val boxPadX = pad * 4.0f
         val dateTextW = paintDateText.measureText(formatted)
         val dateBoxW = dateTextW + (boxPadX * 2f)
-        val dateBoxH = (paintDateText.textSize + pad * 2.2f).coerceAtLeast(pad * 3f)
+        val dateBoxH = (paintDateText.textSize + pad * 3.0f).coerceAtLeast(pad * 4f)
 
         val right = bitmap.width.toFloat()
         val left = (right - dateBoxW).coerceAtLeast(0f)

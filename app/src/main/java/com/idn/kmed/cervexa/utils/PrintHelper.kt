@@ -45,11 +45,27 @@ object PrintHelper {
      * @param jobName   Nama pekerjaan cetak (tampil di antrian printer)
      */
     fun printPdf(activity: Activity, pdfFile: File, jobName: String = "Cervexa Rekam Medis") {
-        val pm = activity.getSystemService(Context.PRINT_SERVICE) as? PrintManager ?: run {
-            Toast.makeText(activity, "Layanan cetak tidak tersedia", Toast.LENGTH_SHORT).show()
+        if (!pdfFile.exists()) {
+            Toast.makeText(activity, "Berkas tidak ditemukan", Toast.LENGTH_SHORT).show()
             return
         }
-        pm.print(jobName, PdfPrintDocumentAdapter(pdfFile), null)
+        if (!pdfFile.name.endsWith(".pdf", ignoreCase = true)) {
+            Toast.makeText(activity, "Berkas bukan format PDF", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val pm = activity.getSystemService(Context.PRINT_SERVICE) as? PrintManager
+        if (pm == null) {
+            Toast.makeText(activity, "Layanan cetak sistem tidak tersedia di perangkat ini. Membuka opsi bagikan...", Toast.LENGTH_SHORT).show()
+            sharePdf(activity, pdfFile)
+            return
+        }
+        runCatching {
+            pm.print(jobName, PdfPrintDocumentAdapter(pdfFile), null)
+        }.onFailure { e ->
+            e.printStackTrace()
+            Toast.makeText(activity, "Gagal membuka layanan cetak: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            sharePdf(activity, pdfFile)
+        }
     }
 
     /* ── 2. SIMPAN / DOWNLOAD PDF ───────────────────────────────────────── */

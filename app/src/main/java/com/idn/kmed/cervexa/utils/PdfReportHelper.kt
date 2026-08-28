@@ -101,6 +101,64 @@ object PdfReportHelper {
     }.getOrNull()
 
     /**
+     * PDF laporan 1 lembar untuk satu foto pemeriksaan medis resolusi tinggi.
+     * @return File PDF sementara, null jika gagal.
+     */
+    fun generateSingleMediaPdf(
+        outputFile: File,
+        nama: String,
+        nik: String,
+        hospitalName: String,
+        nrm: String?,
+        dobUtcMs: Long?,
+        mediaFile: File,
+        aiClassification: String? = null,
+        aiConfidenceScore: Float? = null,
+        aiIsFallback: Boolean = false
+    ): File? = runCatching {
+        val doc = PdfDocument()
+        val page = doc.startPage(PdfDocument.PageInfo.Builder(PW, PH, 1).create())
+        val cv = page.canvas
+        var y = M
+
+        y = drawHeader(cv, y, "LAPORAN HASIL PEMERIKSAAN FOTO", hospitalName)
+        y = drawPatientBlock(cv, y, nama, nik, hospitalName, nrm, dobUtcMs)
+
+        if (aiClassification != null && aiConfidenceScore != null) {
+            y = drawAiResultBlock(cv, y, aiClassification, aiConfidenceScore, aiIsFallback)
+        }
+
+        y += 8f
+        y = drawSectionTitle(cv, y, "GAMBAR HASIL TANGKAPAN (${mediaFile.name})")
+
+        // Draw large image centered on page
+        val maxImgW = PW - 2 * M
+        val maxImgH = (PH - y - 48f).coerceAtLeast(100f)
+
+        if (mediaFile.exists()) {
+            val bmp = BitmapFactory.decodeFile(mediaFile.absolutePath)
+            if (bmp != null) {
+                val scale = minOf(maxImgW / bmp.width.toFloat(), maxImgH / bmp.height.toFloat())
+                val drawW = (bmp.width * scale).toInt()
+                val drawH = (bmp.height * scale).toInt()
+                val drawX = M + ((maxImgW - drawW) / 2f)
+                val srcRect = Rect(0, 0, bmp.width, bmp.height)
+                val dstRect = RectF(drawX, y + 6f, drawX + drawW, y + 6f + drawH)
+
+                cv.drawRect(dstRect.left - 1, dstRect.top - 1, dstRect.right + 1, dstRect.bottom + 1, pStroke(COLOR_DIVIDER, 1f))
+                cv.drawBitmap(bmp, srcRect, dstRect, Paint(Paint.FILTER_BITMAP_FLAG))
+                bmp.recycle()
+            }
+        }
+
+        drawFooter(cv)
+        doc.finishPage(page)
+        FileOutputStream(outputFile).use { doc.writeTo(it) }
+        doc.close()
+        outputFile
+    }.getOrNull()
+
+    /**
      * PDF detail sesi lengkap termasuk thumbnail snapshot.
      * Otomatis menambah halaman jika konten melebihi satu halaman.
      */

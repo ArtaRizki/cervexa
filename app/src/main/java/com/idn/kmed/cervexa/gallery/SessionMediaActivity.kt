@@ -142,6 +142,12 @@ class SessionMediaActivity : AppCompatActivity() {
                     putStringArrayListExtra("paths", paths)
                     putStringArrayListExtra("types", types)
                     putExtra("index", index)
+                    putExtra("patient_name", patientNameExtra ?: patientName)
+                    putExtra("patient_nik", patientNikExtra)
+                    putExtra("patient_rs", patientRsExtra)
+                    putExtra("patient_nrm", patientNrmExtra)
+                    putExtra("patient_dob_utc", patientDobUtcExtra ?: -1L)
+                    putExtra("session_dir", sessionDir.absolutePath)
                 })
             }
         }

@@ -1,6 +1,7 @@
 package com.idn.kmed.cervexa.gallery
 
 import android.content.ClipData
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
@@ -10,12 +11,14 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import com.idn.kmed.cervexa.R
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.idn.kmed.cervexa.utils.PdfReportHelper
 import com.idn.kmed.cervexa.utils.PrintHelper
 import java.io.File
 import androidx.core.content.FileProvider
@@ -24,6 +27,10 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
 import com.google.android.material.shape.CornerFamily
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 open class MediaPagerActivity : AppCompatActivity() {
 
@@ -174,23 +181,219 @@ open class MediaPagerActivity : AppCompatActivity() {
             dialog.dismiss()
         }
 
-        // Cetak Data Pasien (PDF ringkasan, tanpa media)
+        // Cetak Data Pasien (PDF ringkasan)
         v.findViewById<LinearLayout>(R.id.itemPrintPatient)?.setOnClickListener {
             dialog.dismiss()
-            // Di MediaPagerActivity tidak ada data pasien lengkap — buka chooser share PDF
-            val outFile = File(cacheDir, "cervexa_media_${System.currentTimeMillis()}.pdf")
-            PrintHelper.sharePdf(this, outFile.takeIf { it.exists() } ?: file, appLabel = "")
+            generateAndActionPdf(file, ReportType.PATIENT_SUMMARY, download = false)
         }
 
-        // Unduh / cetak — share PDF ke aplikasi lain
+        // Cetak Sesi / Foto
         v.findViewById<LinearLayout>(R.id.itemPrintSession)?.setOnClickListener {
             dialog.dismiss()
-            // Langsung share file aslinya via chooser (PDF share dari context galeri)
-            val pdfFile = File(cacheDir, "cervexa_media_${System.currentTimeMillis()}.pdf")
-            PrintHelper.printPdf(this, file, "Cervexa Media")
+            if (mime.startsWith("image")) {
+                generateAndActionPdf(file, ReportType.CURRENT_PHOTO, download = false)
+            } else {
+                generateAndActionPdf(file, ReportType.FULL_SESSION, download = false)
+            }
+        }
+
+        // Unduh PDF
+        v.findViewById<LinearLayout>(R.id.itemDownloadSession)?.setOnClickListener {
+            dialog.dismiss()
+            if (mime.startsWith("image")) {
+                generateAndActionPdf(file, ReportType.CURRENT_PHOTO, download = true)
+            } else {
+                generateAndActionPdf(file, ReportType.FULL_SESSION, download = true)
+            }
         }
 
         dialog.show()
+    }
+
+    private enum class ReportType {
+        CURRENT_PHOTO,
+        PATIENT_SUMMARY,
+        FULL_SESSION
+    }
+
+    private data class SessionInfo(
+        val nama: String,
+        val nik: String,
+        val hospitalName: String,
+        val nrm: String?,
+        val dobUtcMs: Long?,
+        val sessionDir: File?
+    )
+
+    private fun getSessionOrPatientMetadata(currentFile: File): SessionInfo {
+        // 1. Dari Intent Extras
+        val nameExtra = intent.getStringExtra("patient_name")
+        val nikExtra = intent.getStringExtra("patient_nik")
+        val rsExtra = intent.getStringExtra("patient_rs")
+        val nrmExtra = intent.getStringExtra("patient_nrm")
+        val dobExtra = intent.getLongExtra("patient_dob_utc", -1L)
+
+        if (!nameExtra.isNullOrBlank() || !nikExtra.isNullOrBlank() || !rsExtra.isNullOrBlank()) {
+            return SessionInfo(
+                nama = nameExtra.orEmpty().ifBlank { "—" },
+                nik = nikExtra.orEmpty().ifBlank { "—" },
+                hospitalName = rsExtra.orEmpty().ifBlank { "—" },
+                nrm = nrmExtra?.ifBlank { null },
+                dobUtcMs = dobExtra.takeIf { it > 0L },
+                sessionDir = intent.getStringExtra("session_dir")?.let { File(it) } ?: currentFile.parentFile?.parentFile
+            )
+        }
+
+        // 2. Parse dari folder sesi (session.json / nama folder)
+        val parent = currentFile.parentFile
+        val patientDir = if (parent != null && (parent.name.equals("Snapshots", true) || parent.name.equals("Video", true))) {
+            parent.parentFile
+        } else {
+            parent
+        }
+
+        if (patientDir != null && patientDir.exists()) {
+            val jsonFile = File(patientDir, "session.json")
+            if (jsonFile.exists()) {
+                val o = runCatching { JSONObject(jsonFile.readText()) }.getOrNull()
+                if (o != null) {
+                    return SessionInfo(
+                        nama = o.optString("nama", "—").ifBlank { "—" },
+                        nik = o.optString("nik", "—").ifBlank { "—" },
+                        hospitalName = o.optString("rs", "—").ifBlank { "—" },
+                        nrm = o.optString("nrm", null)?.ifBlank { null },
+                        dobUtcMs = o.optLong("dob_utc").takeIf { it > 0L },
+                        sessionDir = patientDir
+                    )
+                }
+            }
+
+            val parts = patientDir.name.split("_")
+            if (parts.size >= 2) {
+                val nik = parts[0]
+                val nama = parts.drop(1).dropLast(1).joinToString(" ").replace('_', ' ').trim()
+                return SessionInfo(
+                    nama = nama.ifBlank { "—" },
+                    nik = nik.ifBlank { "—" },
+                    hospitalName = "Cervexa Clinic",
+                    nrm = null,
+                    dobUtcMs = null,
+                    sessionDir = patientDir
+                )
+            }
+        }
+
+        // 3. Fallback SharedPreferences
+        val sp = getSharedPreferences("cervexa_prefs", Context.MODE_PRIVATE)
+        return SessionInfo(
+            nama = sp.getString("pref_patient_name", "—") ?: "—",
+            nik = sp.getString("pref_patient_nik", "—") ?: "—",
+            hospitalName = sp.getString("pref_patient_rs", "—") ?: "—",
+            nrm = sp.getString("pref_patient_nrm", null),
+            dobUtcMs = null,
+            sessionDir = patientDir
+        )
+    }
+
+    private fun generateAndActionPdf(file: File, type: ReportType, download: Boolean) {
+        val meta = getSessionOrPatientMetadata(file)
+        val ts = System.currentTimeMillis()
+        val fname = when (type) {
+            ReportType.CURRENT_PHOTO -> "cervexa_foto_${ts}.pdf"
+            ReportType.PATIENT_SUMMARY -> "cervexa_pasien_${ts}.pdf"
+            ReportType.FULL_SESSION -> "cervexa_sesi_${ts}.pdf"
+        }
+        val outFile = File(cacheDir, fname)
+
+        val sessionDir = meta.sessionDir
+        val snaps = if (sessionDir != null && sessionDir.exists()) {
+            File(sessionDir, "Snapshots")
+                .listFiles { f -> f.isFile && f.extension.equals("jpg", true) }
+                ?.sortedBy { it.lastModified() } ?: listOf(file).filter { it.extension.equals("jpg", true) }
+        } else {
+            listOf(file).filter { it.extension.equals("jpg", true) }
+        }
+
+        val videos = if (sessionDir != null && sessionDir.exists()) {
+            File(sessionDir, "Video")
+                .listFiles { f -> f.isFile && f.extension.equals("mp4", true) }
+                ?.sortedBy { it.lastModified() } ?: emptyList()
+        } else {
+            emptyList()
+        }
+
+        Toast.makeText(this, "Menyiapkan laporan PDF...", Toast.LENGTH_SHORT).show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val pdf = when (type) {
+                ReportType.CURRENT_PHOTO -> {
+                    PdfReportHelper.generateSingleMediaPdf(
+                        outputFile = outFile,
+                        nama = meta.nama,
+                        nik = meta.nik,
+                        hospitalName = meta.hospitalName,
+                        nrm = meta.nrm,
+                        dobUtcMs = meta.dobUtcMs,
+                        mediaFile = file
+                    )
+                }
+                ReportType.PATIENT_SUMMARY -> {
+                    PdfReportHelper.generatePatientPdf(
+                        outputFile = outFile,
+                        nama = meta.nama,
+                        nik = meta.nik,
+                        hospitalName = meta.hospitalName,
+                        nrm = meta.nrm,
+                        dobUtcMs = meta.dobUtcMs,
+                        sessionId = -1,
+                        sessionCode = null,
+                        startedAt = null,
+                        completedAt = null,
+                        snapshotCount = snaps.size,
+                        videoCount = videos.size
+                    )
+                }
+                ReportType.FULL_SESSION -> {
+                    PdfReportHelper.generateSessionPdf(
+                        outputFile = outFile,
+                        nama = meta.nama,
+                        nik = meta.nik,
+                        hospitalName = meta.hospitalName,
+                        nrm = meta.nrm,
+                        dobUtcMs = meta.dobUtcMs,
+                        sessionId = -1,
+                        sessionCode = null,
+                        startedAt = null,
+                        completedAt = null,
+                        snapshotFiles = snaps,
+                        videoFiles = videos
+                    )
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                if (pdf == null || !pdf.exists()) {
+                    Toast.makeText(this@MediaPagerActivity, "Gagal membuat PDF", Toast.LENGTH_SHORT).show()
+                    return@withContext
+                }
+
+                if (download) {
+                    val ok = PrintHelper.downloadPdf(this@MediaPagerActivity, pdf, fname)
+                    Toast.makeText(
+                        this@MediaPagerActivity,
+                        if (ok) "PDF tersimpan di folder Downloads" else "Gagal menyimpan PDF",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    val label = when (type) {
+                        ReportType.CURRENT_PHOTO -> "Hasil Foto"
+                        ReportType.PATIENT_SUMMARY -> "Data Pasien"
+                        ReportType.FULL_SESSION -> "Sesi Pemeriksaan"
+                    }
+                    PrintHelper.printPdf(this@MediaPagerActivity, pdf, "Cervexa — $label")
+                }
+            }
+        }
     }
 
     private fun fileUriForShare(f: File): Uri =

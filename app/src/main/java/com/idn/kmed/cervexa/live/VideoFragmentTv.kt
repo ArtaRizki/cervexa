@@ -603,24 +603,17 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
         runCatching {
             val options = arrayListOf(
-                // ── Transport: UDP jauh lebih rendah latency dari TCP ──
-                "--no-rtsp-tcp",                    // UDP (bukan TCP)
-                // ── Buffer minimum ──
+                "--rtsp-tcp",
                 "--network-caching=0",
                 "--live-caching=0",
                 "--file-caching=0",
                 "--clock-jitter=0",
                 "--clock-synchro=0",
-                // ── FFmpeg low-latency flags ──
-                "--codec=avcodec",
-                "--avcodec-skiploopfilter=48",      // AVDISCARD_ALL: skip semua loop filter
-                "--avcodec-fast",
-                "--avcodec-hurry-up",
-                // ── Drop frame agresif ──
+                "--no-audio",
                 "--drop-late-frames",
                 "--skip-frames",
-                "--no-audio",
-                // ── Video filter (color) ──
+                "--avcodec-skiploopfilter=4",
+                "--avcodec-fast",
                 "--video-filter=adjust",
                 "--brightness=1.15",
                 "--contrast=1.2",
@@ -642,15 +635,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 rawUrl.replace("rtsp://", "rtsp://$user:$pass@") else rawUrl
 
             val media = Media(libVlc, Uri.parse(finalUrl))
-            // ── Per-media options: FFmpeg nobuffer + infbuf (kunci real-time) ──
             media.addOption(":network-caching=0")
             media.addOption(":no-audio")
-            media.addOption(":fflags=nobuffer")       // FFmpeg: jangan buffer sama sekali
-            media.addOption(":flags=low_delay")       // FFmpeg: low delay mode
-            media.addOption(":rtsp_transport=udp")    // Pastikan UDP di level media
-            media.addOption(":infbuf=1")              // FFmpeg: infinite buffer off, langsung decode
-            media.addOption(":analyzeduration=100000") // 100ms probe (vs default 5000000μs=5s)
-            media.addOption(":probesize=32768")        // 32KB probe (vs default 1MB)
             mediaPlayer?.media = media
             media.release()
 

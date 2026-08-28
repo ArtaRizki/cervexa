@@ -213,6 +213,7 @@ object PrintHelper {
                 FileInputStream(pdfFile).use { input ->
                     FileOutputStream(destination.fileDescriptor).use { out ->
                         input.copyTo(out)
+                        out.flush()
                     }
                 }
                 if (cancellationSignal.isCanceled) {

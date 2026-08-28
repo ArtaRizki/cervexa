@@ -1218,6 +1218,13 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         startActivity(Intent(requireContext(), target).apply {
             putStringArrayListExtra("paths", paths); putStringArrayListExtra("types", types)
             putExtra("index", position); putExtra("forceLandscape", isLandscape())
+            putExtra("patient_nama", patientNama)
+            putExtra("patient_name", patientNama)
+            putExtra("patient_nik", patientNik)
+            putExtra("patient_rs", patientRs)
+            putExtra("patient_nrm", patientNrm)
+            putExtra("patient_dob_utc", patientDobUtc)
+            putExtra("session_dir", sessionDir?.absolutePath)
         })
     }
 

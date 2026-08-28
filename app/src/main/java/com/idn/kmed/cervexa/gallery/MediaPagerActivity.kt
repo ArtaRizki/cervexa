@@ -226,72 +226,71 @@ open class MediaPagerActivity : AppCompatActivity() {
     )
 
     private fun getSessionOrPatientMetadata(currentFile: File): SessionInfo {
-        // 1. Dari Intent Extras
-        val nameExtra = intent.getStringExtra("patient_name")
+        // 1. Coba dari Intent Extras (support berbagai format penamaan key)
+        val nameExtra = intent.getStringExtra("patient_nama")
+            ?: intent.getStringExtra("patient_name")
+            ?: intent.getStringExtra("patientName")
         val nikExtra = intent.getStringExtra("patient_nik")
+            ?: intent.getStringExtra("patientNik")
         val rsExtra = intent.getStringExtra("patient_rs")
+            ?: intent.getStringExtra("patientRs")
         val nrmExtra = intent.getStringExtra("patient_nrm")
-        val dobExtra = intent.getLongExtra("patient_dob_utc", -1L)
+            ?: intent.getStringExtra("patientNrm")
+        val dobExtra = intent.getLongExtra("patient_dob_utc", -1L).takeIf { it > 0L }
+            ?: intent.getLongExtra("patientDobUtc", -1L).takeIf { it > 0L }
 
-        if (!nameExtra.isNullOrBlank() || !nikExtra.isNullOrBlank() || !rsExtra.isNullOrBlank()) {
-            return SessionInfo(
-                nama = nameExtra.orEmpty().ifBlank { "—" },
-                nik = nikExtra.orEmpty().ifBlank { "—" },
-                hospitalName = rsExtra.orEmpty().ifBlank { "—" },
-                nrm = nrmExtra?.ifBlank { null },
-                dobUtcMs = dobExtra.takeIf { it > 0L },
-                sessionDir = intent.getStringExtra("session_dir")?.let { File(it) } ?: currentFile.parentFile?.parentFile
-            )
-        }
-
-        // 2. Parse dari folder sesi (session.json / nama folder)
+        // 2. Coba parse dari sessionDir / parent folder
         val parent = currentFile.parentFile
-        val patientDir = if (parent != null && (parent.name.equals("Snapshots", true) || parent.name.equals("Video", true))) {
-            parent.parentFile
-        } else {
-            parent
-        }
+        val sessionDir = intent.getStringExtra("session_dir")?.let { File(it) }
+            ?: if (parent != null && (parent.name.equals("Snapshots", true) || parent.name.equals("Video", true))) parent.parentFile
+            else parent
 
-        if (patientDir != null && patientDir.exists()) {
-            val jsonFile = File(patientDir, "session.json")
+        var jsonNama: String? = null
+        var jsonNik: String? = null
+        var jsonRs: String? = null
+        var jsonNrm: String? = null
+        var jsonDob: Long? = null
+
+        if (sessionDir != null && sessionDir.exists()) {
+            val jsonFile = File(sessionDir, "session.json")
             if (jsonFile.exists()) {
                 val o = runCatching { JSONObject(jsonFile.readText()) }.getOrNull()
                 if (o != null) {
-                    return SessionInfo(
-                        nama = o.optString("nama", "—").ifBlank { "—" },
-                        nik = o.optString("nik", "—").ifBlank { "—" },
-                        hospitalName = o.optString("rs", "—").ifBlank { "—" },
-                        nrm = o.optString("nrm", null)?.ifBlank { null },
-                        dobUtcMs = o.optLong("dob_utc").takeIf { it > 0L },
-                        sessionDir = patientDir
-                    )
+                    jsonNama = o.optString("nama", null) ?: o.optString("name", null) ?: o.optString("patient_nama", null)
+                    jsonNik = o.optString("nik", null) ?: o.optString("patient_nik", null)
+                    jsonRs = o.optString("rs", null) ?: o.optString("hospital", null) ?: o.optString("patient_rs", null)
+                    jsonNrm = o.optString("nrm", null) ?: o.optString("patient_nrm", null)
+                    jsonDob = o.optLong("dob_utc", -1L).takeIf { it > 0L } ?: o.optLong("dobUtc", -1L).takeIf { it > 0L }
                 }
-            }
-
-            val parts = patientDir.name.split("_")
-            if (parts.size >= 2) {
-                val nik = parts[0]
-                val nama = parts.drop(1).dropLast(1).joinToString(" ").replace('_', ' ').trim()
-                return SessionInfo(
-                    nama = nama.ifBlank { "—" },
-                    nik = nik.ifBlank { "—" },
-                    hospitalName = "Cervexa Clinic",
-                    nrm = null,
-                    dobUtcMs = null,
-                    sessionDir = patientDir
-                )
             }
         }
 
-        // 3. Fallback SharedPreferences
-        val sp = getSharedPreferences("cervexa_prefs", Context.MODE_PRIVATE)
+        // 3. Fallback nama folder: "NIK_NAMA_USIA"
+        var folderNik: String? = null
+        var folderNama: String? = null
+        if (sessionDir != null) {
+            val parts = sessionDir.name.split("_")
+            if (parts.size >= 2 && !sessionDir.name.startsWith("Patient_Unknown")) {
+                folderNik = parts[0].takeIf { it.isNotBlank() }
+                folderNama = parts.drop(1).dropLast(1).joinToString(" ").replace('_', ' ').trim().ifBlank { null }
+                    ?: parts.drop(1).joinToString(" ").replace('_', ' ').trim().ifBlank { null }
+            }
+        }
+
+        // 4. Merge values (prioritaskan Intent -> session.json -> folder -> default)
+        val finalNama = nameExtra?.ifBlank { null } ?: jsonNama?.ifBlank { null } ?: folderNama?.ifBlank { null } ?: "—"
+        val finalNik = nikExtra?.ifBlank { null } ?: jsonNik?.ifBlank { null } ?: folderNik?.ifBlank { null } ?: "—"
+        val finalRs = rsExtra?.ifBlank { null } ?: jsonRs?.ifBlank { null } ?: "—"
+        val finalNrm = nrmExtra?.ifBlank { null } ?: jsonNrm?.ifBlank { null }
+        val finalDob = dobExtra ?: jsonDob
+
         return SessionInfo(
-            nama = sp.getString("pref_patient_name", "—") ?: "—",
-            nik = sp.getString("pref_patient_nik", "—") ?: "—",
-            hospitalName = sp.getString("pref_patient_rs", "—") ?: "—",
-            nrm = sp.getString("pref_patient_nrm", null),
-            dobUtcMs = null,
-            sessionDir = patientDir
+            nama = finalNama,
+            nik = finalNik,
+            hospitalName = finalRs,
+            nrm = finalNrm,
+            dobUtcMs = finalDob,
+            sessionDir = sessionDir
         )
     }
 

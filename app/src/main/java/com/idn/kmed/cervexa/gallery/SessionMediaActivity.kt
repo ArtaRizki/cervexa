@@ -379,19 +379,19 @@ class SessionMediaActivity : AppCompatActivity() {
         // Cetak Data Pasien (PDF ringkasan)
         v.findViewById<LinearLayout>(R.id.itemPrintPatient)?.setOnClickListener {
             dialog.dismiss()
-            generateAndActionPdf(sessionOnly = false, download = false)
+            generateAndActionPdf(files, sessionOnly = false, download = false)
         }
 
-        // Cetak Sesi Lengkap (+Media)
+        // Cetak Sesi / Media Terpilih
         v.findViewById<LinearLayout>(R.id.itemPrintSession)?.setOnClickListener {
             dialog.dismiss()
-            generateAndActionPdf(sessionOnly = true, download = false)
+            generateAndActionPdf(files, sessionOnly = true, download = false)
         }
 
-        // Unduh PDF Sesi Lengkap
+        // Unduh PDF Sesi / Media Terpilih
         v.findViewById<LinearLayout>(R.id.itemDownloadSession)?.setOnClickListener {
             dialog.dismiss()
-            generateAndActionPdf(sessionOnly = true, download = true)
+            generateAndActionPdf(files, sessionOnly = true, download = true)
         }
 
         dialog.show()
@@ -399,21 +399,43 @@ class SessionMediaActivity : AppCompatActivity() {
 
     /**
      * Generate PDF dan print atau download.
+     * @param selectedFiles daftar file yang dipilih (jika ada)
      * @param sessionOnly  true = sertakan media dalam PDF
      * @param download     true = simpan ke Downloads, false = dialog cetak printer
      */
-    private fun generateAndActionPdf(sessionOnly: Boolean, download: Boolean) {
+    private fun generateAndActionPdf(
+        selectedFiles: List<File> = emptyList(),
+        sessionOnly: Boolean,
+        download: Boolean
+    ) {
         val meta = readSessionMeta()
         val ts = System.currentTimeMillis()
-        val fname = if (sessionOnly) "cervexa_sesi_${ts}.pdf" else "cervexa_pasien_${ts}.pdf"
+
+        val isSingleImage = sessionOnly && selectedFiles.size == 1 && selectedFiles[0].extension.equals("jpg", true)
+        val fname = when {
+            isSingleImage -> "cervexa_foto_${ts}.pdf"
+            sessionOnly -> "cervexa_sesi_${ts}.pdf"
+            else -> "cervexa_pasien_${ts}.pdf"
+        }
         val outFile = File(cacheDir, fname)
 
-        val snaps = File(sessionDir, "Snapshots")
+        val allSnaps = File(sessionDir, "Snapshots")
             .listFiles { f -> f.isFile && f.extension.equals("jpg", true) }
             ?.sortedBy { it.lastModified() } ?: emptyList()
-        val videos = File(sessionDir, "Video")
+        val allVideos = File(sessionDir, "Video")
             .listFiles { f -> f.isFile && f.extension.equals("mp4", true) }
             ?.sortedBy { it.lastModified() } ?: emptyList()
+
+        val snaps = if (selectedFiles.isNotEmpty()) {
+            selectedFiles.filter { it.extension.equals("jpg", true) }
+        } else {
+            allSnaps
+        }
+        val videos = if (selectedFiles.isNotEmpty()) {
+            selectedFiles.filter { it.extension.equals("mp4", true) }
+        } else {
+            allVideos
+        }
 
         val nama = (patientNameExtra ?: meta.name).orEmpty().ifBlank { "—" }
         val nik = (patientNikExtra ?: meta.nik).orEmpty().ifBlank { "—" }
@@ -421,27 +443,40 @@ class SessionMediaActivity : AppCompatActivity() {
         val nrm = (patientNrmExtra ?: meta.nrm)?.ifBlank { null }
         val dobUtcMs = (patientDobUtcExtra ?: meta.dobUtc)?.takeIf { it > 0L }
 
+        Toast.makeText(this, "Menyiapkan laporan PDF...", Toast.LENGTH_SHORT).show()
+
         lifecycleScope.launch(Dispatchers.IO) {
-            val pdf = if (sessionOnly) {
-                PdfReportHelper.generateSessionPdf(
-                    outputFile = outFile,
-                    nama = nama, nik = nik, hospitalName = rs,
-                    nrm = nrm, dobUtcMs = dobUtcMs,
-                    sessionId = -1, sessionCode = null,
-                    startedAt = null, completedAt = null,
-                    snapshotFiles = snaps,
-                    videoFiles = videos
-                )
-            } else {
-                PdfReportHelper.generatePatientPdf(
-                    outputFile = outFile,
-                    nama = nama, nik = nik, hospitalName = rs,
-                    nrm = nrm, dobUtcMs = dobUtcMs,
-                    sessionId = -1, sessionCode = null,
-                    startedAt = null, completedAt = null,
-                    snapshotCount = snaps.size,
-                    videoCount = videos.size
-                )
+            val pdf = when {
+                isSingleImage -> {
+                    PdfReportHelper.generateSingleMediaPdf(
+                        outputFile = outFile,
+                        nama = nama, nik = nik, hospitalName = rs,
+                        nrm = nrm, dobUtcMs = dobUtcMs,
+                        mediaFile = selectedFiles[0]
+                    )
+                }
+                sessionOnly -> {
+                    PdfReportHelper.generateSessionPdf(
+                        outputFile = outFile,
+                        nama = nama, nik = nik, hospitalName = rs,
+                        nrm = nrm, dobUtcMs = dobUtcMs,
+                        sessionId = -1, sessionCode = null,
+                        startedAt = null, completedAt = null,
+                        snapshotFiles = snaps,
+                        videoFiles = videos
+                    )
+                }
+                else -> {
+                    PdfReportHelper.generatePatientPdf(
+                        outputFile = outFile,
+                        nama = nama, nik = nik, hospitalName = rs,
+                        nrm = nrm, dobUtcMs = dobUtcMs,
+                        sessionId = -1, sessionCode = null,
+                        startedAt = null, completedAt = null,
+                        snapshotCount = snaps.size,
+                        videoCount = videos.size
+                    )
+                }
             }
 
             withContext(Dispatchers.Main) {
@@ -461,8 +496,15 @@ class SessionMediaActivity : AppCompatActivity() {
                         Toast.LENGTH_LONG
                     ).show()
                 } else {
-                    val label = if (sessionOnly) "Sesi Pemeriksaan" else "Data Pasien"
+                    val label = when {
+                        isSingleImage -> "Hasil Foto"
+                        sessionOnly -> "Sesi Pemeriksaan"
+                        else -> "Data Pasien"
+                    }
                     PrintHelper.printPdf(this@SessionMediaActivity, pdf, "Cervexa — $label")
+                }
+                if (selectionMode) {
+                    enterSelectionMode(false)
                 }
             }
         }

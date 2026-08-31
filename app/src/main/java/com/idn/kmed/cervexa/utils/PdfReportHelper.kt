@@ -326,27 +326,37 @@ object PdfReportHelper {
         var yy = y + 8f
         yy = drawSectionTitle(cv, yy, "DATA SESI")
 
-        fun fmtDate(raw: String?): String {
-            if (raw.isNullOrBlank()) return "—"
+        fun fmtDate(raw: String?): String? {
+            if (raw.isNullOrBlank()) return null
             return runCatching {
                 val iso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", Locale.US)
                     .also { it.timeZone = TimeZone.getTimeZone("UTC") }.parse(raw)
-                    ?: return "—"
+                    ?: return null
                 SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("id", "ID"))
                     .also { it.timeZone = TimeZone.getTimeZone("Asia/Jakarta") }
                     .format(iso) + " WIB"
-            }.getOrDefault(raw)
+            }.getOrNull()
         }
 
-        val rows = listOf(
-            "ID Sesi" to if (sessionId > 0) sessionId.toString() else "—",
-            "Kode Sesi" to sessionCode.orEmpty().ifBlank { "—" },
-            "Waktu Mulai" to fmtDate(startedAt),
-            "Waktu Selesai" to fmtDate(completedAt),
-            "Status" to "Selesai",
-            "Jumlah Snapshot" to "$snapshotCount berkas",
-            "Jumlah Video" to "$videoCount berkas"
-        )
+        val rows = mutableListOf<Pair<String, String>>()
+        if (sessionId > 0) {
+            rows.add("ID Sesi" to sessionId.toString())
+        }
+        if (!sessionCode.isNullOrBlank() && sessionCode != "—") {
+            rows.add("Kode Sesi" to sessionCode)
+        }
+        val startFormatted = fmtDate(startedAt)
+        if (!startFormatted.isNullOrBlank()) {
+            rows.add("Waktu Mulai" to startFormatted)
+        }
+        val endFormatted = fmtDate(completedAt)
+        if (!endFormatted.isNullOrBlank()) {
+            rows.add("Waktu Selesai" to endFormatted)
+        }
+        rows.add("Status" to "Selesai")
+        rows.add("Jumlah Snapshot" to "$snapshotCount berkas")
+        rows.add("Jumlah Video" to "$videoCount berkas")
+
         yy = drawTable(cv, yy, rows)
         return yy
     }

@@ -208,9 +208,9 @@ object PdfReportHelper {
             y += 12f
             y = drawSectionTitle(cv, y, "MEDIA")
 
-            /* Snapshot — grid 2 kolom */
+            /* Snapshot — grid 2 kolom (rasio 16:9 tanpa crop agar watermark utuh) */
             val imgW = ((PW - 2 * M - 12) / 2).toInt()
-            val imgH = (imgW * 3 / 4)   // rasio 4:3
+            val imgH = (imgW * 9 / 16)   // rasio 16:9
             var col = 0
 
             for (snap in snapshotFiles) {
@@ -387,10 +387,24 @@ object PdfReportHelper {
         }.getOrNull()
 
         if (bmp != null) {
-            val dst = Rect(x, y, x + w, y + h)
-            // Crop ke tengah (center crop)
-            val src = centerCropRect(bmp.width, bmp.height, w, h)
-            cv.drawBitmap(bmp, src, dst, null)
+            val scale = minOf(w.toFloat() / bmp.width.toFloat(), h.toFloat() / bmp.height.toFloat())
+            val drawW = (bmp.width * scale).toInt()
+            val drawH = (bmp.height * scale).toInt()
+            val drawX = x + ((w - drawW) / 2f)
+            val drawY = y + ((h - drawH) / 2f)
+
+            // Background hitam di belakang gambar
+            cv.drawRect(
+                x.toFloat(),
+                y.toFloat(),
+                (x + w).toFloat(),
+                (y + h).toFloat(),
+                pFill(Color.BLACK)
+            )
+
+            val src = Rect(0, 0, bmp.width, bmp.height)
+            val dst = RectF(drawX, drawY, drawX + drawW, drawY + drawH)
+            cv.drawBitmap(bmp, src, dst, Paint(Paint.FILTER_BITMAP_FLAG))
             bmp.recycle()
         } else {
             cv.drawRect(
@@ -420,19 +434,6 @@ object PdfReportHelper {
             pFill(COLOR_LIGHT_BG)
         )
         cv.drawText(fname, x + 4f, y + h + 13f, pText(COLOR_LABEL, 7f))
-    }
-
-    private fun centerCropRect(srcW: Int, srcH: Int, dstW: Int, dstH: Int): Rect {
-        val scale = maxOf(dstW.toFloat() / srcW, dstH.toFloat() / srcH)
-        val scaledW = (srcW * scale).toInt()
-        val scaledH = (srcH * scale).toInt()
-        val left = (scaledW - dstW) / 2
-        val top = (scaledH - dstH) / 2
-        val rW = (dstW / scale).toInt()
-        val rH = (dstH / scale).toInt()
-        val rL = ((srcW - rW) / 2)
-        val rT = ((srcH - rH) / 2)
-        return Rect(rL, rT, rL + rW, rT + rH)
     }
 
     private fun drawVideoPlaceholder(cv: Canvas, y: Float, file: File): Float {

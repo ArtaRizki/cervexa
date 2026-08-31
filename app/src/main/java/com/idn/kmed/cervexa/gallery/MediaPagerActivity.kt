@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -152,6 +153,10 @@ open class MediaPagerActivity : AppCompatActivity() {
             }
         }
 
+        val isImg = mime.startsWith("image")
+        v.findViewById<TextView>(R.id.tvTitle)?.text = if (isImg) "Cetak & Bagikan Foto" else "Cetak & Bagikan Media"
+        v.findViewById<TextView>(R.id.tvPrintSessionLabel)?.text = if (isImg) "Cetak Foto" else "Cetak Sesi"
+
         v.findViewById<ImageButton>(R.id.btnClose).setOnClickListener { dialog.dismiss() }
 
         v.findViewById<LinearLayout>(R.id.itemWa).setOnClickListener {
@@ -173,7 +178,7 @@ open class MediaPagerActivity : AppCompatActivity() {
             dialog.dismiss()
         }
         v.findViewById<LinearLayout>(R.id.itemCloud).setOnClickListener {
-            Toast.makeText(this, "Dalam Pengembangan", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Fitur Cloud dalam pengembangan", Toast.LENGTH_SHORT).show()
             dialog.dismiss()
         }
         v.findViewById<LinearLayout>(R.id.itemSave).setOnClickListener {
@@ -188,9 +193,10 @@ open class MediaPagerActivity : AppCompatActivity() {
         }
 
         // Cetak Sesi / Foto
-        v.findViewById<LinearLayout>(R.id.itemPrintSession)?.setOnClickListener {
+        val btnPrintSession = v.findViewById<LinearLayout>(R.id.itemPrintSession)
+        btnPrintSession?.setOnClickListener {
             dialog.dismiss()
-            if (mime.startsWith("image")) {
+            if (isImg) {
                 generateAndActionPdf(file, ReportType.CURRENT_PHOTO, download = false)
             } else {
                 generateAndActionPdf(file, ReportType.FULL_SESSION, download = false)
@@ -200,7 +206,7 @@ open class MediaPagerActivity : AppCompatActivity() {
         // Unduh PDF
         v.findViewById<LinearLayout>(R.id.itemDownloadSession)?.setOnClickListener {
             dialog.dismiss()
-            if (mime.startsWith("image")) {
+            if (isImg) {
                 generateAndActionPdf(file, ReportType.CURRENT_PHOTO, download = true)
             } else {
                 generateAndActionPdf(file, ReportType.FULL_SESSION, download = true)
@@ -208,6 +214,7 @@ open class MediaPagerActivity : AppCompatActivity() {
         }
 
         dialog.show()
+        btnPrintSession?.requestFocus()
     }
 
     private enum class ReportType {

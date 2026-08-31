@@ -355,10 +355,14 @@ class SessionMediaActivity : AppCompatActivity() {
         dialog.behavior.skipCollapsed = true
         applyRoundedTop(dialog)
 
+        val isSingleImg = files.size == 1 && files[0].extension.equals("jpg", true)
+        v.findViewById<TextView>(R.id.tvTitle)?.text = if (files.isNotEmpty()) "Cetak & Bagikan (${files.size} dipilih)" else "Cetak & Bagikan Media"
+        v.findViewById<TextView>(R.id.tvPrintSessionLabel)?.text = if (isSingleImg) "Cetak Foto" else "Cetak Sesi"
+
         v.findViewById<ImageButton>(R.id.btnClose).setOnClickListener { dialog.dismiss() }
 
         v.findViewById<LinearLayout>(R.id.itemCloud).setOnClickListener {
-            Toast.makeText(this, "Dalam Pengembangan", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Fitur Cloud dalam pengembangan", Toast.LENGTH_SHORT).show()
             dialog.dismiss()
         }
 
@@ -383,7 +387,8 @@ class SessionMediaActivity : AppCompatActivity() {
         }
 
         // Cetak Sesi / Media Terpilih
-        v.findViewById<LinearLayout>(R.id.itemPrintSession)?.setOnClickListener {
+        val btnPrintSession = v.findViewById<LinearLayout>(R.id.itemPrintSession)
+        btnPrintSession?.setOnClickListener {
             dialog.dismiss()
             generateAndActionPdf(files, sessionOnly = true, download = false)
         }
@@ -395,6 +400,7 @@ class SessionMediaActivity : AppCompatActivity() {
         }
 
         dialog.show()
+        btnPrintSession?.requestFocus()
     }
 
     /**

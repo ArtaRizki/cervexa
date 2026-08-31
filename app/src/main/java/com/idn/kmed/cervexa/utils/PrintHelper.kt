@@ -53,18 +53,60 @@ object PrintHelper {
             Toast.makeText(activity, "Berkas bukan format PDF", Toast.LENGTH_SHORT).show()
             return
         }
+
         val pm = activity.getSystemService(Context.PRINT_SERVICE) as? PrintManager
-        if (pm == null) {
-            Toast.makeText(activity, "Layanan cetak sistem tidak tersedia di perangkat ini. Membuka opsi bagikan...", Toast.LENGTH_SHORT).show()
-            sharePdf(activity, pdfFile)
+        var printStarted = false
+
+        if (pm != null) {
+            runCatching {
+                pm.print(jobName, PdfPrintDocumentAdapter(pdfFile), null)
+                printStarted = true
+            }.onFailure { e ->
+                e.printStackTrace()
+            }
+        }
+
+        if (!printStarted) {
+            // Android TV / device tanpa PrintSpooler:
+            // Simpan ke Downloads dan tampilkan dialog ramah TV / remote
+            val saved = downloadPdf(activity, pdfFile, pdfFile.name)
+            showTvOrFallbackPrintDialog(activity, pdfFile, saved)
+        }
+    }
+
+    private fun showTvOrFallbackPrintDialog(activity: Activity, pdfFile: File, savedToDownloads: Boolean) {
+        val msg = if (savedToDownloads) {
+            "Layanan cetak langsung (Print Spooler) tidak tersedia di perangkat ini.\n\nLaporan PDF berhasil disimpan ke folder Download:\n${pdfFile.name}"
+        } else {
+            "Layanan cetak tidak tersedia di perangkat ini."
+        }
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(activity, com.idn.kmed.cervexa.R.style.MyAlertDialogTheme)
+            .setTitle("Laporan PDF Siap")
+            .setMessage(msg)
+            .setPositiveButton("Buka PDF") { _, _ ->
+                openPdfViewer(activity, pdfFile)
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
+    }
+
+    fun openPdfViewer(activity: Activity, pdfFile: File) {
+        val uri = try {
+            FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", pdfFile)
+        } catch (e: Exception) {
+            Toast.makeText(activity, "Tidak dapat membuka file: ${e.message}", Toast.LENGTH_SHORT).show()
             return
         }
-        runCatching {
-            pm.print(jobName, PdfPrintDocumentAdapter(pdfFile), null)
-        }.onFailure { e ->
-            e.printStackTrace()
-            Toast.makeText(activity, "Gagal membuka layanan cetak: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-            sharePdf(activity, pdfFile)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/pdf")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            activity.startActivity(intent)
+        } catch (_: Exception) {
+            Toast.makeText(activity, "Tidak ada aplikasi pembuka PDF terpasang", Toast.LENGTH_SHORT).show()
         }
     }
 

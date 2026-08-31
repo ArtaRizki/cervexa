@@ -54,6 +54,16 @@ object PrintHelper {
             return
         }
 
+        val isTv = DeviceTypeDetector.isTvDevice(activity)
+        if (isTv) {
+            // Android TV / STB tidak memiliki PrintSpooler UI sistem
+            // Simpan langsung ke Downloads dan tampilkan dialog sukses untuk TV
+            val saved = downloadPdf(activity, pdfFile, pdfFile.name)
+            showTvOrFallbackPrintDialog(activity, pdfFile, saved)
+            return
+        }
+
+        // Smartphone / Tablet: Gunakan PrintManager sistem
         val pm = activity.getSystemService(Context.PRINT_SERVICE) as? PrintManager
         var printStarted = false
 
@@ -67,8 +77,6 @@ object PrintHelper {
         }
 
         if (!printStarted) {
-            // Android TV / device tanpa PrintSpooler:
-            // Simpan ke Downloads dan tampilkan dialog ramah TV / remote
             val saved = downloadPdf(activity, pdfFile, pdfFile.name)
             showTvOrFallbackPrintDialog(activity, pdfFile, saved)
         }

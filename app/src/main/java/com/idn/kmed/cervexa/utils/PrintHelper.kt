@@ -83,39 +83,38 @@ object PrintHelper {
     }
 
     private fun showTvOrFallbackPrintDialog(activity: Activity, pdfFile: File, savedToDownloads: Boolean) {
+        if (activity.isFinishing || activity.isDestroyed) return
+
         val msg = if (savedToDownloads) {
-            "Layanan cetak langsung (Print Spooler) tidak tersedia di perangkat ini.\n\nLaporan PDF berhasil disimpan ke folder Download:\n${pdfFile.name}"
+            "Laporan PDF berhasil dibuat dan disimpan di folder Download:\n\n${pdfFile.name}"
         } else {
-            "Layanan cetak tidak tersedia di perangkat ini."
+            "Laporan PDF selesai dibuat (${pdfFile.name})."
         }
 
         com.google.android.material.dialog.MaterialAlertDialogBuilder(activity, com.idn.kmed.cervexa.R.style.MyAlertDialogTheme)
-            .setTitle("Laporan PDF Siap")
+            .setTitle("📄 Laporan PDF Siap")
             .setMessage(msg)
-            .setPositiveButton("Buka PDF") { _, _ ->
+            .setPositiveButton("Lihat Dokumen") { _, _ ->
                 openPdfViewer(activity, pdfFile)
             }
             .setNegativeButton("Tutup", null)
             .show()
     }
 
-    fun openPdfViewer(activity: Activity, pdfFile: File) {
-        val uri = try {
-            FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", pdfFile)
-        } catch (e: Exception) {
-            Toast.makeText(activity, "Tidak dapat membuka file: ${e.message}", Toast.LENGTH_SHORT).show()
+    /**
+     * Buka PDF menggunakan In-App PDF Viewer bawaan Cervexa.
+     * Tidak membutuhkan aplikasi pihak ketiga / external viewer apapun.
+     */
+    fun openPdfViewer(activity: Activity, pdfFile: File, title: String? = null) {
+        if (!pdfFile.exists()) {
+            Toast.makeText(activity, "Berkas tidak ditemukan", Toast.LENGTH_SHORT).show()
             return
         }
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/pdf")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intent = Intent(activity, com.idn.kmed.cervexa.gallery.PdfViewerActivity::class.java).apply {
+            putExtra("pdf_path", pdfFile.absolutePath)
+            putExtra("pdf_title", title ?: pdfFile.name)
         }
-        try {
-            activity.startActivity(intent)
-        } catch (_: Exception) {
-            Toast.makeText(activity, "Tidak ada aplikasi pembuka PDF terpasang", Toast.LENGTH_SHORT).show()
-        }
+        activity.startActivity(intent)
     }
 
     /* ── 2. SIMPAN / DOWNLOAD PDF ───────────────────────────────────────── */

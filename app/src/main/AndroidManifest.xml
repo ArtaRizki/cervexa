@@ -149,6 +149,10 @@
             android:name=".gallery.SessionMediaActivity"
             android:exported="false" />
         <activity
+            android:name=".gallery.PdfViewerActivity"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:exported="false" />
+        <activity
             android:name=".settings.SystemInfoActivity"
             android:exported="false" />
         <activity

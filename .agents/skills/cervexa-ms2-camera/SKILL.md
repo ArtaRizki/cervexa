@@ -414,17 +414,34 @@ Aplikasi mencoba URL satu per satu hingga berhasil terkoneksi.
 ### 4. Smart TV / STB Printing & Print Bridge System (Solusi Cetak Tanpa Konflik Wi-Fi)
 - **Konteks & Masalah**:
   - Android TV / STB (seperti OUBEISI Smart TV 24/25" Android 11) tidak memiliki sistem `PrintSpooler.apk` atau driver bawaan, dan aplikasi mobile seperti HP Smart / Epson iPrint sulit digunakan dengan remote TV.
-  - **Konflik Wi-Fi Tunggal**: Kamera mikroskop Elikliv MS2 memancarkan Hotspot Wi-Fi mandiri tanpa internet. Saat Smart TV streaming, chip Wi-Fi TV terkunci ke hotspot MS2, sehingga TV tidak bisa mengakses printer nirkabel yang ada di jaringan router klinik.
-- **Solusi Arsitektur Dual-Network**:
-  - **Wi-Fi TV**: Dibiarkan selalu terhubung ke hotspot kamera Elikliv MS2 (live stream 100% lancar, tidak pernah putus).
-  - **Kabel LAN (Ethernet RJ45)**: TV dicolok kabel LAN ke router/switch klinik tempat PC dan printer berada. Android TV mendukung Wi-Fi + LAN simultan!
+  - **Konflik Wi-Fi Tunggal**: Kamera mikroskop Elikliv MS2 memancarkan Hotspot Wi-Fi mandiri tanpa internet. Saat Smart TV streaming, chip Wi-Fi TV terkunci ke hotspot MS2, sehingga TV tidak bisa mengakses printer nirkabel (seperti HP Smart Tank 580/590 series) yang ada di jaringan router klinik.
+
+- **Dua Mode Operasional di Lapangan**:
+  1. **Mode A: Dual-Network (Rekomendasi Utama: Kabel LAN atau Wi-Fi Extender + LAN)**
+     - **Wi-Fi TV**: Dibiarkan selalu terhubung ke hotspot kamera Elikliv MS2 (live stream 100% lancar, tidak pernah putus).
+     - **Kabel LAN (Ethernet RJ45)**: TV dicolok kabel LAN ke router/switch klinik (atau via Wi-Fi Range Extender murah dengan port LAN di dekat TV yang connect ke Wi-Fi klinik).
+     - **Zero-Switching**: Dokter memeriksa pasien dan langsung klik cetak tanpa pernah putus-nyambung Wi-Fi.
+  2. **Mode B: Single Wi-Fi / Tanpa Kabel LAN (Manual Switch Mode)**
+     - Jika Smart TV **tidak memiliki kabel LAN**:
+       1. Saat pemeriksaan: TV terhubung ke Wi-Fi Kamera MS2 (`wifi_camera_MS2_...`).
+       2. Saat selesai & mau cetak: TV diputus dari Wi-Fi Kamera, lalu disambungkan ke Wi-Fi klinik (`PT. KHI`) tempat Laptop Bridge (`192.168.1.7:9123`) berada.
+       3. Buka Cervexa ➡️ Cetak: Aplikasi otomatis fallback ke jalur Wi-Fi (`fallbackClient`) dan mengirim PDF ke Laptop Bridge.
+       4. Selesai cetak: Sambungkan kembali TV ke Wi-Fi Kamera untuk pasien berikutnya.
+
 - **Implementasi Cervexa Print Bridge System**:
   1. **Modul PC (`tools/print-bridge/`)**:
-     - `server.py`: Server HTTP ringan (Python standard library, port 9123). Otomatis mendeteksi printer default Windows (misal: HP Smart Tank 480/580 series), menyediakan endpoint `GET /status` dan `POST /print` untuk silent printing berkas PDF rekam medis tanpa popup.
-     - `run_bridge.bat`: Skrip satu-klik untuk menjalankan server di PC kasir/dokter klinik.
+     - `server.py`: Server HTTP ringan (Python standard library, port 9123). Otomatis mendeteksi printer default Windows (via `win32print` / PowerShell / WMI), menyediakan endpoint `GET /status` dan `POST /print` untuk silent printing berkas PDF rekam medis tanpa popup.
+     - Auto-discovery SumatraPDF: Mencari eksekutabel di `Program Files`, `Program Files (x86)`, `LOCALAPPDATA`, folder `bin/`, atau `PATH`.
+     - `run_bridge.bat`: Skrip satu-klik untuk menjalankan server di PC klinik.
+     - `requirements.txt`: Dependensi minimal (`pywin32`).
      - `README.md`: Panduan instalasi dan penggunaan untuk staf klinik.
   2. **Modul Android Cervexa**:
-     - `PrintBridgeClient.kt`: Klien OkHttp & Coroutines untuk cek status printer dan upload berkas PDF ke server bridge.
-     - `SettingsActivity.kt` & `activity_settings.xml`: Kartu konfigurasi Print Bridge (toggle aktif, input IP `host:port`, dan tombol uji koneksi realtime).
-     - `PrintHelper.kt`: Di Smart TV atau saat mode bridge aktif, tombol cetak otomatis mengirim PDF ke PC Bridge dengan dialog progress & graceful error fallback (opsi coba lagi, ubah IP, atau buka dokumen in-app jika PC offline).
+     - `PrintBridgeClient.kt`: 
+       - `findEthernetNetwork()`: Mencari network aktif dengan `TRANSPORT_ETHERNET`.
+       - `clientFor()`: Mengikat soket OkHttp secara eksplisit ke `ethernet.socketFactory` (melewati batasan *default network* Android TV dan mengatasi error `ENONET`). Jika tidak ada LAN, otomatis fallback ke default network (Mode B).
+       - `sanitizeHeaderValue()`: Mengonversi karakter non-ASCII (seperti em dash `—` / `0x2014`) menjadi `-` untuk mencegah `IllegalArgumentException` pada OkHttp header `X-Job-Title`.
+       - `getActiveTransportName()`: Diagnostik visual apakah request lewat `LAN/Ethernet` atau `WiFi/Sistem`.
+     - `SettingsActivity.kt` & `activity_settings.xml`: Kartu konfigurasi Print Bridge (toggle aktif, input IP `host:port`, dan tombol uji koneksi realtime dengan label status jalur jaringan).
+     - `PrintHelper.kt`: Di Smart TV atau saat mode bridge aktif, tombol cetak otomatis mengirim PDF ke PC Bridge dengan dialog progress & graceful error handling (menampilkan jalur aktif dan petunjuk cek kabel LAN saat terjadi ENONET).
+
 

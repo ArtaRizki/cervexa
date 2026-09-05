@@ -396,7 +396,7 @@ open class MediaPagerActivity : AppCompatActivity() {
                         ReportType.PATIENT_SUMMARY -> "Data Pasien"
                         ReportType.FULL_SESSION -> "Sesi Pemeriksaan"
                     }
-                    PrintHelper.printPdf(this@MediaPagerActivity, pdf, "Cervexa — $label")
+                    PrintHelper.printPdf(this@MediaPagerActivity, pdf, "Cervexa - $label")
                 }
             }
         }

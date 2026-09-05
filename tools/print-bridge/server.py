@@ -99,10 +99,19 @@ def print_pdf_file(pdf_path, printer_name=None):
     """
     Kirim berkas PDF ke printer secara silent.
     """
-    sumatra_path = os.path.join(BIN_DIR, "SumatraPDF.exe")
-    # Cek apakah SumatraPDF ada di folder bin atau PATH
-    if not os.path.exists(sumatra_path):
-        sumatra_path = shutil.which("SumatraPDF.exe")
+    # Cek apakah SumatraPDF ada di folder bin, PATH, atau Program Files standar
+    sumatra_path = None
+    candidates = [
+        os.path.join(BIN_DIR, "SumatraPDF.exe"),
+        shutil.which("SumatraPDF.exe") or "",
+        os.path.join(os.environ.get("PROGRAMFILES", r"C:\Program Files"), "SumatraPDF", "SumatraPDF.exe"),
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"), "SumatraPDF", "SumatraPDF.exe"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "SumatraPDF", "SumatraPDF.exe"),
+    ]
+    for c in candidates:
+        if c and os.path.isfile(c):
+            sumatra_path = c
+            break
 
     if sumatra_path and os.path.exists(sumatra_path):
         cmd = [sumatra_path, "-silent"]

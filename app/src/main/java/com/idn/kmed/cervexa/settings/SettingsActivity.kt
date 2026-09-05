@@ -109,20 +109,22 @@ class SettingsActivity : AppCompatActivity() {
             tvBridgeStatus.setTextColor(Color.parseColor("#6B7280"))
 
             lifecycleScope.launch {
-                val result = PrintBridgeClient.checkStatus(inputHost)
+                val result = PrintBridgeClient.checkStatus(this@SettingsActivity, inputHost)
+                val transport = PrintBridgeClient.getActiveTransportName(this@SettingsActivity)
                 pbTestingBridge.visibility = View.GONE
                 btnTestBridge.isEnabled = true
 
                 result.onSuccess { status ->
                     if (status.isReady) {
-                        tvBridgeStatus.text = "✓ Terhubung: ${status.defaultPrinter}"
+                        tvBridgeStatus.text = "✓ Terhubung [$transport]: ${status.defaultPrinter}"
                         tvBridgeStatus.setTextColor(Color.parseColor("#10B981"))
                     } else {
-                        tvBridgeStatus.text = "⚠️ Terhubung, status printer belum siap"
+                        tvBridgeStatus.text = "⚠️ Terhubung [$transport], status printer belum siap"
                         tvBridgeStatus.setTextColor(Color.parseColor("#F59E0B"))
                     }
                 }.onFailure { err ->
-                    tvBridgeStatus.text = "✕ Gagal: ${err.localizedMessage ?: err.message}"
+                    val extra = if (err.message?.contains("ENONET", ignoreCase = true) == true) " (Cek kabel LAN)" else ""
+                    tvBridgeStatus.text = "✕ Gagal [$transport]: ${err.localizedMessage ?: err.message}$extra"
                     tvBridgeStatus.setTextColor(Color.parseColor("#EF4444"))
                 }
             }

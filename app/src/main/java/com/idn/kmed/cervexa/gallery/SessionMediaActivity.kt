@@ -507,7 +507,7 @@ class SessionMediaActivity : AppCompatActivity() {
                         sessionOnly -> "Sesi Pemeriksaan"
                         else -> "Data Pasien"
                     }
-                    PrintHelper.printPdf(this@SessionMediaActivity, pdf, "Cervexa — $label")
+                    PrintHelper.printPdf(this@SessionMediaActivity, pdf, "Cervexa - $label")
                 }
                 if (selectionMode) {
                     enterSelectionMode(false)

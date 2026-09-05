@@ -19,6 +19,11 @@ import android.content.ContentValues
 import android.os.Environment
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -37,10 +42,9 @@ object PrintHelper {
     /* ── 1. CETAK KE PRINTER JARINGAN ───────────────────────────────────── */
 
     /**
-     * Buka dialog cetak sistem Android.
-     * Printer Wi-Fi (Mopria/IPP) dan printer cloud otomatis terdeteksi.
+     * Buka dialog cetak sistem Android atau kirim via Print Bridge.
      *
-     * @param activity  Activity aktif (untuk context PrintManager)
+     * @param activity  Activity aktif (untuk context PrintManager / CoroutineScope)
      * @param pdfFile   File PDF yang sudah digenerate
      * @param jobName   Nama pekerjaan cetak (tampil di antrian printer)
      */
@@ -55,15 +59,22 @@ object PrintHelper {
         }
 
         val isTv = DeviceTypeDetector.isTvDevice(activity)
-        if (isTv) {
-            // Android TV / STB tidak memiliki PrintSpooler UI sistem
-            // Simpan langsung ke Downloads dan tampilkan dialog sukses untuk TV
-            val saved = downloadPdf(activity, pdfFile, pdfFile.name)
-            showTvOrFallbackPrintDialog(activity, pdfFile, saved)
+        val isBridgeEnabled = PrintBridgeClient.isBridgeEnabled(activity)
+        val bridgeHost = PrintBridgeClient.getBridgeHost(activity)
+
+        // 1. Jika Print Bridge diaktifkan (atau Smart TV dengan IP Bridge yang sudah diset)
+        if (isBridgeEnabled || (isTv && bridgeHost.isNotBlank())) {
+            printViaBridge(activity, pdfFile, jobName, bridgeHost)
             return
         }
 
-        // Smartphone / Tablet: Gunakan PrintManager sistem
+        // 2. Jika Smart TV tanpa konfigurasi Print Bridge
+        if (isTv) {
+            showTvPrintOptionsDialog(activity, pdfFile, jobName)
+            return
+        }
+
+        // 3. Smartphone / Tablet: Gunakan PrintManager sistem
         val pm = activity.getSystemService(Context.PRINT_SERVICE) as? PrintManager
         var printStarted = false
 
@@ -80,6 +91,85 @@ object PrintHelper {
             val saved = downloadPdf(activity, pdfFile, pdfFile.name)
             showTvOrFallbackPrintDialog(activity, pdfFile, saved)
         }
+    }
+
+    private fun printViaBridge(activity: Activity, pdfFile: File, jobName: String, bridgeHost: String) {
+        if (activity.isFinishing || activity.isDestroyed) return
+
+        if (bridgeHost.isBlank()) {
+            showTvPrintOptionsDialog(activity, pdfFile, jobName)
+            return
+        }
+
+        val progressDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(activity, com.idn.kmed.cervexa.R.style.MyAlertDialogTheme)
+            .setTitle("🖨️ Mengirim ke Printer")
+            .setMessage("Menghubungkan ke Print Bridge ($bridgeHost)...")
+            .setCancelable(false)
+            .create()
+        progressDialog.window?.setBackgroundDrawableResource(com.idn.kmed.cervexa.R.drawable.bg_dialog_custom)
+        progressDialog.show()
+
+        val scope = if (activity is androidx.lifecycle.LifecycleOwner) {
+            activity.lifecycleScope
+        } else {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
+        }
+
+        scope.launch {
+            val result = PrintBridgeClient.sendPrintJob(bridgeHost, pdfFile, jobName)
+            if (!activity.isFinishing && !activity.isDestroyed) {
+                progressDialog.dismiss()
+            }
+
+            result.onSuccess { msg ->
+                Toast.makeText(activity, "✓ $msg", Toast.LENGTH_LONG).show()
+                // Otomatis simpan juga ke unduhan sebagai cadangan
+                downloadPdf(activity, pdfFile, pdfFile.name)
+            }.onFailure { err ->
+                showBridgeErrorDialog(activity, pdfFile, jobName, bridgeHost, err.localizedMessage ?: err.message.orEmpty())
+            }
+        }
+    }
+
+    private fun showBridgeErrorDialog(
+        activity: Activity,
+        pdfFile: File,
+        jobName: String,
+        bridgeHost: String,
+        errorMessage: String
+    ) {
+        if (activity.isFinishing || activity.isDestroyed) return
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(activity, com.idn.kmed.cervexa.R.style.MyAlertDialogTheme)
+            .setTitle("⚠️ Gagal Mencetak via Print Bridge")
+            .setMessage("Tidak dapat mengirim berkas ke PC Print Bridge di $bridgeHost.\n\nDetail: $errorMessage\n\nPastikan PC Bridge aktif dan kabel LAN Smart TV terhubung.")
+            .setPositiveButton("Coba Lagi") { _, _ ->
+                printViaBridge(activity, pdfFile, jobName, bridgeHost)
+            }
+            .setNeutralButton("Pengaturan IP") { _, _ ->
+                activity.startActivity(Intent(activity, com.idn.kmed.cervexa.settings.SettingsActivity::class.java))
+            }
+            .setNegativeButton("Lihat Dokumen") { _, _ ->
+                openPdfViewer(activity, pdfFile)
+            }
+            .show()
+    }
+
+    private fun showTvPrintOptionsDialog(activity: Activity, pdfFile: File, jobName: String) {
+        if (activity.isFinishing || activity.isDestroyed) return
+
+        val saved = downloadPdf(activity, pdfFile, pdfFile.name)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(activity, com.idn.kmed.cervexa.R.style.MyAlertDialogTheme)
+            .setTitle("📄 Cetak Dokumen Rekam Medis")
+            .setMessage("Laporan PDF berhasil dibuat (${pdfFile.name}).\n\nUntuk mencetak langsung ke printer HP, hubungkan kabel LAN dan aktifkan fitur Print Bridge.")
+            .setPositiveButton("Atur Print Bridge") { _, _ ->
+                activity.startActivity(Intent(activity, com.idn.kmed.cervexa.settings.SettingsActivity::class.java))
+            }
+            .setNeutralButton("Lihat Dokumen") { _, _ ->
+                openPdfViewer(activity, pdfFile)
+            }
+            .setNegativeButton("Tutup", null)
+            .show()
     }
 
     private fun showTvOrFallbackPrintDialog(activity: Activity, pdfFile: File, savedToDownloads: Boolean) {

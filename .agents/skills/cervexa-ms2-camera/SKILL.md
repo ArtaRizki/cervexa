@@ -410,3 +410,21 @@ Aplikasi mencoba URL satu per satu hingga berhasil terkoneksi.
   2. Buat tema di `themes.xml` yang mewarisi tema aplikasi (`AppTheme.NoActionBar`), dengan `android:windowFullscreen=true` dan `android:windowNoTitle=true`.
   3. Panggil `window.setFlags(FLAG_FULLSCREEN, FLAG_FULLSCREEN)` di `onCreate` **sebelum** `setContentView`.
   4. Panggil logika `window.insetsController` (untuk Android 11+) **setelah** `setContentView`.
+
+### 4. Smart TV / STB Printing & Print Bridge System (Solusi Cetak Tanpa Konflik Wi-Fi)
+- **Konteks & Masalah**:
+  - Android TV / STB (seperti OUBEISI Smart TV 24/25" Android 11) tidak memiliki sistem `PrintSpooler.apk` atau driver bawaan, dan aplikasi mobile seperti HP Smart / Epson iPrint sulit digunakan dengan remote TV.
+  - **Konflik Wi-Fi Tunggal**: Kamera mikroskop Elikliv MS2 memancarkan Hotspot Wi-Fi mandiri tanpa internet. Saat Smart TV streaming, chip Wi-Fi TV terkunci ke hotspot MS2, sehingga TV tidak bisa mengakses printer nirkabel yang ada di jaringan router klinik.
+- **Solusi Arsitektur Dual-Network**:
+  - **Wi-Fi TV**: Dibiarkan selalu terhubung ke hotspot kamera Elikliv MS2 (live stream 100% lancar, tidak pernah putus).
+  - **Kabel LAN (Ethernet RJ45)**: TV dicolok kabel LAN ke router/switch klinik tempat PC dan printer berada. Android TV mendukung Wi-Fi + LAN simultan!
+- **Implementasi Cervexa Print Bridge System**:
+  1. **Modul PC (`tools/print-bridge/`)**:
+     - `server.py`: Server HTTP ringan (Python standard library, port 9123). Otomatis mendeteksi printer default Windows (misal: HP Smart Tank 480/580 series), menyediakan endpoint `GET /status` dan `POST /print` untuk silent printing berkas PDF rekam medis tanpa popup.
+     - `run_bridge.bat`: Skrip satu-klik untuk menjalankan server di PC kasir/dokter klinik.
+     - `README.md`: Panduan instalasi dan penggunaan untuk staf klinik.
+  2. **Modul Android Cervexa**:
+     - `PrintBridgeClient.kt`: Klien OkHttp & Coroutines untuk cek status printer dan upload berkas PDF ke server bridge.
+     - `SettingsActivity.kt` & `activity_settings.xml`: Kartu konfigurasi Print Bridge (toggle aktif, input IP `host:port`, dan tombol uji koneksi realtime).
+     - `PrintHelper.kt`: Di Smart TV atau saat mode bridge aktif, tombol cetak otomatis mengirim PDF ke PC Bridge dengan dialog progress & graceful error fallback (opsi coba lagi, ubah IP, atau buka dokumen in-app jika PC offline).
+

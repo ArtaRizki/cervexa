@@ -212,6 +212,8 @@ class VideoFragmentMobile : Fragment() {
         if (record.get()) stopVideoRecording()
         stopVlcStream()
         hudHandler.removeCallbacks(hudTick)
+        val cm = requireContext().applicationContext.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        runCatching { cm?.bindProcessToNetwork(null) }
     }
 
     override fun onResume() {

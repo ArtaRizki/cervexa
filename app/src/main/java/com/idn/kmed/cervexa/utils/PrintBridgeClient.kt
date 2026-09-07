@@ -20,7 +20,8 @@ data class PrintBridgeStatus(
     val isReady: Boolean,
     val defaultPrinter: String,
     val availablePrinters: List<String>,
-    val rawMessage: String
+    val rawMessage: String,
+    val transportName: String = "Jaringan"
 )
 
 object PrintBridgeClient {
@@ -30,70 +31,118 @@ object PrintBridgeClient {
     const val PREF_KEY_BRIDGE_ENABLED = "print_bridge_enabled"
     const val PREF_KEY_BRIDGE_HOST = "print_bridge_host"
 
-    private val baseClientBuilder = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
-
-    private val fallbackClient = baseClientBuilder.build()
+    data class NetworkRoute(
+        val network: Network?,
+        val transportName: String
+    )
 
     /**
-     * Cari Network aktif bertipe Ethernet (kabel LAN ke PC Print Bridge).
-     *
-     * Kenapa perlu: kalau Smart TV sekaligus terhubung ke WiFi (kamera MS2)
-     * dan Ethernet, Android TV memprioritaskan WiFi sebagai default network.
-     * Jika jaringan Ethernet tidak memiliki akses internet langsung (LAN offline klinik),
-     * Android TV bahkan tidak menjadikannya default network sehingga socket biasa
-     * gagal total dengan error ENONET (Machine is not on the network).
-     * Dengan mem-bind socket secara eksplisit ke Network Ethernet ini, request
-     * Print Bridge selalu mengalir lewat kabel LAN tanpa terganggu koneksi WiFi kamera.
+     * Mencari interface jaringan terbaik untuk berkomunikasi dengan Print Bridge:
+     * 1. Kabel LAN (TRANSPORT_ETHERNET) -> Jika Smart TV dicolok kabel LAN (Mode A Dual-Network)
+     * 2. Wi-Fi (TRANSPORT_WIFI) -> Jika Smart TV terhubung ke Wi-Fi klinik/router (Mode B Single Wi-Fi)
+     * 3. Jaringan Aktif Sistem -> Fallback ke default active network
      */
-    fun findEthernetNetwork(context: Context): Network? {
+    fun findTargetNetwork(context: Context): NetworkRoute {
         val cm = context.applicationContext
-            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return null
+            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return NetworkRoute(null, "Tidak ada Network Service")
+
         return runCatching {
             val networks = cm.allNetworks
-            Log.d(TAG, "Mencari network Ethernet... Total network terdeteksi: ${networks.size}")
             var ethNet: Network? = null
+            var wifiNet: Network? = null
+
             for (net in networks) {
                 val caps = cm.getNetworkCapabilities(net) ?: continue
-                val isEth = caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-                val isWifi = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-                Log.d(TAG, "Network $net -> Ethernet: $isEth, WiFi: $isWifi, Caps: $caps")
-                if (isEth && ethNet == null) {
-                    ethNet = net
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                    if (ethNet == null) ethNet = net
+                }
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    if (wifiNet == null) wifiNet = net
                 }
             }
-            ethNet
-        }.getOrNull()
+
+            // Prioritas 1: Kabel LAN / Ethernet (Mode A)
+            if (ethNet != null) {
+                return@runCatching NetworkRoute(ethNet, "LAN/Ethernet")
+            }
+
+            // Prioritas 2: Network aktif saat ini jika bertransport WiFi (Mode B)
+            val active = cm.activeNetwork
+            if (active != null) {
+                val caps = cm.getNetworkCapabilities(active)
+                if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    return@runCatching NetworkRoute(active, "WiFi")
+                }
+            }
+
+            // Prioritas 3: Wi-Fi manapun yang terdeteksi (termasuk jaringan lokal tanpa internet)
+            if (wifiNet != null) {
+                return@runCatching NetworkRoute(wifiNet, "WiFi")
+            }
+
+            // Prioritas 4: Active network apapun
+            if (active != null) {
+                return@runCatching NetworkRoute(active, "Jaringan Aktif")
+            }
+
+            NetworkRoute(null, "Tidak Terhubung")
+        }.getOrElse {
+            NetworkRoute(null, "Tidak Terhubung")
+        }
     }
 
     /**
      * Nama jalur aktif yang dipakai (untuk tampilan UI diagnosis pengguna).
      */
     fun getActiveTransportName(context: Context): String {
-        val eth = findEthernetNetwork(context)
-        return if (eth != null) "LAN/Ethernet" else "WiFi/Sistem"
+        return findTargetNetwork(context).transportName
     }
 
     /**
-     * Client yang di-bind ke Ethernet jika tersedia, sehingga request Print Bridge
-     * tidak terganggu oleh WiFi kamera MS2. Fallback ke client default jika kabel
-     * Ethernet tidak terpasang/terdeteksi.
+     * Membangun OkHttpClient yang terikat ke target network (Ethernet atau WiFi klinik).
+     *
+     * PENTING: Memanggil cm.bindProcessToNetwork(null) terlebih dahulu untuk membersihkan
+     * binding lama ke kamera MS2. Jika proses masih terikat ke netId kamera yang sudah ditutup,
+     * pembuatan socket baru akan dilempar error "ENONET (Machine is not on the network)".
      */
-    private fun clientFor(context: Context): OkHttpClient {
-        val ethernet = findEthernetNetwork(context)
-        if (ethernet != null) {
-            Log.i(TAG, "Menggunakan jalur kabel Ethernet (Network: $ethernet) untuk koneksi Print Bridge")
-            return runCatching {
-                baseClientBuilder.socketFactory(ethernet.socketFactory).build()
-            }.getOrElse { e ->
-                Log.w(TAG, "Gagal mengikat socketFactory ke Ethernet: ${e.message}, fallback ke default")
-                fallbackClient
-            }
+    private fun clientFor(context: Context): Pair<OkHttpClient, String> {
+        val cm = context.applicationContext
+            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val route = findTargetNetwork(context)
+
+        // 1. Bersihkan process binding lama dari kamera MS2 agar libc socket tidak ENONET
+        runCatching {
+            cm?.bindProcessToNetwork(null)
         }
-        Log.i(TAG, "Ethernet tidak terdeteksi, menggunakan default network client")
-        return fallbackClient
+
+        val builder = OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .connectionPool(okhttp3.ConnectionPool(0, 1, TimeUnit.SECONDS))
+
+        // 2. Jika ada network target (Ethernet atau WiFi klinik), bind process & socketFactory ke network tersebut
+        if (route.network != null && cm != null) {
+            Log.i(TAG, "Mengikat PrintBridgeClient ke jalur: ${route.transportName} (${route.network})")
+            runCatching {
+                cm.bindProcessToNetwork(route.network)
+            }
+            runCatching {
+                builder.socketFactory(route.network.socketFactory)
+            }
+            runCatching {
+                builder.dns(object : okhttp3.Dns {
+                    override fun lookup(hostname: String): List<java.net.InetAddress> {
+                        return route.network.getAllByName(hostname).toList()
+                    }
+                })
+            }
+        } else {
+            Log.w(TAG, "Tidak ada network target spesifik, menggunakan routing default sistem")
+        }
+
+        return Pair(builder.build(), route.transportName)
     }
 
     /**
@@ -152,7 +201,9 @@ object PrintBridgeClient {
                 .get()
                 .build()
 
-            clientFor(context).newCall(request).execute().use { response ->
+            val (client, transport) = clientFor(context)
+
+            client.newCall(request).execute().use { response ->
                 val bodyStr = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     throw Exception("Server merespons error HTTP ${response.code}: $bodyStr")
@@ -174,7 +225,8 @@ object PrintBridgeClient {
                     isReady = isReady,
                     defaultPrinter = defaultPrinter,
                     availablePrinters = printers,
-                    rawMessage = bodyStr
+                    rawMessage = bodyStr,
+                    transportName = transport
                 )
             }
         }
@@ -209,7 +261,9 @@ object PrintBridgeClient {
                 reqBuilder.addHeader("X-Printer-Name", sanitizeHeaderValue(printerName))
             }
 
-            clientFor(context).newCall(reqBuilder.build()).execute().use { response ->
+            val (client, _) = clientFor(context)
+
+            client.newCall(reqBuilder.build()).execute().use { response ->
                 val bodyStr = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
                     val errMsg = try {

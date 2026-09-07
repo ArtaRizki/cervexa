@@ -342,6 +342,11 @@ def main():
     print(f"  • Masukkan IP ini pada Pengaturan Smart TV Cervexa:")
     print(f"    --> {local_ip}:{PORT}")
     print("=" * 60)
+    print("  Catatan Jaringan & Firewall:")
+    print("  Jika TV gagal terhubung, pastikan Windows Firewall mengizinkan port 9123.")
+    print("  Perintah izin firewall (PowerShell Admin):")
+    print('  netsh advfirewall firewall add rule name="Cervexa Print Bridge" dir=in action=allow protocol=TCP localport=9123')
+    print("=" * 60)
     print("  Tekan Ctrl+C untuk menghentikan server.\n")
 
     try:

@@ -93,6 +93,9 @@ class SessionMediaActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_session_media)
 
+        val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        runCatching { cm?.bindProcessToNetwork(null) }
+
         onBackPressedDispatcher.addCallback(this) {
             if (selectionMode) enterSelectionMode(false) else finish()
         }

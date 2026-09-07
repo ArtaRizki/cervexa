@@ -43,6 +43,10 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
+        // Bersihkan process network binding lama agar tidak terkunci di network kamera MS2
+        val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        runCatching { cm?.bindProcessToNetwork(null) }
+
         // Toolbar
         val top = findViewById<MaterialToolbar>(R.id.topAppBar)
         top.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
@@ -123,7 +127,7 @@ class SettingsActivity : AppCompatActivity() {
                         tvBridgeStatus.setTextColor(Color.parseColor("#F59E0B"))
                     }
                 }.onFailure { err ->
-                    val extra = if (err.message?.contains("ENONET", ignoreCase = true) == true) " (Cek kabel LAN)" else ""
+                    val extra = if (err.message?.contains("ENONET", ignoreCase = true) == true) " (Pastikan Wi-Fi atau kabel LAN terhubung)" else ""
                     tvBridgeStatus.text = "✕ Gagal [$transport]: ${err.localizedMessage ?: err.message}$extra"
                     tvBridgeStatus.setTextColor(Color.parseColor("#EF4444"))
                 }

@@ -58,6 +58,12 @@ class VideoActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        runCatching { cm?.bindProcessToNetwork(null) }
+    }
+
     companion object {
         private const val TAG = "VideoActivity"
     }

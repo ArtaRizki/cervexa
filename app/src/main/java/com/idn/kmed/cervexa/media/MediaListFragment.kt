@@ -185,6 +185,10 @@ class MediaListFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        // Bersihkan process network binding lama dari kamera MS2 agar tidak memblokir akses Wi-Fi klinik / Print Bridge
+        val cm = requireContext().applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        runCatching { cm?.bindProcessToNetwork(null) }
+
         // Refresh List Data
         loaded = 0
         adapter.reset()

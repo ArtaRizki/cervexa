@@ -267,6 +267,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         clockJob?.cancel()
         stopPhoneCamera()
         stopVlcStream()
+        val cm = requireContext().applicationContext.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        runCatching { cm?.bindProcessToNetwork(null) }
         prefs.edit().apply {
             putFloat("image_brightness", brightness)
             putFloat("image_contrast", contrast)

@@ -142,12 +142,14 @@ object PrintHelper {
 
         val activeTransport = PrintBridgeClient.getActiveTransportName(activity)
         val extraHint = if (errorMessage.contains("ENONET", ignoreCase = true)) {
-            "\n\nPerhatian: Sistem Android TV tidak mendeteksi koneksi jaringan aktif untuk jalur $activeTransport. Pastikan kabel LAN terpasang kencang ke Smart TV."
+            "\n\nPerhatian: Sistem Android TV tidak mendeteksi koneksi jaringan aktif untuk jalur $activeTransport. Pastikan Wi-Fi terhubung ke router klinik atau kabel LAN terpasang."
+        } else if (errorMessage.contains("Failed to connect", ignoreCase = true) || errorMessage.contains("Connection refused", ignoreCase = true) || errorMessage.contains("timed out", ignoreCase = true)) {
+            "\n\nTips: Pastikan Print Bridge Server aktif di Laptop ($bridgeHost) dan Windows Firewall mengizinkan port 9123."
         } else ""
 
         com.google.android.material.dialog.MaterialAlertDialogBuilder(activity, com.idn.kmed.cervexa.R.style.MyAlertDialogTheme)
             .setTitle("⚠️ Gagal Mencetak via Print Bridge")
-            .setMessage("Tidak dapat mengirim berkas ke PC Print Bridge di $bridgeHost.\n\nJalur Jaringan: $activeTransport\nDetail: $errorMessage$extraHint\n\nPastikan PC Bridge aktif dan kabel LAN Smart TV terhubung.")
+            .setMessage("Tidak dapat mengirim berkas ke PC Print Bridge di $bridgeHost.\n\nJalur Jaringan: $activeTransport\nDetail: $errorMessage$extraHint")
             .setPositiveButton("Coba Lagi") { _, _ ->
                 printViaBridge(activity, pdfFile, jobName, bridgeHost)
             }

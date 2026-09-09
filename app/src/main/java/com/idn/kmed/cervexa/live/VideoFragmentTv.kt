@@ -161,27 +161,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         color = 0xFF000000.toInt()
         style = Paint.Style.FILL
     }
-    private val paintCaptureEnhance = Paint().apply {
-        val cm = android.graphics.ColorMatrix()
-        val contrastVal = 1.05f
-        val brightnessVal = 0f
-        val scale = contrastVal
-        val translate = brightnessVal + (1f - contrastVal) * 128f
-        cm.set(
-            floatArrayOf(
-                scale, 0f, 0f, 0f, translate,
-                0f, scale, 0f, 0f, translate,
-                0f, 0f, scale, 0f, translate,
-                0f, 0f, 0f, 1f, 0f
-            )
-        )
-        val sat = android.graphics.ColorMatrix()
-        sat.setSaturation(1.05f)
-        cm.postConcat(sat)
-        colorFilter = android.graphics.ColorMatrixColorFilter(cm)
-        isAntiAlias = false
-        isDither = false
-    }
     private val paintEnhance = Paint().apply { isAntiAlias = false; isDither = false }
 
     // ===== Overlay Text Scale Cache =====
@@ -926,13 +905,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
         } else src
 
-        // Kita buat blank bitmap baru agar bisa menggambar safeSrc dengan Paint (untuk apply filter hasil)
-        val bitmap = Bitmap.createBitmap(safeSrc.width, safeSrc.height, Bitmap.Config.ARGB_8888)
+        // Gunakan mutable bitmap langsung tanpa filter saturasi/kontras buatan agar warna hasil snapshot
+        // identik (WYSIWYG) dengan apa yang dilihat dokter di layar Smart TV
+        val bitmap = if (safeSrc.isMutable) safeSrc else safeSrc.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(bitmap)
-
-        // Gambar gambar asli dengan filter enhancement untuk HASIL foto/video
-        canvas.drawBitmap(safeSrc, 0f, 0f, paintCaptureEnhance)
-        if (safeSrc !== src && !safeSrc.isRecycled) {
+        if (safeSrc !== src && safeSrc !== bitmap && !safeSrc.isRecycled) {
             safeSrc.recycle()
         }
 

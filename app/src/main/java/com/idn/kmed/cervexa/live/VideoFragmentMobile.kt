@@ -9,6 +9,8 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.net.Uri
 import android.os.Bundle
@@ -857,8 +859,20 @@ class VideoFragmentMobile : Fragment() {
             Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
         } else src
         
-        val bitmap = if (safeSrc.isMutable) safeSrc else safeSrc.copy(Bitmap.Config.ARGB_8888, true)
+        // Terapkan matriks kalibrasi warna yang sama dengan live preview (WYSIWYG)
+        // TextureView.getBitmap() hanya mengambil raw frame, sehingga ColorMatrix GPU harus digambar ke Canvas
+        val bitmap = Bitmap.createBitmap(safeSrc.width, safeSrc.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
+        val paintFilter = Paint().apply {
+            colorFilter = ColorMatrixColorFilter(buildCalibrationColorMatrix())
+            isAntiAlias = false
+            isDither = false
+        }
+        canvas.drawBitmap(safeSrc, 0f, 0f, paintFilter)
+
+        if (safeSrc !== src && !safeSrc.isRecycled) {
+            safeSrc.recycle()
+        }
 
         // >>> FIX UTAMA: font & padding mengikuti ukuran frame <<<
         ensureOverlayTextSize(bitmap.height)
@@ -1287,6 +1301,43 @@ class VideoFragmentMobile : Fragment() {
     private var currentBlue = 0.95f
     private var currentHue = 0f
 
+    private fun buildCalibrationColorMatrix(
+        brightnessOffset: Float = currentBrightness,
+        contrast: Float = currentContrast,
+        saturation: Float = currentSaturation,
+        redBoost: Float = currentRed,
+        greenBoost: Float = currentGreen,
+        blueBoost: Float = currentBlue,
+        hueOffset: Float = currentHue
+    ): ColorMatrix {
+        val cm = ColorMatrix()
+        cm.setSaturation(saturation)
+
+        // Hue rotation
+        if (hueOffset != 0f) {
+            val theta = Math.PI * hueOffset / 180.0
+            val c = Math.cos(theta).toFloat()
+            val s = Math.sin(theta).toFloat()
+
+            val hueMatrix = ColorMatrix(floatArrayOf(
+                0.213f + 0.787f * c - 0.213f * s, 0.715f - 0.715f * c - 0.715f * s, 0.072f - 0.072f * c + 0.928f * s, 0f, 0f,
+                0.213f - 0.213f * c + 0.143f * s, 0.715f + 0.285f * c + 0.140f * s, 0.072f - 0.072f * c - 0.283f * s, 0f, 0f,
+                0.213f - 0.213f * c - 0.787f * s, 0.715f - 0.715f * c + 0.715f * s, 0.072f + 0.928f * c + 0.072f * s, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f
+            ))
+            cm.postConcat(hueMatrix)
+        }
+
+        val brightnessAndContrast = ColorMatrix(floatArrayOf(
+            contrast * redBoost, 0f, 0f, 0f, brightnessOffset,
+            0f, contrast * greenBoost, 0f, 0f, brightnessOffset,
+            0f, 0f, contrast * blueBoost, 0f, brightnessOffset,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        cm.postConcat(brightnessAndContrast)
+        return cm
+    }
+
     private fun applyHardwareBrightness(
         tv: android.view.TextureView, 
         brightnessOffset: Float = currentBrightness,
@@ -1297,34 +1348,11 @@ class VideoFragmentMobile : Fragment() {
         blueBoost: Float = currentBlue,
         hueOffset: Float = currentHue
     ) {
-        val cm = android.graphics.ColorMatrix()
-        cm.setSaturation(saturation)
-
-        // Hue rotation
-        if (hueOffset != 0f) {
-            val theta = Math.PI * hueOffset / 180.0
-            val c = Math.cos(theta).toFloat()
-            val s = Math.sin(theta).toFloat()
-
-            val hueMatrix = android.graphics.ColorMatrix(floatArrayOf(
-                0.213f + 0.787f * c - 0.213f * s, 0.715f - 0.715f * c - 0.715f * s, 0.072f - 0.072f * c + 0.928f * s, 0f, 0f,
-                0.213f - 0.213f * c + 0.143f * s, 0.715f + 0.285f * c + 0.140f * s, 0.072f - 0.072f * c - 0.283f * s, 0f, 0f,
-                0.213f - 0.213f * c - 0.787f * s, 0.715f - 0.715f * c + 0.715f * s, 0.072f + 0.928f * c + 0.072f * s, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-            ))
-            cm.postConcat(hueMatrix)
-        }
-
-        val brightnessAndContrast = android.graphics.ColorMatrix(floatArrayOf(
-            contrast * redBoost, 0f, 0f, 0f, brightnessOffset,
-            0f, contrast * greenBoost, 0f, 0f, brightnessOffset,
-            0f, 0f, contrast * blueBoost, 0f, brightnessOffset,
-            0f, 0f, 0f, 1f, 0f
-        ))
-        cm.postConcat(brightnessAndContrast)
-
-        val paint = android.graphics.Paint().apply {
-            colorFilter = android.graphics.ColorMatrixColorFilter(cm)
+        val cm = buildCalibrationColorMatrix(
+            brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset
+        )
+        val paint = Paint().apply {
+            colorFilter = ColorMatrixColorFilter(cm)
         }
         tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
     }

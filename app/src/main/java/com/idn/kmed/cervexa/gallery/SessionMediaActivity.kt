@@ -38,8 +38,10 @@ import com.idn.kmed.cervexa.utils.SectionedMediaItem
 import com.idn.kmed.cervexa.utils.SectionedThumbAdapter
 import com.idn.kmed.cervexa.utils.PdfReportHelper
 import com.idn.kmed.cervexa.utils.PrintHelper
+import com.idn.kmed.cervexa.utils.DeviceTypeDetector
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.shape.CornerFamily
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
@@ -563,6 +565,25 @@ class SessionMediaActivity : AppCompatActivity() {
         onConfirm: () -> Unit,
         onCancel: (() -> Unit)? = null
     ) {
+        if (DeviceTypeDetector.isTvDevice(this)) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Konfirmasi Hapus")
+                .setMessage(message)
+                .setPositiveButton("Hapus") { d, _ ->
+                    d.dismiss()
+                    onConfirm()
+                }
+                .setNegativeButton("Batal") { d, _ ->
+                    d.dismiss()
+                    onCancel?.invoke()
+                }
+                .setOnCancelListener {
+                    onCancel?.invoke()
+                }
+                .show()
+            return
+        }
+
         val dialog = BottomSheetDialog(
             this,
             com.google.android.material.R.style.Theme_Material3_Light_BottomSheetDialog

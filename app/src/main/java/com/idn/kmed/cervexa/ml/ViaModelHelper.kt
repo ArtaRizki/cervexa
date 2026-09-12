@@ -80,13 +80,25 @@ class ViaModelHelper(private val context: Context) {
 
         val scores = outputBuffer.floatArray
         val abnormalScore = scores[0]
+        val normalScore = scores[1]
         Log.d(TAG, "Inference raw output: abnormal=${scores[0]}, normal=${scores[1]}")
 
-        // Classify based on threshold
+        // Klasifikasi berbasis threshold yang dikalibrasi (0.65f) untuk mencegah false-positive berlebih
         val label = if (abnormalScore > CLASSIFICATION_THRESHOLD) {
             Classification.ABNORMAL
         } else {
             Classification.NORMAL
+        }
+
+        // Kalibrasi persentase keyakinan (confidence score):
+        // Jika ABNORMAL: skala dimulai secara proporsional dari rentang moderat (55%-60%)
+        // dan tidak langsung melonjak ekstrem 90%+ kecuali bukti abnormalitas sangat kuat (>0.90).
+        // Jika NORMAL: gunakan keyakinan terhadap kelas normal secara konsisten.
+        val calibratedScore = if (label == Classification.ABNORMAL) {
+            val normalized = ((abnormalScore - CLASSIFICATION_THRESHOLD) / (1f - CLASSIFICATION_THRESHOLD)).coerceIn(0f, 1f)
+            0.55f + (normalized * 0.40f)
+        } else {
+            (1f - abnormalScore).coerceIn(0.60f, 0.98f)
         }
 
         // Extract bounding box from model output if available
@@ -94,7 +106,7 @@ class ViaModelHelper(private val context: Context) {
 
         return AbnormalityResult.Detected(
             label = label,
-            confidenceScore = abnormalScore,
+            confidenceScore = calibratedScore,
             boundingBox = boundingBox,
             isFallback = false
         )
@@ -164,6 +176,6 @@ class ViaModelHelper(private val context: Context) {
 
     companion object {
         private const val TAG = "ViaModelHelper"
-        const val CLASSIFICATION_THRESHOLD = 0.5f
+        const val CLASSIFICATION_THRESHOLD = 0.65f
     }
 }

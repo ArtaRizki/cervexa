@@ -32,9 +32,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.shape.CornerFamily
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
+import com.idn.kmed.cervexa.utils.DeviceTypeDetector
 import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.patient.RegistrationPatientActivity
 import com.idn.kmed.cervexa.gallery.SessionMediaActivity
@@ -541,6 +543,26 @@ class MediaListFragment : Fragment() {
         onConfirm: () -> Unit,
         onCancel: (() -> Unit)? = null
     ) {
+        val ctx = context ?: return
+        if (DeviceTypeDetector.isTvDevice(ctx)) {
+            MaterialAlertDialogBuilder(ctx)
+                .setTitle("Konfirmasi Hapus")
+                .setMessage(message)
+                .setPositiveButton("Hapus") { d, _ ->
+                    d.dismiss()
+                    onConfirm()
+                }
+                .setNegativeButton("Batal") { d, _ ->
+                    d.dismiss()
+                    onCancel?.invoke()
+                }
+                .setOnCancelListener {
+                    onCancel?.invoke()
+                }
+                .show()
+            return
+        }
+
         val dialog = BottomSheetDialog(
             requireContext(),
             com.google.android.material.R.style.Theme_Material3_Light_BottomSheetDialog

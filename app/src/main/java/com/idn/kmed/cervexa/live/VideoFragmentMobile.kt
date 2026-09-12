@@ -882,25 +882,21 @@ class VideoFragmentMobile : Fragment() {
             ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
 
-        val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
+        // === Box padding merata & simetris antara kiri (RS/RM) dan kanan (Timestamp) ===
+        val boxPadX = pad * 2.5f
+        val boxH = (paintDateText.textSize + pad * 2.5f).coerceAtLeast(pad * 3.5f)
+        val cornerRadius = boxH / 2f
+        val bottom = bitmap.height.toFloat()
+        val top = (bottom - boxH).coerceAtLeast(0f)
 
-        // Box padding merata agar teks berada tepat di tengah (centered)
-        // Diperbesar agar overlay menutupi timestamp kuning bawaan kamera
-        val boxPadX = pad * 4.0f
+        // === Right-bottom date box ===
         val dateTextW = paintDateText.measureText(formatted)
         val dateBoxW = dateTextW + (boxPadX * 2f)
-        val dateBoxH = (paintDateText.textSize + pad * 3.0f).coerceAtLeast(pad * 4f)
-
         val right = bitmap.width.toFloat()
         val left = (right - dateBoxW).coerceAtLeast(0f)
-        val bottom = bitmap.height.toFloat()
-        val top = (bottom - dateBoxH).coerceAtLeast(0f)
-
-        // Baseline Y untuk menengahkan teks secara vertikal di dalam box
-        val dateCenterY = top + (dateBoxH / 2f) - ((paintDateText.descent() + paintDateText.ascent()) / 2f)
+        val dateCenterY = top + (boxH / 2f) - ((paintDateText.descent() + paintDateText.ascent()) / 2f)
 
         // Draw specific rounded corners: top-left & bottom-left
-        val cornerRadius = dateBoxH / 2f
         val rightRadii = floatArrayOf(
             cornerRadius, cornerRadius, // top-left
             0f, 0f,                     // top-right
@@ -919,13 +915,12 @@ class VideoFragmentMobile : Fragment() {
         // Teks ditengah box (centered)
         canvas.drawText(formatted, left + boxPadX, dateCenterY, paintDateText)
 
-        // === Left-bottom info box (dynamic width) ===
+        // === Left-bottom info box (RS/RM) - disesuaikan sama besar & simetris ===
+        val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
         val infoTextW = paintText.measureText(info)
-        val infoBoxW = (infoTextW + pad * 2f).coerceAtMost(bitmap.width * 0.75f)
+        val infoBoxW = (infoTextW + boxPadX * 2f).coerceAtLeast(dateBoxW * 0.85f).coerceAtMost(bitmap.width * 0.48f)
         val infoLeft = 0f
         val infoRight = (infoLeft + infoBoxW).coerceAtMost(bitmap.width.toFloat())
-        val infoTop = top // sejajarkan tinggi box bawah
-        val infoBottom = bottom
 
         // Draw specific rounded corners: top-right & bottom-right
         val leftRadii = floatArrayOf(
@@ -936,7 +931,7 @@ class VideoFragmentMobile : Fragment() {
         )
         val leftPath = android.graphics.Path().apply {
             addRoundRect(
-                android.graphics.RectF(infoLeft, infoTop, infoRight, infoBottom),
+                android.graphics.RectF(infoLeft, top, infoRight, bottom),
                 leftRadii,
                 android.graphics.Path.Direction.CW
             )
@@ -944,12 +939,12 @@ class VideoFragmentMobile : Fragment() {
         canvas.drawPath(leftPath, paintBox)
 
         // Kalau text terlalu panjang sampai melewati box, kita potong (ellipsize manual sederhana)
-        val maxTextW = (infoRight - infoLeft - pad * 2f).coerceAtLeast(0f)
+        val maxTextW = (infoRight - infoLeft - boxPadX * 2f).coerceAtLeast(0f)
         val infoDraw = ellipsizeToWidth(info, paintText, maxTextW)
 
         // Hitung juga center Y untuk text sebelah kiri agar simetris
-        val infoCenterY = infoTop + ((infoBottom - infoTop) / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
-        canvas.drawText(infoDraw, infoLeft + pad, infoCenterY, paintText)
+        val infoCenterY = top + (boxH / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
+        canvas.drawText(infoDraw, infoLeft + boxPadX, infoCenterY, paintText)
 
         // AI overlay is now handled by OverlayRenderer — no inline AI drawing here
 

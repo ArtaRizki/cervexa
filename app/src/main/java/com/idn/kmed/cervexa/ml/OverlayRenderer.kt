@@ -27,11 +27,11 @@ class OverlayRenderer {
         private const val COLOR_ORANGE = 0xFFFF8C00.toInt()    // #FF8C00
         private const val COLOR_GREEN = 0xFF00C853.toInt()     // #00C853
 
-        // Proportional scaling factors
-        private const val TEXT_SIZE_RATIO = 0.04f       // 4% of frame height
-        private const val STROKE_WIDTH_RATIO = 0.005f   // 0.5% of frame width
-        private const val PADDING_RATIO = 0.02f         // 2% of frame height
-        private const val LABEL_BG_ALPHA = 160          // Background alpha for label
+        // Proportional scaling factors - compact badge to prevent obstructing cervix
+        private const val TEXT_SIZE_RATIO = 0.026f       // Reduced from 0.04f (compact badge)
+        private const val STROKE_WIDTH_RATIO = 0.0035f   // 0.35% of frame width
+        private const val PADDING_RATIO = 0.012f         // 1.2% of frame height
+        private const val LABEL_BG_ALPHA = 175          // Background alpha for label
     }
 
     /**
@@ -69,10 +69,8 @@ class OverlayRenderer {
             }
         }
 
-        val subText = when (result.label) {
-            Classification.ABNORMAL -> "Harap lakukan pemeriksaan lebih lanjut"
-            Classification.NORMAL -> ""
-        }
+        // Subtext dihilangkan sesuai permintaan user agar tidak menutupi objek serviks
+        val subText = ""
 
         // Draw label with background
         drawLabel(canvas, labelText, subText, labelColor, textSize, padding, width)
@@ -126,10 +124,8 @@ class OverlayRenderer {
             }
         }
 
-        val subText = when (result.label) {
-            Classification.ABNORMAL -> "Harap lakukan pemeriksaan lebih lanjut"
-            Classification.NORMAL -> ""
-        }
+        // Subtext dihilangkan agar tidak menutupi objek serviks
+        val subText = ""
 
         // Draw label with background
         drawLabel(canvas, labelText, subText, labelColor, textSize, padding, width)
@@ -200,10 +196,7 @@ class OverlayRenderer {
      * @return Formatted label string
      */
     fun formatLabel(result: AbnormalityResult.Detected): String {
-        val percentage = when (result.label) {
-            Classification.ABNORMAL -> (result.confidenceScore * 100).roundToInt()
-            Classification.NORMAL -> ((1 - result.confidenceScore) * 100).roundToInt()
-        }
+        val percentage = (result.confidenceScore * 100).roundToInt().coerceIn(50, 99)
 
         val classLabel = when (result.label) {
             Classification.ABNORMAL -> "ABNORMAL"
@@ -216,20 +209,18 @@ class OverlayRenderer {
     }
 
     /**
-     * Determines the label color based on confidence score.
+     * Determines the label color based on classification result and confidence.
      *
-     * - score > 0.75 → red (#FF0000)
-     * - 0.5 < score ≤ 0.75 → orange (#FF8C00)
-     * - score ≤ 0.5 → green (#00C853)
-     *
-     * @param result The detection result
-     * @return Color int value
+     * - NORMAL → Always green (#00C853)
+     * - ABNORMAL high (> 80%) → red (#FF0000)
+     * - ABNORMAL moderate (≤ 80%) → orange (#FF8C00)
      */
     fun getLabelColor(result: AbnormalityResult.Detected): Int {
-        return when {
-            result.confidenceScore > 0.75f -> COLOR_RED
-            result.confidenceScore > 0.5f -> COLOR_ORANGE
-            else -> COLOR_GREEN
+        return when (result.label) {
+            Classification.ABNORMAL -> {
+                if (result.confidenceScore > 0.80f) COLOR_RED else COLOR_ORANGE
+            }
+            Classification.NORMAL -> COLOR_GREEN
         }
     }
 
@@ -300,18 +291,19 @@ class OverlayRenderer {
         val subTextHeight = if (subText.isNotEmpty()) subTextPaint.descent() - subTextPaint.ascent() else 0f
 
         // Position label at top-left with padding
-        val labelX = padding
-        val labelY = padding + textHeight
+        val labelX = padding * 1.5f
+        val labelY = padding * 1.5f + textHeight
         val subLabelY = if (subText.isNotEmpty()) labelY + subTextHeight + (padding / 2) else labelY
 
-        // Draw background rectangle
+        // Draw compact background rounded rectangle
+        val cornerRadius = padding * 0.8f
         val bgRect = RectF(
-            labelX - padding / 2,
-            labelY - textHeight - padding / 4,
-            labelX + maxWidth + padding,
-            if (subText.isNotEmpty()) subLabelY + padding / 4 else labelY + padding / 4
+            labelX - padding * 0.8f,
+            labelY - textHeight - padding * 0.4f,
+            labelX + maxWidth + padding * 0.8f,
+            if (subText.isNotEmpty()) subLabelY + padding * 0.4f else labelY + padding * 0.4f
         )
-        canvas.drawRect(bgRect, bgPaint)
+        canvas.drawRoundRect(bgRect, cornerRadius, cornerRadius, bgPaint)
 
         // Draw text
         canvas.drawText(text, labelX, labelY - textPaint.descent(), textPaint)

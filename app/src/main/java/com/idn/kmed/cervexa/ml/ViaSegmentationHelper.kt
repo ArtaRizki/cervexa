@@ -85,8 +85,8 @@ class ViaSegmentationHelper(private val context: Context) {
      * Executes neural network inference on YOLOv8n-Seg model.
      */
     private fun runTfliteSegmentation(interpreter: Interpreter, bitmap: Bitmap): AbnormalityResult.Detected {
-        var tensorImage = TensorImage.fromBitmap(bitmap)
-        tensorImage = imageProcessor.process(tensorImage)
+        val inputShape = interpreter.getInputTensor(0).shape()
+        val inputBuffer = prepareInputBuffer(bitmap, inputShape)
 
         // YOLOv8-Seg standard outputs:
         // Output 0: Detection boxes, scores, and 32 mask coefficients [1, 37, 3024]
@@ -104,12 +104,16 @@ class ViaSegmentationHelper(private val context: Context) {
             buf
         } else null
 
-        interpreter.runForMultipleInputsOutputs(arrayOf(tensorImage.buffer), outputMap)
+        interpreter.runForMultipleInputsOutputs(arrayOf(inputBuffer), outputMap)
 
         // Parse highest confidence detection
         val rawBoxes = boxBuffer.floatArray
         val numChannels = outputBoxShape[1]
         val numPredictions = outputBoxShape[2]
+
+        val isNCHW = inputShape.size == 4 && inputShape[1] == 3
+        val inputW = (if (isNCHW) inputShape[3] else inputShape[2]).toFloat()
+        val inputH = (if (isNCHW) inputShape[2] else inputShape[1]).toFloat()
 
         var bestScore = 0f
         var bestIdx = -1
@@ -123,10 +127,10 @@ class ViaSegmentationHelper(private val context: Context) {
             if (score > bestScore) {
                 bestScore = score
                 bestIdx = i
-                bestCx = rawBoxes[0 * numPredictions + i] / inputSize
-                bestCy = rawBoxes[1 * numPredictions + i] / inputSize
-                bestW = rawBoxes[2 * numPredictions + i] / inputSize
-                bestH = rawBoxes[3 * numPredictions + i] / inputSize
+                bestCx = rawBoxes[0 * numPredictions + i] / inputW
+                bestCy = rawBoxes[1 * numPredictions + i] / inputH
+                bestW = rawBoxes[2 * numPredictions + i] / inputW
+                bestH = rawBoxes[3 * numPredictions + i] / inputH
             }
         }
 
@@ -147,8 +151,21 @@ class ViaSegmentationHelper(private val context: Context) {
             (bestCy + bestH / 2f).coerceIn(0f, 1f)
         )
 
-        // Generate synthetic smooth contour around the detected lesion bounding area
-        val contourPoints = generateContourFromBox(boundingBox)
+        // Decode prototype mask from Output 1 using 32 mask coefficients from Output 0
+        val maskWeights = FloatArray(32)
+        if (numChannels >= 37) {
+            for (m in 0 until 32) {
+                maskWeights[m] = rawBoxes[(5 + m) * numPredictions + bestIdx]
+            }
+        }
+
+        val contourPoints = if (maskBuffer != null && numChannels >= 37 && outputMaskShape != null) {
+            decodeMaskToContour(maskBuffer.floatArray, maskWeights, outputMaskShape, boundingBox)
+                ?: generateContourFromBox(boundingBox)
+        } else {
+            generateContourFromBox(boundingBox)
+        }
+
         val lesionAreaRatio = boundingBox.width() * boundingBox.height()
 
         return AbnormalityResult.Detected(
@@ -159,6 +176,136 @@ class ViaSegmentationHelper(private val context: Context) {
             lesionAreaRatio = lesionAreaRatio,
             isFallback = false
         )
+    }
+
+    /**
+     * Decodes the YOLOv8-Seg prototype masks into an organic polygon contour for the detected lesion.
+     */
+    private fun decodeMaskToContour(
+        protoMasks: FloatArray,
+        maskWeights: FloatArray,
+        maskShape: IntArray,
+        box: RectF
+    ): List<PointF>? {
+        if (maskShape.size < 4) return null
+        val numProtos = maskShape[1]
+        val maskH = maskShape[2]
+        val maskW = maskShape[3]
+        val maskArea = maskH * maskW
+
+        // Bounding box in mask coordinates
+        val minX = (box.left * maskW).toInt().coerceIn(0, maskW - 1)
+        val maxX = (box.right * maskW).toInt().coerceIn(minX, maskW - 1)
+        val minY = (box.top * maskH).toInt().coerceIn(0, maskH - 1)
+        val maxY = (box.bottom * maskH).toInt().coerceIn(minY, maskH - 1)
+
+        val positivePoints = ArrayList<PointF>()
+        var sumX = 0f
+        var sumY = 0f
+
+        for (y in minY..maxY) {
+            val yOffset = y * maskW
+            for (x in minX..maxX) {
+                var logit = 0f
+                for (k in 0 until numProtos) {
+                    val protoVal = protoMasks[k * maskArea + yOffset + x]
+                    logit += maskWeights[k] * protoVal
+                }
+                // Sigmoid(logit) > 0.5 <=> logit > 0.0
+                if (logit > 0f) {
+                    val normX = x.toFloat() / maskW
+                    val normY = y.toFloat() / maskH
+                    positivePoints.add(PointF(normX, normY))
+                    sumX += normX
+                    sumY += normY
+                }
+            }
+        }
+
+        if (positivePoints.size < 6) return null
+
+        val centerX = sumX / positivePoints.size
+        val centerY = sumY / positivePoints.size
+
+        // Radial grouping for organic contour polygon (20 slices)
+        val slices = 20
+        val maxDist = FloatArray(slices) { 0.01f }
+
+        for (pt in positivePoints) {
+            val dx = pt.x - centerX
+            val dy = pt.y - centerY
+            var angle = atan2(dy.toDouble(), dx.toDouble()).toFloat()
+            if (angle < 0) angle += (2 * Math.PI).toFloat()
+
+            val sliceIdx = ((angle / (2 * Math.PI)) * slices).toInt().coerceIn(0, slices - 1)
+            val dist = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+            if (dist > maxDist[sliceIdx]) {
+                maxDist[sliceIdx] = dist
+            }
+        }
+
+        val contour = ArrayList<PointF>()
+        for (i in 0 until slices) {
+            val angle = (i.toFloat() / slices) * 2 * Math.PI
+            val r = maxDist[i]
+            val px = (centerX + r * cos(angle).toFloat()).coerceIn(0.01f, 0.99f)
+            val py = (centerY + r * sin(angle).toFloat()).coerceIn(0.01f, 0.99f)
+            contour.add(PointF(px, py))
+        }
+
+        return contour
+    }
+
+    /**
+     * Prepares normalized Float32 direct ByteBuffer supporting both NCHW and NHWC formats.
+     */
+    private fun prepareInputBuffer(bitmap: Bitmap, inputShape: IntArray): java.nio.ByteBuffer {
+        val isNCHW = inputShape.size == 4 && inputShape[1] == 3
+        val targetWidth = if (isNCHW) inputShape[3] else inputShape[2]
+        val targetHeight = if (isNCHW) inputShape[2] else inputShape[1]
+
+        val resizedBitmap = if (bitmap.width == targetWidth && bitmap.height == targetHeight) {
+            bitmap
+        } else {
+            Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+        }
+
+        val totalPixels = targetWidth * targetHeight
+        val byteBuffer = java.nio.ByteBuffer.allocateDirect(1 * 3 * totalPixels * 4).apply {
+            order(java.nio.ByteOrder.nativeOrder())
+        }
+
+        val intValues = IntArray(totalPixels)
+        resizedBitmap.getPixels(intValues, 0, targetWidth, 0, 0, targetWidth, targetHeight)
+
+        if (isNCHW) {
+            // [1, 3, H, W] - All Red, then All Green, then All Blue
+            for (pixel in intValues) {
+                val r = ((pixel shr 16) and 0xFF) / 255.0f
+                byteBuffer.putFloat(r)
+            }
+            for (pixel in intValues) {
+                val g = ((pixel shr 8) and 0xFF) / 255.0f
+                byteBuffer.putFloat(g)
+            }
+            for (pixel in intValues) {
+                val b = (pixel and 0xFF) / 255.0f
+                byteBuffer.putFloat(b)
+            }
+        } else {
+            // [1, H, W, 3] - RGB interleaved
+            for (pixel in intValues) {
+                val r = ((pixel shr 16) and 0xFF) / 255.0f
+                val g = ((pixel shr 8) and 0xFF) / 255.0f
+                val b = (pixel and 0xFF) / 255.0f
+                byteBuffer.putFloat(r)
+                byteBuffer.putFloat(g)
+                byteBuffer.putFloat(b)
+            }
+        }
+
+        byteBuffer.rewind()
+        return byteBuffer
     }
 
     /**

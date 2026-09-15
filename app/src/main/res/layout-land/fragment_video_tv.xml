@@ -140,23 +140,30 @@
 
     </FrameLayout>
 
-    <!-- ✅ OVERLAY INFO - CONSTRAINT KE PARENT (bukan videoContainer) -->
+    <!-- ✅ OVERLAY INFO - CONSTRAINT KE PARENT & tvOverlayClock (tinggi disamakan) -->
     <TextView
         android:id="@+id/tvOverlayInfo"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
         android:background="#FF000000"
         android:elevation="5dp"
         android:fontFamily="monospace"
+        android:gravity="center_vertical"
+        android:maxLines="1"
+        android:ellipsize="end"
         android:paddingHorizontal="16dp"
-        android:paddingVertical="6dp"
+        android:paddingVertical="16dp"
         android:text="Nama RS / NRM"
         android:textColor="@android:color/white"
         android:textSize="18sp"
         android:textStyle="bold"
         android:visibility="visible"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constrainedWidth="true"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintTop_toTopOf="@+id/tvOverlayClock"
+        app:layout_constraintBottom_toBottomOf="@+id/tvOverlayClock"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/tvOverlayClock" />
 
     <!-- ✅ OVERLAY CLOCK - CONSTRAINT KE PARENT (bukan videoContainer) -->
     <TextView
@@ -166,6 +173,7 @@
         android:background="#FF000000"
         android:elevation="5dp"
         android:fontFamily="monospace"
+        android:gravity="center_vertical"
         android:paddingHorizontal="80dp"
         android:paddingVertical="16dp"
         android:text="0000-00-00 00:00:00"

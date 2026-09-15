@@ -150,11 +150,13 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         color = Color.WHITE  // Putih agar kontras di background hitam
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
     }
     private val paintText = Paint().apply {
         color = Color.WHITE  // Putih agar terbaca di background hitam
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         setShadowLayer(2f, 1f, 1f, Color.BLACK)
     }
     private val paintBox = Paint().apply {
@@ -920,18 +922,18 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
 
-        val pad = (bitmap.height * 0.035f).coerceIn(14f, 36f) // padding ikut skala
+        val pad = (bitmap.height * 0.016f).coerceIn(8f, 20f) // padding ikut skala proporsional live stream
 
         // === Box padding merata & simetris antara kiri (RS/RM) dan kanan (Timestamp) ===
-        val boxPadX = pad * 2.5f
-        val boxH = (paintDateText.textSize + pad * 2.5f).coerceAtLeast(pad * 3.5f)
-        val cornerRadius = boxH / 2f
+        val boxPadX = pad * 1.6f
+        val boxH = (paintDateText.textSize + pad * 1.8f).coerceAtLeast(pad * 2.6f)
+        val cornerRadius = (boxH * 0.2f).coerceIn(6f, 14f)
         val bottom = bitmap.height.toFloat()
         val top = (bottom - boxH).coerceAtLeast(0f)
 
         // === Right-bottom date box ===
         val dateTextW = paintDateText.measureText(formatted)
-        val dateBoxW = dateTextW + (boxPadX * 2f)
+        val dateBoxW = (dateTextW + (boxPadX * 2f)).coerceAtLeast(bitmap.width * 0.18f)
         val right = bitmap.width.toFloat()
         val left = (right - dateBoxW).coerceAtLeast(0f)
         val dateCenterY = top + (boxH / 2f) - ((paintDateText.descent() + paintDateText.ascent()) / 2f)
@@ -1434,11 +1436,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         const val STB_BITRATE = 1_500_000 // 1.5 Mbps cukup untuk 640×480
 
         // ===== Overlay Text Scaling =====
-        // 0.045f = 4.5% dari tinggi frame — lebih besar agar terbaca
-        private const val TEXT_SCALE = 0.045f
+        // 0.026f = ~2.6% dari tinggi frame (~28px pada 1080p, proporsional dengan 18sp di live stream)
+        private const val TEXT_SCALE = 0.026f
 
         // Batas aman agar tidak terlalu kecil / terlalu besar
-        private const val TEXT_MIN_PX = 18f
-        private const val TEXT_MAX_PX = 52f
+        private const val TEXT_MIN_PX = 14f
+        private const val TEXT_MAX_PX = 32f
     }
 }

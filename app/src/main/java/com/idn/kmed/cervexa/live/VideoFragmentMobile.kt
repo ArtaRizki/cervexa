@@ -12,6 +12,7 @@ import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -145,6 +146,7 @@ class VideoFragmentMobile : Fragment() {
         // textSize JANGAN hardcode (akan diskalakan berdasarkan frame)
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         setShadowLayer(2f, 1f, 1f, Color.BLACK)
     }
     private val paintBox = Paint().apply {
@@ -161,6 +163,7 @@ class VideoFragmentMobile : Fragment() {
         color = Color.WHITE  // Putih agar kontras di background hitam
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
     }
 
     // === Overlay scaling cache ===
@@ -883,15 +886,15 @@ class VideoFragmentMobile : Fragment() {
         else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
 
         // === Box padding merata & simetris antara kiri (RS/RM) dan kanan (Timestamp) ===
-        val boxPadX = pad * 2.5f
-        val boxH = (paintDateText.textSize + pad * 2.5f).coerceAtLeast(pad * 3.5f)
-        val cornerRadius = boxH / 2f
+        val boxPadX = pad * 1.6f
+        val boxH = (paintDateText.textSize + pad * 1.8f).coerceAtLeast(pad * 2.6f)
+        val cornerRadius = (boxH * 0.2f).coerceIn(6f, 14f)
         val bottom = bitmap.height.toFloat()
         val top = (bottom - boxH).coerceAtLeast(0f)
 
         // === Right-bottom date box ===
         val dateTextW = paintDateText.measureText(formatted)
-        val dateBoxW = dateTextW + (boxPadX * 2f)
+        val dateBoxW = (dateTextW + (boxPadX * 2f)).coerceAtLeast(bitmap.width * 0.18f)
         val right = bitmap.width.toFloat()
         val left = (right - dateBoxW).coerceAtLeast(0f)
         val dateCenterY = top + (boxH / 2f) - ((paintDateText.descent() + paintDateText.ascent()) / 2f)
@@ -1491,14 +1494,14 @@ class VideoFragmentMobile : Fragment() {
 
 
         // ===== Overlay scaling =====
-        // 0.045f = 4.5% tinggi frame (480 -> ~21.6px) — lebih besar dari sebelumnya
-        private const val TEXT_SCALE = 0.045f
-        private const val TEXT_MIN_PX = 18f
-        private const val TEXT_MAX_PX = 52f
+        // 0.026f = ~2.6% tinggi frame, proporsional dengan live stream
+        private const val TEXT_SCALE = 0.026f
+        private const val TEXT_MIN_PX = 14f
+        private const val TEXT_MAX_PX = 32f
 
         // Padding scale
-        private const val PADDING_SCALE = 0.035f
-        private const val PADDING_MIN_PX = 14f
-        private const val PADDING_MAX_PX = 36f
+        private const val PADDING_SCALE = 0.016f
+        private const val PADDING_MIN_PX = 8f
+        private const val PADDING_MAX_PX = 20f
     }
 }               

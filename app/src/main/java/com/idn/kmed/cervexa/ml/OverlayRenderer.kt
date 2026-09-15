@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PointF
 import android.graphics.RectF
 import android.graphics.Typeface
 import java.text.SimpleDateFormat
@@ -69,6 +71,11 @@ class OverlayRenderer {
             }
         }
 
+        // Draw lesion contour polygon and translucent mask if available
+        result.contourPoints?.let { points ->
+            drawSegmentationContour(canvas, points, width, height, labelColor)
+        }
+
         // Subtext dihilangkan sesuai permintaan user agar tidak menutupi objek serviks
         val subText = ""
 
@@ -122,6 +129,11 @@ class OverlayRenderer {
             Classification.NORMAL -> {
                 drawFrameBorder(canvas, width, height, strokeWidth, COLOR_GREEN)
             }
+        }
+
+        // Draw lesion contour polygon and translucent mask if available
+        result.contourPoints?.let { points ->
+            drawSegmentationContour(canvas, points, width, height, labelColor)
         }
 
         // Subtext dihilangkan agar tidak menutupi objek serviks
@@ -203,9 +215,14 @@ class OverlayRenderer {
             Classification.NORMAL -> "NORMAL"
         }
 
+        val areaSuffix = if (result.lesionAreaRatio > 0.001f) {
+            val pct = (result.lesionAreaRatio * 100).roundToInt().coerceIn(1, 99)
+            " • Lesi: $pct%"
+        } else ""
+
         val fallbackSuffix = if (result.isFallback) " (Acetowhite)" else ""
 
-        return "AI: $classLabel ($percentage%)$fallbackSuffix"
+        return "AI: $classLabel ($percentage%)$areaSuffix$fallbackSuffix"
     }
 
     /**
@@ -336,5 +353,49 @@ class OverlayRenderer {
         val y = frameHeight - padding
 
         canvas.drawText(timestamp, x, y, timestampPaint)
+    }
+
+    /**
+     * Draws contour polygons and translucent mask around detected abnormal lesion areas.
+     */
+    fun drawSegmentationContour(
+        canvas: Canvas,
+        contourPoints: List<PointF>,
+        frameWidth: Int,
+        frameHeight: Int,
+        color: Int = COLOR_RED
+    ) {
+        if (contourPoints.size < 3) return
+
+        val path = Path()
+        val first = contourPoints[0]
+        path.moveTo(first.x * frameWidth, first.y * frameHeight)
+
+        for (i in 1 until contourPoints.size) {
+            val pt = contourPoints[i]
+            path.lineTo(pt.x * frameWidth, pt.y * frameHeight)
+        }
+        path.close()
+
+        // 1. Semi-transparent fill mask inside lesion
+        val fillPaint = Paint().apply {
+            this.color = color
+            alpha = 45 // Subtle translucent shading
+            style = Paint.Style.FILL
+            isAntiAlias = true
+        }
+        canvas.drawPath(path, fillPaint)
+
+        // 2. Clear glowing outline contour
+        val strokePaint = Paint().apply {
+            this.color = color
+            style = Paint.Style.STROKE
+            strokeWidth = (frameWidth * STROKE_WIDTH_RATIO * 1.6f).coerceIn(2.5f, 6.5f)
+            strokeJoin = Paint.Join.ROUND
+            strokeCap = Paint.Cap.ROUND
+            isAntiAlias = true
+            setShadowLayer(4f, 0f, 0f, Color.BLACK)
+        }
+        canvas.drawPath(path, strokePaint)
     }
 }

@@ -35,6 +35,7 @@ import com.idn.kmed.cervexa.ml.AnalysisModeManager
 import com.idn.kmed.cervexa.ml.Classification
 import com.idn.kmed.cervexa.ml.OverlayRenderer
 import com.idn.kmed.cervexa.ml.ViaModelHelper
+import com.idn.kmed.cervexa.ml.ViaSegmentationHelper
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -197,7 +198,8 @@ class MediaPageFragment : Fragment() {
         val viaModelHelper = ViaModelHelper(ctx)
         val acetowhiteDetector = AcetowhiteDetector()
         val analysisModeManager = AnalysisModeManager(prefs)
-        aiDetector = AiDetector(ctx, viaModelHelper, acetowhiteDetector, analysisModeManager)
+        val viaSegmentationHelper = ViaSegmentationHelper(ctx)
+        aiDetector = AiDetector(ctx, viaModelHelper, acetowhiteDetector, analysisModeManager, viaSegmentationHelper)
         overlayRenderer = OverlayRenderer()
     }
 
@@ -278,7 +280,25 @@ class MediaPageFragment : Fragment() {
         } else {
             "• Jaringan serviks tampak normal (tidak ditemukan tanda lesi signifikan).\n• Lanjutkan pemeriksaan rutin sesuai jadwal."
         }
-        val modeText = if (result.isFallback) "Deteksi Acetowhite (Fallback)" else "Cervex AI Model (TFLite)"
+        val modeText = if (result.contourPoints != null && result.contourPoints.isNotEmpty()) {
+            if (result.isFallback) "Segmentasi Kontur Acetowhite" else "AI Instance Segmentation (YOLO)"
+        } else if (result.isFallback) {
+            "Deteksi Acetowhite (Fallback)"
+        } else {
+            "Cervex AI Model (TFLite)"
+        }
+
+        val typeText = if (result.contourPoints != null && result.contourPoints.isNotEmpty()) {
+            "Instance Segmentation (Kontur Poligon Lesi)"
+        } else {
+            "Klasifikasi Citra Keseluruhan (Whole-Image)"
+        }
+
+        val lesionAreaStr = if (result.lesionAreaRatio > 0.001f) {
+            val pct = (result.lesionAreaRatio * 100).roundToInt().coerceIn(1, 99)
+            "• Estimasi Luas Lesi: $pct% dari area serviks\n"
+        } else ""
+
         val timeStr = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
 
         val message = """
@@ -287,8 +307,8 @@ class MediaPageFragment : Fragment() {
             |Waktu Pemeriksaan: $timeStr
             |
             |KETERANGAN KLINIS:
-            |• Tipe Analisis: Klasifikasi Citra Keseluruhan (Whole-Image)
-            |• Catatan: Model menganalisis keseluruhan gambar serviks secara klasifikasi medis.
+            |• Tipe Analisis: $typeText
+            |${lesionAreaStr}• Catatan: Garis kontur melingkari batas area lesi acetowhite yang terdeteksi.
             |
             |REKOMENDASI:
             |$rekomendasiText

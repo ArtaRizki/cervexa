@@ -31,7 +31,8 @@ class AiDetector(
     private val context: Context,
     private val viaModelHelper: ViaModelHelper,
     private val acetowhiteDetector: AcetowhiteDetector,
-    private val analysisModeManager: AnalysisModeManager
+    private val analysisModeManager: AnalysisModeManager,
+    private val viaSegmentationHelper: ViaSegmentationHelper? = null
 ) {
 
     private val frameChannel = Channel<Bitmap>(
@@ -103,9 +104,36 @@ class AiDetector(
      * @return [AbnormalityResult] containing the detection result
      */
     suspend fun analyzeImage(bitmap: Bitmap): AbnormalityResult {
+        // 1. Try Segmentation Helper if provided (extracts contour polygon mask)
+        viaSegmentationHelper?.let { segHelper ->
+            try {
+                val segResult = segHelper.detectAndSegment(bitmap)
+                if (segResult.label == Classification.ABNORMAL) {
+                    return segResult
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Segmentation helper error; falling back to classification", e)
+            }
+        }
+
         return try {
-            // Primary: TFLite inference — returns AbnormalityResult.Detected directly
-            viaModelHelper.detectAbnormality(bitmap)
+            // 2. Primary: TFLite classification inference — returns AbnormalityResult.Detected directly
+            val classResult = viaModelHelper.detectAbnormality(bitmap)
+            if (classResult.label == Classification.ABNORMAL && classResult.contourPoints == null) {
+                viaSegmentationHelper?.let { segHelper ->
+                    try {
+                        val segResult = segHelper.detectAndSegment(bitmap)
+                        if (segResult.contourPoints != null) {
+                            return classResult.copy(
+                                contourPoints = segResult.contourPoints,
+                                boundingBox = segResult.boundingBox ?: classResult.boundingBox,
+                                lesionAreaRatio = segResult.lesionAreaRatio
+                            )
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+            classResult
         } catch (e: Exception) {
             Log.w(TAG, "TFLite inference failed, returning error for debugging: ${e.message}")
             // Temporarily returning error to see the exact crash reason on UI

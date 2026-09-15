@@ -157,8 +157,6 @@
             android:layout_gravity="bottom|start"
             android:layout_marginStart="0dp"
             android:layout_marginBottom="0dp"
-            android:layout_marginStart="0dp"
-            android:layout_marginBottom="0dp"
             android:background="#FF000000"
             android:fontFamily="sans-serif-medium"
             android:gravity="center_vertical"
@@ -186,7 +184,7 @@
             android:paddingVertical="12dp"
             android:text="0000-00-00 00:00:00"
             android:textColor="@android:color/white"
-            android:textSize="14sp"
+            android:textSize="16sp"
             android:visibility="visible" />
 
     </FrameLayout>

@@ -46,10 +46,10 @@ class ViaSegmentationHelper(private val context: Context) {
         try {
             val tfliteModel: MappedByteBuffer = FileUtil.loadMappedFile(context, modelName)
             val options = Interpreter.Options().apply {
-                setNumThreads(4)
+                setNumThreads(2) // 2 threads agar tidak membebani CPU Smart TV
             }
             interpreter = Interpreter(tfliteModel, options)
-            Log.i(TAG, "Successfully loaded $modelName with 4 threads")
+            Log.i(TAG, "Successfully loaded $modelName with 2 threads")
         } catch (e: Exception) {
             Log.w(TAG, "Model $modelName not present in assets; using acetowhite contour fallback: ${e.message}")
             interpreter = null
@@ -336,23 +336,37 @@ class ViaSegmentationHelper(private val context: Context) {
             )
         }
 
-        // Extract lesion candidate coordinates from central transformation zone (20% - 80%)
-        val width = bitmap.width
-        val height = bitmap.height
-        val startX = (width * 0.20).toInt()
-        val endX = (width * 0.80).toInt()
-        val startY = (height * 0.20).toInt()
-        val endY = (height * 0.80).toInt()
+        // Downsample to fast analysis grid (width 320px) to eliminate JNI getPixel overhead on large images
+        val sampleW = 320
+        val sampleH = ((sampleW.toFloat() * bitmap.height) / bitmap.width).toInt().coerceAtLeast(180)
+        val sampleBmp = if (bitmap.width > sampleW || bitmap.height > sampleH) {
+            Bitmap.createScaledBitmap(bitmap, sampleW, sampleH, false)
+        } else {
+            bitmap
+        }
+
+        val pixels = IntArray(sampleW * sampleH)
+        sampleBmp.getPixels(pixels, 0, sampleW, 0, 0, sampleW, sampleH)
+
+        if (sampleBmp != bitmap && !sampleBmp.isRecycled) {
+            sampleBmp.recycle()
+        }
+
+        val startX = (sampleW * 0.20).toInt()
+        val endX = (sampleW * 0.80).toInt()
+        val startY = (sampleH * 0.20).toInt()
+        val endY = (sampleH * 0.80).toInt()
 
         val candidatePoints = ArrayList<PointF>()
-        val step = 8
+        val step = 2
 
         for (y in startY until endY step step) {
+            val rowOffset = y * sampleW
             for (x in startX until endX step step) {
-                val pixel = bitmap.getPixel(x, y)
-                val r = Color.red(pixel)
-                val g = Color.green(pixel)
-                val b = Color.blue(pixel)
+                val pixel = pixels[rowOffset + x]
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
 
                 // 1. Acetowhite characteristic check (bercak putih asam asetat tebal)
                 val isAcetowhite = r > 135 && g > 115 && b > 115 && Math.abs(r - g) < 45 && Math.abs(g - b) < 40
@@ -361,7 +375,7 @@ class ViaSegmentationHelper(private val context: Context) {
                 val isErythematous = r > 120 && (r - g) > 25 && (r - b) > 20
 
                 if (isAcetowhite || isErythematous) {
-                    candidatePoints.add(PointF(x.toFloat() / width, y.toFloat() / height))
+                    candidatePoints.add(PointF(x.toFloat() / sampleW, y.toFloat() / sampleH))
                 }
             }
         }

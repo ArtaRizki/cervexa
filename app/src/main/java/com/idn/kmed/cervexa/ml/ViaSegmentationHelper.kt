@@ -74,7 +74,7 @@ class ViaSegmentationHelper(private val context: Context) {
         }
 
         val currentInterpreter = interpreter
-        if (currentInterpreter != null) {
+        if (ENABLE_TFLITE_SEGMENTATION && currentInterpreter != null) {
             try {
                 val tfliteResult = runTfliteSegmentation(currentInterpreter, bitmap)
                 if (tfliteResult.label == Classification.ABNORMAL && tfliteResult.contourPoints != null) {
@@ -486,5 +486,13 @@ class ViaSegmentationHelper(private val context: Context) {
 
     companion object {
         private const val TAG = "ViaSegmentationHelper"
+
+        /**
+         * Set ke false karena model via_seg_model.tflite saat ini adalah hasil training lama
+         * yang skornya hanya 2% (0.02) dan membutuhkan 12+ detik pada CPU Smart TV sehingga memicu timeout.
+         * Dengan false, ekstraksi kontur dual-mode instan (20ms) langsung berjalan di Smart TV & HP.
+         * Aktifkan kembali (true) setelah model baru dilatih di Colab (Solusi 2) malam nanti.
+         */
+        const val ENABLE_TFLITE_SEGMENTATION = false
     }
 }

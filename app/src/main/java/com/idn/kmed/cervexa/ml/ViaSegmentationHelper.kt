@@ -58,8 +58,12 @@ class ViaSegmentationHelper(private val context: Context) {
 
     /**
      * Performs abnormality detection and contour polygon segmentation on the given bitmap frame.
+     *
+     * @param bitmap The frame or photo to analyze.
+     * @param isAlreadyAbnormal Set to true if the caller (e.g. [AiDetector]) already confirmed the image
+     *        is ABNORMAL via the primary classifier and needs lesion contour extraction.
      */
-    fun detectAndSegment(bitmap: Bitmap): AbnormalityResult.Detected {
+    fun detectAndSegment(bitmap: Bitmap, isAlreadyAbnormal: Boolean = false): AbnormalityResult.Detected {
         if (isClosed || bitmap.isRecycled) {
             return AbnormalityResult.Detected(
                 label = Classification.NORMAL,
@@ -72,13 +76,16 @@ class ViaSegmentationHelper(private val context: Context) {
         val currentInterpreter = interpreter
         if (currentInterpreter != null) {
             try {
-                return runTfliteSegmentation(currentInterpreter, bitmap)
+                val tfliteResult = runTfliteSegmentation(currentInterpreter, bitmap)
+                if (tfliteResult.label == Classification.ABNORMAL && tfliteResult.contourPoints != null) {
+                    return tfliteResult
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "TFLite segmentation error; falling back to acetowhite contour", e)
+                Log.e(TAG, "TFLite segmentation error; falling back to heuristic contour", e)
             }
         }
 
-        return runHeuristicContourDetection(bitmap)
+        return runHeuristicContourDetection(bitmap, isAlreadyAbnormal)
     }
 
     /**
@@ -309,25 +316,36 @@ class ViaSegmentationHelper(private val context: Context) {
     }
 
     /**
-     * Fallback method using acetowhite color thresholding to locate lesion clusters
+     * Fallback method using dual-characteristic (acetowhite & erythematous/erosion) color thresholding
+     * in the cervical transformation zone (20% - 80%) to locate lesion clusters
      * and construct an organic polygon boundary.
      */
-    private fun runHeuristicContourDetection(bitmap: Bitmap): AbnormalityResult.Detected {
-        val baseDetection = acetowhiteDetector.detect(bitmap)
-        if (baseDetection.label == Classification.NORMAL) {
-            return baseDetection
+    fun runHeuristicContourDetection(bitmap: Bitmap, isAlreadyAbnormal: Boolean = false): AbnormalityResult.Detected {
+        val baseDetection = if (!isAlreadyAbnormal) {
+            val d = acetowhiteDetector.detect(bitmap)
+            if (d.label == Classification.NORMAL) {
+                return d
+            }
+            d
+        } else {
+            AbnormalityResult.Detected(
+                label = Classification.ABNORMAL,
+                confidenceScore = 0.75f,
+                boundingBox = null,
+                isFallback = true
+            )
         }
 
-        // Extract acetowhite coordinates from central region (25% - 75%)
+        // Extract lesion candidate coordinates from central transformation zone (20% - 80%)
         val width = bitmap.width
         val height = bitmap.height
-        val startX = (width * 0.25).toInt()
-        val endX = (width * 0.75).toInt()
-        val startY = (height * 0.25).toInt()
-        val endY = (height * 0.75).toInt()
+        val startX = (width * 0.20).toInt()
+        val endX = (width * 0.80).toInt()
+        val startY = (height * 0.20).toInt()
+        val endY = (height * 0.80).toInt()
 
-        val whitePoints = ArrayList<PointF>()
-        val step = 12
+        val candidatePoints = ArrayList<PointF>()
+        val step = 8
 
         for (y in startY until endY step step) {
             for (x in startX until endX step step) {
@@ -336,31 +354,36 @@ class ViaSegmentationHelper(private val context: Context) {
                 val g = Color.green(pixel)
                 val b = Color.blue(pixel)
 
-                // Acetowhite characteristic check
-                if (r > 135 && g > 115 && b > 115 && Math.abs(r - g) < 45 && Math.abs(g - b) < 40) {
-                    whitePoints.add(PointF(x.toFloat() / width, y.toFloat() / height))
+                // 1. Acetowhite characteristic check (bercak putih asam asetat tebal)
+                val isAcetowhite = r > 135 && g > 115 && b > 115 && Math.abs(r - g) < 45 && Math.abs(g - b) < 40
+
+                // 2. Erythematous / central erosion characteristic check (lesi kemerahan / vaskular atipik)
+                val isErythematous = r > 120 && (r - g) > 25 && (r - b) > 20
+
+                if (isAcetowhite || isErythematous) {
+                    candidatePoints.add(PointF(x.toFloat() / width, y.toFloat() / height))
                 }
             }
         }
 
-        if (whitePoints.size < 6) {
+        if (candidatePoints.size < 6) {
             return baseDetection
         }
 
         // Compute centroid
         var sumX = 0f
         var sumY = 0f
-        for (pt in whitePoints) {
+        for (pt in candidatePoints) {
             sumX += pt.x
             sumY += pt.y
         }
-        val center = PointF(sumX / whitePoints.size, sumY / whitePoints.size)
+        val center = PointF(sumX / candidatePoints.size, sumY / candidatePoints.size)
 
         // Radial grouping for organic contour polygon (16 slices)
         val slices = 16
         val maxDist = FloatArray(slices) { 0.01f }
 
-        for (pt in whitePoints) {
+        for (pt in candidatePoints) {
             val dx = pt.x - center.x
             val dy = pt.y - center.y
             var angle = atan2(dy.toDouble(), dx.toDouble()).toFloat()

@@ -357,7 +357,8 @@ class ViaSegmentationHelper(private val context: Context) {
         val startY = (sampleH * 0.20).toInt()
         val endY = (sampleH * 0.80).toInt()
 
-        val candidatePoints = ArrayList<PointF>()
+        val redPoints = ArrayList<PointF>()
+        val whitePoints = ArrayList<PointF>()
         val step = 2
 
         for (y in startY until endY step step) {
@@ -368,36 +369,48 @@ class ViaSegmentationHelper(private val context: Context) {
                 val g = (pixel shr 8) and 0xFF
                 val b = pixel and 0xFF
 
-                // 1. Acetowhite characteristic check (bercak putih asam asetat tebal)
-                val isAcetowhite = r > 135 && g > 115 && b > 115 && Math.abs(r - g) < 45 && Math.abs(g - b) < 40
+                // 1. True Acetowhite check (bercak putih susu/asam asetat terang murni)
+                // Harus benar-benar putih terang dan tidak bias pink/merah
+                val isAcetowhite = r > 165 && g > 155 && b > 145 && Math.abs(r - g) < 28 && Math.abs(g - b) < 28
 
-                // 2. Erythematous / central erosion characteristic check (lesi kemerahan / vaskular atipik)
-                val isErythematous = r > 120 && (r - g) > 25 && (r - b) > 20
+                // 2. True Erythematous / central erosion check (lesi merah pekat/vaskular kontras tinggi)
+                // Menolak mukosa pink normal yang selisih merah-hijaunya rendah
+                val isErythematous = r > 135 && (r - g) > 60 && (r - b) > 32
 
-                if (isAcetowhite || isErythematous) {
-                    candidatePoints.add(PointF(x.toFloat() / sampleW, y.toFloat() / sampleH))
+                if (isErythematous) {
+                    redPoints.add(PointF(x.toFloat() / sampleW, y.toFloat() / sampleH))
+                } else if (isAcetowhite) {
+                    whitePoints.add(PointF(x.toFloat() / sampleW, y.toFloat() / sampleH))
                 }
             }
         }
 
-        if (candidatePoints.size < 6) {
+        // Pilih kluster lesi yang dominan agar garis tidak melebar ke jaringan normal
+        val targetPoints = when {
+            redPoints.size >= 15 && redPoints.size >= whitePoints.size -> redPoints
+            whitePoints.size >= 15 -> whitePoints
+            redPoints.isNotEmpty() -> redPoints
+            else -> whitePoints
+        }
+
+        if (targetPoints.size < 6) {
             return baseDetection
         }
 
-        // Compute centroid
+        // Compute centroid kluster lesi
         var sumX = 0f
         var sumY = 0f
-        for (pt in candidatePoints) {
+        for (pt in targetPoints) {
             sumX += pt.x
             sumY += pt.y
         }
-        val center = PointF(sumX / candidatePoints.size, sumY / candidatePoints.size)
+        val center = PointF(sumX / targetPoints.size, sumY / targetPoints.size)
 
-        // Radial grouping for organic contour polygon (16 slices)
+        // Radial grouping dengan penyaringan persentil untuk garis kontur yang presisi dan pas (tidak over)
         val slices = 16
-        val maxDist = FloatArray(slices) { 0.01f }
+        val sliceDists = Array(slices) { ArrayList<Float>() }
 
-        for (pt in candidatePoints) {
+        for (pt in targetPoints) {
             val dx = pt.x - center.x
             val dy = pt.y - center.y
             var angle = atan2(dy.toDouble(), dx.toDouble()).toFloat()
@@ -405,15 +418,25 @@ class ViaSegmentationHelper(private val context: Context) {
 
             val sliceIdx = ((angle / (2 * Math.PI)) * slices).toInt().coerceIn(0, slices - 1)
             val dist = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-            if (dist > maxDist[sliceIdx] && dist < 0.35f) {
-                maxDist[sliceIdx] = dist
+            if (dist in 0.02f..0.22f) {
+                sliceDists[sliceIdx].add(dist)
             }
         }
 
         val contour = ArrayList<PointF>()
         for (i in 0 until slices) {
             val angle = (i.toFloat() / slices) * 2 * Math.PI
-            val r = maxDist[i].coerceAtLeast(0.04f)
+            val dists = sliceDists[i]
+            val rSlice = if (dists.isNotEmpty()) {
+                dists.sort()
+                // Gunakan persentil ke-80 untuk mengikuti lekukan lesi dan membuang outlier
+                val pIdx = ((dists.size - 1) * 0.80f).toInt().coerceIn(0, dists.size - 1)
+                dists[pIdx] * 1.10f
+            } else {
+                0.035f
+            }
+            // Batasi radius maksimum ke 0.17 agar tidak melebar ke seluruh serviks
+            val r = rSlice.coerceIn(0.030f, 0.17f)
             val px = (center.x + r * cos(angle).toFloat()).coerceIn(0.05f, 0.95f)
             val py = (center.y + r * sin(angle).toFloat()).coerceIn(0.05f, 0.95f)
             contour.add(PointF(px, py))

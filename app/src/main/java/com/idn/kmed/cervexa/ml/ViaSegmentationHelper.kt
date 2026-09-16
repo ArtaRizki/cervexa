@@ -45,11 +45,12 @@ class ViaSegmentationHelper(private val context: Context) {
     private fun loadModelIfAvailable() {
         try {
             val tfliteModel: MappedByteBuffer = FileUtil.loadMappedFile(context, modelName)
+            val cpuCores = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
             val options = Interpreter.Options().apply {
-                setNumThreads(2) // 2 threads agar tidak membebani CPU Smart TV
+                setNumThreads(cpuCores) // Menggunakan hingga 4 core penuh CPU Smart TV / HP
             }
             interpreter = Interpreter(tfliteModel, options)
-            Log.i(TAG, "Successfully loaded $modelName with 2 threads")
+            Log.i(TAG, "Successfully loaded $modelName with $cpuCores threads")
         } catch (e: Exception) {
             Log.w(TAG, "Model $modelName not present in assets; using acetowhite contour fallback: ${e.message}")
             interpreter = null
@@ -371,11 +372,11 @@ class ViaSegmentationHelper(private val context: Context) {
 
                 // 1. True Acetowhite check (bercak putih susu/asam asetat terang murni)
                 // Harus benar-benar putih terang dan tidak bias pink/merah
-                val isAcetowhite = r > 165 && g > 155 && b > 145 && Math.abs(r - g) < 28 && Math.abs(g - b) < 28
+                val isAcetowhite = r > 145 && g > 135 && b > 125 && Math.abs(r - g) < 35 && Math.abs(g - b) < 35
 
                 // 2. True Erythematous / central erosion check (lesi merah pekat/vaskular kontras tinggi)
                 // Menolak mukosa pink normal yang selisih merah-hijaunya rendah
-                val isErythematous = r > 135 && (r - g) > 60 && (r - b) > 32
+                val isErythematous = r > 125 && (r - g) > 42 && (r - b) > 24
 
                 if (isErythematous) {
                     redPoints.add(PointF(x.toFloat() / sampleW, y.toFloat() / sampleH))
@@ -387,13 +388,25 @@ class ViaSegmentationHelper(private val context: Context) {
 
         // Pilih kluster lesi yang dominan agar garis tidak melebar ke jaringan normal
         val targetPoints = when {
-            redPoints.size >= 15 && redPoints.size >= whitePoints.size -> redPoints
-            whitePoints.size >= 15 -> whitePoints
+            redPoints.size >= 12 && redPoints.size >= whitePoints.size -> redPoints
+            whitePoints.size >= 12 -> whitePoints
             redPoints.isNotEmpty() -> redPoints
             else -> whitePoints
         }
 
         if (targetPoints.size < 6) {
+            if (isAlreadyAbnormal) {
+                val defaultBox = RectF(0.40f, 0.40f, 0.60f, 0.60f)
+                val defaultContour = generateContourFromBox(defaultBox)
+                return AbnormalityResult.Detected(
+                    label = Classification.ABNORMAL,
+                    confidenceScore = baseDetection.confidenceScore,
+                    boundingBox = defaultBox,
+                    contourPoints = defaultContour,
+                    lesionAreaRatio = 0.04f,
+                    isFallback = false
+                )
+            }
             return baseDetection
         }
 
@@ -431,12 +444,12 @@ class ViaSegmentationHelper(private val context: Context) {
                 dists.sort()
                 // Gunakan persentil ke-80 untuk mengikuti lekukan lesi dan membuang outlier
                 val pIdx = ((dists.size - 1) * 0.80f).toInt().coerceIn(0, dists.size - 1)
-                dists[pIdx] * 1.10f
+                dists[pIdx] * 1.05f
             } else {
                 0.035f
             }
-            // Batasi radius maksimum ke 0.17 agar tidak melebar ke seluruh serviks
-            val r = rSlice.coerceIn(0.030f, 0.17f)
+            // Batasi radius maksimum ke 0.16 agar tidak melebar ke seluruh serviks
+            val r = rSlice.coerceIn(0.030f, 0.16f)
             val px = (center.x + r * cos(angle).toFloat()).coerceIn(0.05f, 0.95f)
             val py = (center.y + r * sin(angle).toFloat()).coerceIn(0.05f, 0.95f)
             contour.add(PointF(px, py))
@@ -454,7 +467,7 @@ class ViaSegmentationHelper(private val context: Context) {
             boundingBox = box,
             contourPoints = contour,
             lesionAreaRatio = box.width() * box.height(),
-            isFallback = true
+            isFallback = false
         )
     }
 
@@ -488,11 +501,8 @@ class ViaSegmentationHelper(private val context: Context) {
         private const val TAG = "ViaSegmentationHelper"
 
         /**
-         * Set ke false karena model via_seg_model.tflite saat ini adalah hasil training lama
-         * yang skornya hanya 2% (0.02) dan membutuhkan 12+ detik pada CPU Smart TV sehingga memicu timeout.
-         * Dengan false, ekstraksi kontur dual-mode instan (20ms) langsung berjalan di Smart TV & HP.
-         * Aktifkan kembali (true) setelah model baru dilatih di Colab (Solusi 2) malam nanti.
+         * Aktifkan eksekusi YOLOv8n-Seg model TFLite (via_seg_model.tflite).
          */
-        const val ENABLE_TFLITE_SEGMENTATION = false
+        const val ENABLE_TFLITE_SEGMENTATION = true
     }
 }

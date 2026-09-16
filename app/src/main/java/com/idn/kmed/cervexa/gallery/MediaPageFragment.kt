@@ -61,8 +61,8 @@ class MediaPageFragment : Fragment() {
 
     companion object {
         private const val TAG = "MediaPageFragment"
-        private const val AI_TIMEOUT_MS = 10000L // 10 detik agar aman di perangkat Smart TV / TV Box
-        private const val VIDEO_AI_INTERVAL_MS = 500L // analyze every 500ms
+        private const val AI_TIMEOUT_MS = 30000L // 30 detik agar aman di perangkat Smart TV / TV Box
+        private const val VIDEO_AI_INTERVAL_MS = 100L // ~10 FPS untuk real-time video AI overlay 500ms
 
         fun newInstance(path: String, type: String): MediaPageFragment {
             val f = MediaPageFragment()

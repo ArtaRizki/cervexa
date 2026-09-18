@@ -115,7 +115,8 @@ class AiDetector(
                             return classResult.copy(
                                 contourPoints = segResult.contourPoints,
                                 boundingBox = segResult.boundingBox ?: classResult.boundingBox,
-                                lesionAreaRatio = segResult.lesionAreaRatio
+                                lesionAreaRatio = segResult.lesionAreaRatio,
+                                lesionType = segResult.lesionType
                             )
                         }
                     } catch (e: Exception) {
@@ -136,7 +137,8 @@ class AiDetector(
                                 return acetowhiteResult.copy(
                                     contourPoints = segResult.contourPoints,
                                     boundingBox = segResult.boundingBox ?: acetowhiteResult.boundingBox,
-                                    lesionAreaRatio = segResult.lesionAreaRatio
+                                    lesionAreaRatio = segResult.lesionAreaRatio,
+                                    lesionType = segResult.lesionType
                                 )
                             }
                         } catch (_: Exception) {}

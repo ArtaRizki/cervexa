@@ -274,9 +274,16 @@ class MediaPageFragment : Fragment() {
             (1 - result.confidenceScore) * 100
         }).roundToInt()
 
-        val statusText = if (result.label == Classification.ABNORMAL) "ABNORMAL" else "NORMAL"
+        val statusText = if (result.label == Classification.ABNORMAL) {
+            if (result.lesionType == "ERYTHEMA") "ABNORMAL (Erosi / Eritema)" else "ABNORMAL"
+        } else "NORMAL"
+
         val rekomendasiText = if (result.label == Classification.ABNORMAL) {
-            "• Terdeteksi pola visual indikasi lesi serviks / Acetowhite.\n• Harap lakukan pemeriksaan klinis lanjutan (Kolposkopi / Biopsi) untuk konfirmasi diagnosis."
+            if (result.lesionType == "ERYTHEMA") {
+                "• Terdeteksi pola visual indikasi erosi serviks / eritema vaskular (garis oranye putus-putus).\n• Harap lakukan evaluasi klinis lanjutan (Kolposkopi / Biopsi) untuk konfirmasi diagnosis."
+            } else {
+                "• Terdeteksi pola visual indikasi lesi serviks / Acetowhite (garis merah putus-putus).\n• Harap lakukan pemeriksaan klinis lanjutan (Kolposkopi / Biopsi) untuk konfirmasi diagnosis."
+            }
         } else {
             "• Jaringan serviks tampak normal (tidak ditemukan tanda lesi signifikan).\n• Lanjutkan pemeriksaan rutin sesuai jadwal."
         }
@@ -299,6 +306,12 @@ class MediaPageFragment : Fragment() {
             "• Estimasi Luas Lesi: $pct% dari area serviks\n"
         } else ""
 
+        val catatanLesi = if (result.lesionType == "ERYTHEMA") {
+            "• Catatan: Garis oranye putus-putus melingkari batas bercak merah/erosi yang terdeteksi."
+        } else {
+            "• Catatan: Garis merah putus-putus melingkari batas area lesi acetowhite yang terdeteksi."
+        }
+
         val timeStr = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
 
         val message = """
@@ -308,7 +321,7 @@ class MediaPageFragment : Fragment() {
             |
             |KETERANGAN KLINIS:
             |• Tipe Analisis: $typeText
-            |${lesionAreaStr}• Catatan: Garis kontur melingkari batas area lesi acetowhite yang terdeteksi.
+            |${lesionAreaStr}$catatanLesi
             |
             |REKOMENDASI:
             |$rekomendasiText

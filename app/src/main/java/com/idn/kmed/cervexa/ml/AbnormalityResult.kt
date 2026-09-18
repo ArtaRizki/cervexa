@@ -26,7 +26,8 @@ sealed class AbnormalityResult {
         val boundingBox: RectF?,
         val isFallback: Boolean = false,
         val contourPoints: List<android.graphics.PointF>? = null,
-        val lesionAreaRatio: Float = 0f
+        val lesionAreaRatio: Float = 0f,
+        val lesionType: String? = null
     ) : AbnormalityResult()
 
     /**

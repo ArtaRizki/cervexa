@@ -182,7 +182,8 @@ class ViaSegmentationHelper(private val context: Context) {
             boundingBox = boundingBox,
             contourPoints = contourPoints,
             lesionAreaRatio = lesionAreaRatio,
-            isFallback = false
+            isFallback = false,
+            lesionType = "ACETOWHITE"
         )
     }
 
@@ -387,12 +388,9 @@ class ViaSegmentationHelper(private val context: Context) {
         }
 
         // Pilih kluster lesi yang dominan agar garis tidak melebar ke jaringan normal
-        val targetPoints = when {
-            redPoints.size >= 12 && redPoints.size >= whitePoints.size -> redPoints
-            whitePoints.size >= 12 -> whitePoints
-            redPoints.isNotEmpty() -> redPoints
-            else -> whitePoints
-        }
+        val isErythema = (redPoints.size >= 12 && redPoints.size >= whitePoints.size) || (redPoints.isNotEmpty() && whitePoints.size < 12)
+        val targetPoints = if (isErythema) redPoints else whitePoints
+        val detectedLesionType = if (isErythema) "ERYTHEMA" else "ACETOWHITE"
 
         if (targetPoints.size < 6) {
             if (isAlreadyAbnormal) {
@@ -404,7 +402,8 @@ class ViaSegmentationHelper(private val context: Context) {
                     boundingBox = defaultBox,
                     contourPoints = defaultContour,
                     lesionAreaRatio = 0.04f,
-                    isFallback = false
+                    isFallback = false,
+                    lesionType = "ERYTHEMA"
                 )
             }
             return baseDetection
@@ -467,7 +466,8 @@ class ViaSegmentationHelper(private val context: Context) {
             boundingBox = box,
             contourPoints = contour,
             lesionAreaRatio = box.width() * box.height(),
-            isFallback = false
+            isFallback = false,
+            lesionType = detectedLesionType
         )
     }
 

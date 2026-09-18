@@ -212,7 +212,9 @@ class OverlayRenderer {
         val percentage = (result.confidenceScore * 100).roundToInt().coerceIn(50, 99)
 
         val classLabel = when (result.label) {
-            Classification.ABNORMAL -> "ABNORMAL"
+            Classification.ABNORMAL -> {
+                if (result.lesionType == "ERYTHEMA") "ABNORMAL (Erosi/Merah)" else "ABNORMAL"
+            }
             Classification.NORMAL -> "NORMAL"
         }
 
@@ -221,22 +223,20 @@ class OverlayRenderer {
             " • Lesi: $pct%"
         } else ""
 
-        val fallbackSuffix = if (result.isFallback) " (Acetowhite)" else ""
-
-        return "AI: $classLabel ($percentage%)$areaSuffix$fallbackSuffix"
+        return "AI: $classLabel ($percentage%)$areaSuffix"
     }
 
     /**
-     * Determines the label color based on classification result and confidence.
+     * Determines the label and contour color based on lesion characteristic.
      *
      * - NORMAL → Always green (#00C853)
-     * - ABNORMAL high (> 80%) → red (#FF0000)
-     * - ABNORMAL moderate (≤ 80%) → orange (#FF8C00)
+     * - ABNORMAL with ERYTHEMA (Bercak Merah / Erosi) → Vivid Orange (#FF8C00)
+     * - ABNORMAL with ACETOWHITE (Bercak Putih IVA) → Red (#FF0000)
      */
     fun getLabelColor(result: AbnormalityResult.Detected): Int {
         return when (result.label) {
             Classification.ABNORMAL -> {
-                if (result.confidenceScore > 0.80f) COLOR_RED else COLOR_ORANGE
+                if (result.lesionType == "ERYTHEMA") COLOR_ORANGE else COLOR_RED
             }
             Classification.NORMAL -> COLOR_GREEN
         }

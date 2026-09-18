@@ -3,6 +3,7 @@ package com.idn.kmed.cervexa.ml
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
@@ -377,24 +378,29 @@ class OverlayRenderer {
         }
         path.close()
 
-        // 1. Semi-transparent fill mask inside lesion
+        // 1. Semi-transparent fill mask inside lesion (halus agar tidak menutupi visual serviks)
         val fillPaint = Paint().apply {
             this.color = color
-            alpha = 45 // Subtle translucent shading
+            alpha = 25 // Sangat halus dan transparan
             style = Paint.Style.FILL
             isAntiAlias = true
         }
         canvas.drawPath(path, fillPaint)
 
-        // 2. Clear glowing outline contour
+        // 2. Garis tipis putus-putus (dashed contour line) sesuai feedback klinis
+        val thinStrokeWidth = (frameWidth * STROKE_WIDTH_RATIO * 0.55f).coerceIn(1.5f, 3.2f)
+        val dashLength = (frameWidth * 0.007f).coerceIn(8f, 15f)
+        val gapLength = (frameWidth * 0.005f).coerceIn(5f, 10f)
+
         val strokePaint = Paint().apply {
             this.color = color
             style = Paint.Style.STROKE
-            strokeWidth = (frameWidth * STROKE_WIDTH_RATIO * 1.6f).coerceIn(2.5f, 6.5f)
+            this.strokeWidth = thinStrokeWidth
+            pathEffect = DashPathEffect(floatArrayOf(dashLength, gapLength), 0f)
             strokeJoin = Paint.Join.ROUND
             strokeCap = Paint.Cap.ROUND
             isAntiAlias = true
-            setShadowLayer(4f, 0f, 0f, Color.BLACK)
+            setShadowLayer(2f, 0f, 0f, Color.BLACK)
         }
         canvas.drawPath(path, strokePaint)
     }

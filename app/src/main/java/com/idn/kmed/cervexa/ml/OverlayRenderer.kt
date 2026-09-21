@@ -26,9 +26,10 @@ class OverlayRenderer {
 
     companion object {
         // Color constants
-        private const val COLOR_RED = 0xFFFF0000.toInt()       // #FF0000
-        private const val COLOR_ORANGE = 0xFFFF8C00.toInt()    // #FF8C00
-        private const val COLOR_GREEN = 0xFF00C853.toInt()     // #00C853
+        private const val COLOR_RED = 0xFFFF0000.toInt()       // #FF0000 (Merah untuk Acetowhite / IVA+)
+        private const val COLOR_YELLOW = 0xFFFFD700.toInt()    // #FFD700 (Kuning untuk Erosi Serviks Sentral OUE)
+        private const val COLOR_ORANGE = 0xFFFF8C00.toInt()    // #FF8C00 (Oranye untuk Bercak Merah / Eritema)
+        private const val COLOR_GREEN = 0xFF00C853.toInt()     // #00C853 (Hijau untuk Normal)
 
         // Proportional scaling factors - compact badge to prevent obstructing cervix
         private const val TEXT_SIZE_RATIO = 0.026f       // Reduced from 0.04f (compact badge)
@@ -213,7 +214,11 @@ class OverlayRenderer {
 
         val classLabel = when (result.label) {
             Classification.ABNORMAL -> {
-                if (result.lesionType == "ERYTHEMA") "ABNORMAL (Erosi/Merah)" else "ABNORMAL"
+                when (result.lesionType) {
+                    "EROSION" -> "ABNORMAL (Erosi)"
+                    "ERYTHEMA" -> "ABNORMAL (Bercak Merah)"
+                    else -> "ABNORMAL"
+                }
             }
             Classification.NORMAL -> "NORMAL"
         }
@@ -227,16 +232,20 @@ class OverlayRenderer {
     }
 
     /**
-     * Determines the label and contour color based on lesion characteristic.
-     *
+     * Determines the label and contour color based on lesion characteristic:
      * - NORMAL → Always green (#00C853)
-     * - ABNORMAL with ERYTHEMA (Bercak Merah / Erosi) → Vivid Orange (#FF8C00)
+     * - ABNORMAL with EROSION (Erosi Serviks Sentral OUE) → Golden Yellow (#FFD700)
+     * - ABNORMAL with ERYTHEMA (Bercak Merah / Fokal) → Vivid Orange (#FF8C00)
      * - ABNORMAL with ACETOWHITE (Bercak Putih IVA) → Red (#FF0000)
      */
     fun getLabelColor(result: AbnormalityResult.Detected): Int {
         return when (result.label) {
             Classification.ABNORMAL -> {
-                if (result.lesionType == "ERYTHEMA") COLOR_ORANGE else COLOR_RED
+                when (result.lesionType) {
+                    "EROSION" -> COLOR_YELLOW
+                    "ERYTHEMA" -> COLOR_ORANGE
+                    else -> COLOR_RED
+                }
             }
             Classification.NORMAL -> COLOR_GREEN
         }

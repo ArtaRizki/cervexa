@@ -275,14 +275,18 @@ class MediaPageFragment : Fragment() {
         }).roundToInt()
 
         val statusText = if (result.label == Classification.ABNORMAL) {
-            if (result.lesionType == "ERYTHEMA") "ABNORMAL (Erosi / Eritema)" else "ABNORMAL"
+            when (result.lesionType) {
+                "EROSION" -> "ABNORMAL (Erosi Serviks)"
+                "ERYTHEMA" -> "ABNORMAL (Bercak Merah / Eritema)"
+                else -> "ABNORMAL (Acetowhite / IVA+)"
+            }
         } else "NORMAL"
 
         val rekomendasiText = if (result.label == Classification.ABNORMAL) {
-            if (result.lesionType == "ERYTHEMA") {
-                "• Terdeteksi pola visual indikasi erosi serviks / eritema vaskular (garis oranye putus-putus).\n• Harap lakukan evaluasi klinis lanjutan (Kolposkopi / Biopsi) untuk konfirmasi diagnosis."
-            } else {
-                "• Terdeteksi pola visual indikasi lesi serviks / Acetowhite (garis merah putus-putus).\n• Harap lakukan pemeriksaan klinis lanjutan (Kolposkopi / Biopsi) untuk konfirmasi diagnosis."
+            when (result.lesionType) {
+                "EROSION" -> "• Terdeteksi indikasi Erosi Serviks / Ectropion di sekitar muara OUE (garis kuning putus-putus).\n• Harap lakukan evaluasi klinis lanjutan untuk pemeriksaan ektropion atau servisitis."
+                "ERYTHEMA" -> "• Terdeteksi pola visual Bercak Merah / Eritema fokal (garis oranye putus-putus).\n• Harap lakukan evaluasi klinis lanjutan untuk konfirmasi vaskularisasi / perdarahan kontak."
+                else -> "• Terdeteksi pola visual indikasi lesi serviks / Acetowhite (garis merah putus-putus).\n• Harap lakukan pemeriksaan klinis lanjutan (Kolposkopi / Biopsi) untuk konfirmasi diagnosis."
             }
         } else {
             "• Jaringan serviks tampak normal (tidak ditemukan tanda lesi signifikan).\n• Lanjutkan pemeriksaan rutin sesuai jadwal."
@@ -306,10 +310,10 @@ class MediaPageFragment : Fragment() {
             "• Estimasi Luas Lesi: $pct% dari area serviks\n"
         } else ""
 
-        val catatanLesi = if (result.lesionType == "ERYTHEMA") {
-            "• Catatan: Garis oranye putus-putus melingkari batas bercak merah/erosi yang terdeteksi."
-        } else {
-            "• Catatan: Garis merah putus-putus melingkari batas area lesi acetowhite yang terdeteksi."
+        val catatanLesi = when (result.lesionType) {
+            "EROSION" -> "• Catatan: Garis kuning putus-putus melingkari batas erosi serviks (ektropion OUE) yang terdeteksi."
+            "ERYTHEMA" -> "• Catatan: Garis oranye putus-putus melingkari batas bercak merah/eritema yang terdeteksi."
+            else -> "• Catatan: Garis merah putus-putus melingkari batas area lesi acetowhite yang terdeteksi."
         }
 
         val timeStr = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())

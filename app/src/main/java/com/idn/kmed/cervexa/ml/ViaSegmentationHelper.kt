@@ -388,9 +388,8 @@ class ViaSegmentationHelper(private val context: Context) {
         }
 
         // Pilih kluster lesi yang dominan agar garis tidak melebar ke jaringan normal
-        val isErythema = (redPoints.size >= 12 && redPoints.size >= whitePoints.size) || (redPoints.isNotEmpty() && whitePoints.size < 12)
-        val targetPoints = if (isErythema) redPoints else whitePoints
-        val detectedLesionType = if (isErythema) "ERYTHEMA" else "ACETOWHITE"
+        val isRedDominant = (redPoints.size >= 12 && redPoints.size >= whitePoints.size) || (redPoints.isNotEmpty() && whitePoints.size < 12)
+        val targetPoints = if (isRedDominant) redPoints else whitePoints
 
         if (targetPoints.size < 6) {
             if (isAlreadyAbnormal) {
@@ -403,7 +402,7 @@ class ViaSegmentationHelper(private val context: Context) {
                     contourPoints = defaultContour,
                     lesionAreaRatio = 0.04f,
                     isFallback = false,
-                    lesionType = "ERYTHEMA"
+                    lesionType = "EROSION" // Default sentral di OUE
                 )
             }
             return baseDetection
@@ -417,6 +416,17 @@ class ViaSegmentationHelper(private val context: Context) {
             sumY += pt.y
         }
         val center = PointF(sumX / targetPoints.size, sumY / targetPoints.size)
+
+        // Tentukan klasifikasi lesi 3-kategori (Putih, Erosi, atau Bercak Merah):
+        // 1. ACETOWHITE: Bercak putih susu / IVA+
+        // 2. EROSION: Bercak merah di area sentral sekitar mulut rahim / OUE (radius <= 0.18 dari tengah 0.5, 0.5)
+        // 3. ERYTHEMA: Bercak merah di area perifer / fokal ektoserviks
+        val detectedLesionType = if (!isRedDominant) {
+            "ACETOWHITE"
+        } else {
+            val distFromOs = Math.hypot((center.x - 0.5f).toDouble(), (center.y - 0.5f).toDouble())
+            if (distFromOs <= 0.18) "EROSION" else "ERYTHEMA"
+        }
 
         // Radial grouping dengan penyaringan persentil untuk garis kontur yang presisi dan pas (tidak over)
         val slices = 16

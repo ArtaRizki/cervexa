@@ -188,7 +188,8 @@ class ViaSegmentationHelper(private val context: Context) {
     }
 
     /**
-     * Decodes the YOLOv8-Seg prototype masks into an organic polygon contour for the detected lesion.
+     * Decodes the YOLOv8-Seg prototype masks into a precise boundary contour
+     * using Moore Neighborhood boundary tracing on the decoded binary mask.
      */
     private fun decodeMaskToContour(
         protoMasks: FloatArray,
@@ -208,61 +209,41 @@ class ViaSegmentationHelper(private val context: Context) {
         val minY = (box.top * maskH).toInt().coerceIn(0, maskH - 1)
         val maxY = (box.bottom * maskH).toInt().coerceIn(minY, maskH - 1)
 
-        val positivePoints = ArrayList<PointF>()
-        var sumX = 0f
-        var sumY = 0f
+        val cropW = maxX - minX + 1
+        val cropH = maxY - minY + 1
+        if (cropW < 3 || cropH < 3) return null
 
+        // Build binary mask within the bounding box region
+        val binaryMask = BooleanArray(cropW * cropH)
         for (y in minY..maxY) {
             val yOffset = y * maskW
             for (x in minX..maxX) {
                 var logit = 0f
                 for (k in 0 until numProtos) {
-                    val protoVal = protoMasks[k * maskArea + yOffset + x]
-                    logit += maskWeights[k] * protoVal
+                    logit += maskWeights[k] * protoMasks[k * maskArea + yOffset + x]
                 }
-                // Sigmoid(logit) > 0.5 <=> logit > 0.0
                 if (logit > 0f) {
-                    val normX = x.toFloat() / maskW
-                    val normY = y.toFloat() / maskH
-                    positivePoints.add(PointF(normX, normY))
-                    sumX += normX
-                    sumY += normY
+                    binaryMask[(y - minY) * cropW + (x - minX)] = true
                 }
             }
         }
 
-        if (positivePoints.size < 6) return null
+        // Trace boundary using Moore Neighborhood algorithm
+        val boundaryPixels = mooreBoundaryTrace(binaryMask, cropW, cropH) ?: return null
 
-        val centerX = sumX / positivePoints.size
-        val centerY = sumY / positivePoints.size
-
-        // Radial grouping for organic contour polygon (20 slices)
-        val slices = 20
-        val maxDist = FloatArray(slices) { 0.01f }
-
-        for (pt in positivePoints) {
-            val dx = pt.x - centerX
-            val dy = pt.y - centerY
-            var angle = atan2(dy.toDouble(), dx.toDouble()).toFloat()
-            if (angle < 0) angle += (2 * Math.PI).toFloat()
-
-            val sliceIdx = ((angle / (2 * Math.PI)) * slices).toInt().coerceIn(0, slices - 1)
-            val dist = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-            if (dist > maxDist[sliceIdx]) {
-                maxDist[sliceIdx] = dist
-            }
+        // Convert pixel coordinates to normalized [0, 1] coordinates
+        val contour = boundaryPixels.map { (px, py) ->
+            PointF(
+                ((minX + px).toFloat() / maskW).coerceIn(0.01f, 0.99f),
+                ((minY + py).toFloat() / maskH).coerceIn(0.01f, 0.99f)
+            )
         }
 
-        val contour = ArrayList<PointF>()
-        for (i in 0 until slices) {
-            val angle = (i.toFloat() / slices) * 2 * Math.PI
-            val r = maxDist[i]
-            val px = (centerX + r * cos(angle).toFloat()).coerceIn(0.01f, 0.99f)
-            val py = (centerY + r * sin(angle).toFloat()).coerceIn(0.01f, 0.99f)
-            contour.add(PointF(px, py))
-        }
+        // Simplify contour with Douglas-Peucker to reduce point count while preserving shape
+        val epsilon = 1.2f / maxOf(maskW, maskH).toFloat()
+        val simplified = douglasPeucker(contour, epsilon)
 
-        return contour
+        return if (simplified.size >= 4) simplified else contour
     }
 
     /**
@@ -428,40 +409,38 @@ class ViaSegmentationHelper(private val context: Context) {
             if (distFromOs <= 0.18) "EROSION" else "ERYTHEMA"
         }
 
-        // Radial grouping dengan penyaringan persentil untuk garis kontur yang presisi dan pas (tidak over)
-        val slices = 16
-        val sliceDists = Array(slices) { ArrayList<Float>() }
-
+        // Build binary grid from target points and trace boundary for precise contour
+        val gridSize = 48
+        val grid = BooleanArray(gridSize * gridSize)
         for (pt in targetPoints) {
-            val dx = pt.x - center.x
-            val dy = pt.y - center.y
-            var angle = atan2(dy.toDouble(), dx.toDouble()).toFloat()
-            if (angle < 0) angle += (2 * Math.PI).toFloat()
-
-            val sliceIdx = ((angle / (2 * Math.PI)) * slices).toInt().coerceIn(0, slices - 1)
-            val dist = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-            if (dist in 0.02f..0.22f) {
-                sliceDists[sliceIdx].add(dist)
-            }
+            val gx = (pt.x * (gridSize - 1)).toInt().coerceIn(0, gridSize - 1)
+            val gy = (pt.y * (gridSize - 1)).toInt().coerceIn(0, gridSize - 1)
+            grid[gy * gridSize + gx] = true
         }
 
-        val contour = ArrayList<PointF>()
-        for (i in 0 until slices) {
-            val angle = (i.toFloat() / slices) * 2 * Math.PI
-            val dists = sliceDists[i]
-            val rSlice = if (dists.isNotEmpty()) {
-                dists.sort()
-                // Gunakan persentil ke-80 untuk mengikuti lekukan lesi dan membuang outlier
-                val pIdx = ((dists.size - 1) * 0.80f).toInt().coerceIn(0, dists.size - 1)
-                dists[pIdx] * 1.05f
-            } else {
-                0.035f
+        // Morphological dilation to connect nearby detected pixels and fill gaps
+        val dilated = morphDilate(grid, gridSize, gridSize)
+
+        // Trace boundary using Moore Neighborhood algorithm for organic, precise contour
+        val boundaryPixels = mooreBoundaryTrace(dilated, gridSize, gridSize)
+
+        val contour: List<PointF> = if (boundaryPixels != null && boundaryPixels.size >= 4) {
+            val rawContour = boundaryPixels.map { (px, py) ->
+                PointF(
+                    (px.toFloat() / (gridSize - 1)).coerceIn(0.05f, 0.95f),
+                    (py.toFloat() / (gridSize - 1)).coerceIn(0.05f, 0.95f)
+                )
             }
-            // Batasi radius maksimum ke 0.16 agar tidak melebar ke seluruh serviks
-            val r = rSlice.coerceIn(0.030f, 0.16f)
-            val px = (center.x + r * cos(angle).toFloat()).coerceIn(0.05f, 0.95f)
-            val py = (center.y + r * sin(angle).toFloat()).coerceIn(0.05f, 0.95f)
-            contour.add(PointF(px, py))
+            val epsilon = 1.5f / gridSize
+            val simplified = douglasPeucker(rawContour, epsilon)
+            if (simplified.size >= 4) simplified else rawContour
+        } else {
+            // Fallback: generate contour from bounding box of target points
+            val pMinX = targetPoints.minOf { it.x }
+            val pMaxX = targetPoints.maxOf { it.x }
+            val pMinY = targetPoints.minOf { it.y }
+            val pMaxY = targetPoints.maxOf { it.y }
+            generateContourFromBox(RectF(pMinX, pMinY, pMaxX, pMaxY))
         }
 
         val minX = contour.minOf { it.x }
@@ -497,6 +476,132 @@ class ViaSegmentationHelper(private val context: Context) {
             points.add(PointF(px, py))
         }
         return points
+    }
+
+    /**
+     * Moore Neighborhood boundary tracing algorithm.
+     * Traces the outer boundary of a connected region in a binary mask,
+     * returning an ordered list of boundary pixel coordinates that form a closed contour.
+     */
+    private fun mooreBoundaryTrace(mask: BooleanArray, width: Int, height: Int): List<Pair<Int, Int>>? {
+        // Find first positive pixel (scan top-to-bottom, left-to-right)
+        var startX = -1
+        var startY = -1
+        outer@ for (y in 0 until height) {
+            for (x in 0 until width) {
+                if (mask[y * width + x]) {
+                    startX = x
+                    startY = y
+                    break@outer
+                }
+            }
+        }
+        if (startX == -1) return null
+
+        // Moore neighbor offsets (8-connected), clockwise:
+        // 0=right, 1=bottom-right, 2=bottom, 3=bottom-left,
+        // 4=left, 5=top-left, 6=top, 7=top-right
+        val dx = intArrayOf(1, 1, 0, -1, -1, -1, 0, 1)
+        val dy = intArrayOf(0, 1, 1, 1, 0, -1, -1, -1)
+
+        val boundary = ArrayList<Pair<Int, Int>>()
+        boundary.add(Pair(startX, startY))
+
+        var cx = startX
+        var cy = startY
+        // Entry was from the left (scanning left-to-right), so backtrack direction is 4 (left)
+        var backtrackDir = 4
+
+        val maxIterations = width * height * 2
+        var iterations = 0
+
+        do {
+            val searchStart = (backtrackDir + 1) % 8
+            var found = false
+
+            for (i in 0 until 8) {
+                val dir = (searchStart + i) % 8
+                val nx = cx + dx[dir]
+                val ny = cy + dy[dir]
+
+                if (nx in 0 until width && ny in 0 until height && mask[ny * width + nx]) {
+                    cx = nx
+                    cy = ny
+                    backtrackDir = (dir + 4) % 8
+                    found = true
+
+                    if (cx != startX || cy != startY) {
+                        boundary.add(Pair(cx, cy))
+                    }
+                    break
+                }
+            }
+
+            if (!found) break
+            iterations++
+        } while ((cx != startX || cy != startY) && iterations < maxIterations)
+
+        return if (boundary.size >= 4) boundary else null
+    }
+
+    /**
+     * Morphological dilation (4-connected) to fill small gaps between nearby pixels.
+     */
+    private fun morphDilate(grid: BooleanArray, w: Int, h: Int): BooleanArray {
+        val result = grid.copyOf()
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                if (!grid[y * w + x]) continue
+                if (x > 0) result[y * w + (x - 1)] = true
+                if (x < w - 1) result[y * w + (x + 1)] = true
+                if (y > 0) result[(y - 1) * w + x] = true
+                if (y < h - 1) result[(y + 1) * w + x] = true
+            }
+        }
+        return result
+    }
+
+    /**
+     * Douglas-Peucker polygon simplification algorithm.
+     * Reduces the number of points in a contour while preserving the overall shape.
+     */
+    private fun douglasPeucker(points: List<PointF>, epsilon: Float): List<PointF> {
+        if (points.size <= 2) return points
+
+        var maxDist = 0f
+        var maxIdx = 0
+        val first = points.first()
+        val last = points.last()
+
+        for (i in 1 until points.size - 1) {
+            val dist = perpendicularDistance(points[i], first, last)
+            if (dist > maxDist) {
+                maxDist = dist
+                maxIdx = i
+            }
+        }
+
+        return if (maxDist > epsilon) {
+            val left = douglasPeucker(points.subList(0, maxIdx + 1), epsilon)
+            val right = douglasPeucker(points.subList(maxIdx, points.size), epsilon)
+            left.dropLast(1) + right
+        } else {
+            listOf(first, last)
+        }
+    }
+
+    private fun perpendicularDistance(point: PointF, lineStart: PointF, lineEnd: PointF): Float {
+        val ldx = lineEnd.x - lineStart.x
+        val ldy = lineEnd.y - lineStart.y
+        val lengthSq = ldx * ldx + ldy * ldy
+        if (lengthSq < 1e-10f) {
+            val px = point.x - lineStart.x
+            val py = point.y - lineStart.y
+            return Math.sqrt((px * px + py * py).toDouble()).toFloat()
+        }
+        return (Math.abs(
+            (ldy * point.x - ldx * point.y + lineEnd.x * lineStart.y - lineEnd.y * lineStart.x).toDouble()
+        ) / Math.sqrt(lengthSq.toDouble())).toFloat()
     }
 
     fun close() {

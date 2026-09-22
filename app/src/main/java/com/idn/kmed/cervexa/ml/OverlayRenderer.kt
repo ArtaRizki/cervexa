@@ -223,12 +223,7 @@ class OverlayRenderer {
             Classification.NORMAL -> "NORMAL"
         }
 
-        val areaSuffix = if (result.lesionAreaRatio > 0.001f) {
-            val pct = (result.lesionAreaRatio * 100).roundToInt().coerceIn(1, 99)
-            " • Lesi: $pct%"
-        } else ""
-
-        return "AI: $classLabel ($percentage%)$areaSuffix"
+        return "AI: $classLabel ($percentage%)"
     }
 
     /**

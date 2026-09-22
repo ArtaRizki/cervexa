@@ -15,7 +15,10 @@ import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 import java.nio.MappedByteBuffer
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * ViaSegmentationHelper manages TFLite instance segmentation for cervical lesions (VIA).
@@ -189,7 +192,7 @@ class ViaSegmentationHelper(private val context: Context) {
 
     /**
      * Decodes the YOLOv8-Seg prototype masks into a precise boundary contour
-     * using Moore Neighborhood boundary tracing on the decoded binary mask.
+     * using morphological closing + Moore Neighborhood tracing + Chaikin smoothing.
      */
     private fun decodeMaskToContour(
         protoMasks: FloatArray,
@@ -214,7 +217,7 @@ class ViaSegmentationHelper(private val context: Context) {
         if (cropW < 3 || cropH < 3) return null
 
         // Build binary mask within the bounding box region
-        val binaryMask = BooleanArray(cropW * cropH)
+        var binaryMask = BooleanArray(cropW * cropH)
         for (y in minY..maxY) {
             val yOffset = y * maskW
             for (x in minX..maxX) {
@@ -228,6 +231,9 @@ class ViaSegmentationHelper(private val context: Context) {
             }
         }
 
+        // Morphological closing (dilate then erode) to fill gaps WITHOUT expanding boundary
+        binaryMask = morphClose(binaryMask, cropW, cropH)
+
         // Trace boundary using Moore Neighborhood algorithm
         val boundaryPixels = mooreBoundaryTrace(binaryMask, cropW, cropH) ?: return null
 
@@ -239,11 +245,12 @@ class ViaSegmentationHelper(private val context: Context) {
             )
         }
 
-        // Simplify contour with Douglas-Peucker to reduce point count while preserving shape
+        // Simplify with Douglas-Peucker then smooth with Chaikin for organic curves
         val epsilon = 1.2f / maxOf(maskW, maskH).toFloat()
         val simplified = douglasPeucker(contour, epsilon)
+        val smoothed = chaikinSmooth(if (simplified.size >= 4) simplified else contour, iterations = 2)
 
-        return if (simplified.size >= 4) simplified else contour
+        return if (smoothed.size >= 4) smoothed else contour
     }
 
     /**
@@ -300,8 +307,8 @@ class ViaSegmentationHelper(private val context: Context) {
 
     /**
      * Fallback method using dual-characteristic (acetowhite & erythematous/erosion) color thresholding
-     * in the cervical transformation zone (20% - 80%) to locate lesion clusters
-     * and construct an organic polygon boundary.
+     * in HSV+RGB color space within the cervical transformation zone (15%-85%)
+     * with specular/shadow rejection and morphological closing for precise boundary.
      */
     fun runHeuristicContourDetection(bitmap: Bitmap, isAlreadyAbnormal: Boolean = false): AbnormalityResult.Detected {
         val baseDetection = if (!isAlreadyAbnormal) {
@@ -319,7 +326,7 @@ class ViaSegmentationHelper(private val context: Context) {
             )
         }
 
-        // Downsample to fast analysis grid (width 320px) to eliminate JNI getPixel overhead on large images
+        // Downsample to fast analysis grid (width 320px)
         val sampleW = 320
         val sampleH = ((sampleW.toFloat() * bitmap.height) / bitmap.width).toInt().coerceAtLeast(180)
         val sampleBmp = if (bitmap.width > sampleW || bitmap.height > sampleH) {
@@ -335,13 +342,15 @@ class ViaSegmentationHelper(private val context: Context) {
             sampleBmp.recycle()
         }
 
-        val startX = (sampleW * 0.20).toInt()
-        val endX = (sampleW * 0.80).toInt()
-        val startY = (sampleH * 0.20).toInt()
-        val endY = (sampleH * 0.80).toInt()
+        // Wider analysis zone (15%-85%) for better edge coverage
+        val startX = (sampleW * 0.15).toInt()
+        val endX = (sampleW * 0.85).toInt()
+        val startY = (sampleH * 0.15).toInt()
+        val endY = (sampleH * 0.85).toInt()
 
         val redPoints = ArrayList<PointF>()
         val whitePoints = ArrayList<PointF>()
+        val hsvBuffer = FloatArray(3)
         val step = 2
 
         for (y in startY until endY step step) {
@@ -352,13 +361,28 @@ class ViaSegmentationHelper(private val context: Context) {
                 val g = (pixel shr 8) and 0xFF
                 val b = pixel and 0xFF
 
-                // 1. True Acetowhite check (bercak putih susu/asam asetat terang murni)
-                // Harus benar-benar putih terang dan tidak bias pink/merah
-                val isAcetowhite = r > 145 && g > 135 && b > 125 && Math.abs(r - g) < 35 && Math.abs(g - b) < 35
+                // Reject specular highlights (overexposed white glare from microscope light)
+                val brightness = (r + g + b) / 3
+                if (brightness > 225) continue
+                // Reject deep shadows (underexposed dark areas)
+                if (brightness < 45) continue
 
-                // 2. True Erythematous / central erosion check (lesi merah pekat/vaskular kontras tinggi)
-                // Menolak mukosa pink normal yang selisih merah-hijaunya rendah
-                val isErythematous = r > 125 && (r - g) > 42 && (r - b) > 24
+                // Convert to HSV for more robust color classification
+                Color.RGBToHSV(r, g, b, hsvBuffer)
+                val hue = hsvBuffer[0]       // 0-360
+                val sat = hsvBuffer[1]       // 0-1
+                val value = hsvBuffer[2]     // 0-1
+
+                // 1. Acetowhite: high brightness, low saturation (desaturated white/cream)
+                // Must be genuinely white/cream, not pink or specular
+                val isAcetowhite = value > 0.55f && sat < 0.22f && brightness > 140
+                        && Math.abs(r - g) < 30 && Math.abs(g - b) < 30
+
+                // 2. Erythematous / erosion: red-dominant in HSV (hue 0-25° or 340-360°)
+                // with sufficient saturation to distinguish from normal pink mucosa
+                val isRedHue = hue < 25f || hue > 340f
+                val isErythematous = isRedHue && sat > 0.30f && value > 0.35f
+                        && (r - g) > 35 && (r - b) > 20
 
                 if (isErythematous) {
                     redPoints.add(PointF(x.toFloat() / sampleW, y.toFloat() / sampleH))
@@ -368,7 +392,7 @@ class ViaSegmentationHelper(private val context: Context) {
             }
         }
 
-        // Pilih kluster lesi yang dominan agar garis tidak melebar ke jaringan normal
+        // Choose dominant lesion cluster
         val isRedDominant = (redPoints.size >= 12 && redPoints.size >= whitePoints.size) || (redPoints.isNotEmpty() && whitePoints.size < 12)
         val targetPoints = if (isRedDominant) redPoints else whitePoints
 
@@ -383,13 +407,13 @@ class ViaSegmentationHelper(private val context: Context) {
                     contourPoints = defaultContour,
                     lesionAreaRatio = 0.04f,
                     isFallback = false,
-                    lesionType = "EROSION" // Default sentral di OUE
+                    lesionType = "EROSION"
                 )
             }
             return baseDetection
         }
 
-        // Compute centroid kluster lesi
+        // Compute centroid of lesion cluster
         var sumX = 0f
         var sumY = 0f
         for (pt in targetPoints) {
@@ -398,10 +422,7 @@ class ViaSegmentationHelper(private val context: Context) {
         }
         val center = PointF(sumX / targetPoints.size, sumY / targetPoints.size)
 
-        // Tentukan klasifikasi lesi 3-kategori (Putih, Erosi, atau Bercak Merah):
-        // 1. ACETOWHITE: Bercak putih susu / IVA+
-        // 2. EROSION: Bercak merah di area sentral sekitar mulut rahim / OUE (radius <= 0.18 dari tengah 0.5, 0.5)
-        // 3. ERYTHEMA: Bercak merah di area perifer / fokal ektoserviks
+        // 3-category lesion classification
         val detectedLesionType = if (!isRedDominant) {
             "ACETOWHITE"
         } else {
@@ -409,8 +430,8 @@ class ViaSegmentationHelper(private val context: Context) {
             if (distFromOs <= 0.18) "EROSION" else "ERYTHEMA"
         }
 
-        // Build binary grid from target points and trace boundary for precise contour
-        val gridSize = 48
+        // Higher resolution grid (96x96) for precise contour tracing
+        val gridSize = 96
         val grid = BooleanArray(gridSize * gridSize)
         for (pt in targetPoints) {
             val gx = (pt.x * (gridSize - 1)).toInt().coerceIn(0, gridSize - 1)
@@ -418,11 +439,11 @@ class ViaSegmentationHelper(private val context: Context) {
             grid[gy * gridSize + gx] = true
         }
 
-        // Morphological dilation to connect nearby detected pixels and fill gaps
-        val dilated = morphDilate(grid, gridSize, gridSize)
+        // Morphological closing (dilate→erode) to fill gaps without expanding final boundary
+        val closed = morphClose(grid, gridSize, gridSize)
 
-        // Trace boundary using Moore Neighborhood algorithm for organic, precise contour
-        val boundaryPixels = mooreBoundaryTrace(dilated, gridSize, gridSize)
+        // Trace boundary using Moore Neighborhood algorithm
+        val boundaryPixels = mooreBoundaryTrace(closed, gridSize, gridSize)
 
         val contour: List<PointF> = if (boundaryPixels != null && boundaryPixels.size >= 4) {
             val rawContour = boundaryPixels.map { (px, py) ->
@@ -431,11 +452,12 @@ class ViaSegmentationHelper(private val context: Context) {
                     (py.toFloat() / (gridSize - 1)).coerceIn(0.05f, 0.95f)
                 )
             }
+            // Simplify then smooth for organic, curved contour
             val epsilon = 1.5f / gridSize
             val simplified = douglasPeucker(rawContour, epsilon)
-            if (simplified.size >= 4) simplified else rawContour
+            val base = if (simplified.size >= 4) simplified else rawContour
+            chaikinSmooth(base, iterations = 2)
         } else {
-            // Fallback: generate contour from bounding box of target points
             val pMinX = targetPoints.minOf { it.x }
             val pMaxX = targetPoints.maxOf { it.x }
             val pMinY = targetPoints.minOf { it.y }
@@ -559,6 +581,69 @@ class ViaSegmentationHelper(private val context: Context) {
             }
         }
         return result
+    }
+
+    /**
+     * Morphological erosion (4-connected). A pixel survives only if all 4 neighbors are also set.
+     * Shrinks the boundary by 1 pixel, counteracting the expansion from dilation.
+     */
+    private fun morphErode(grid: BooleanArray, w: Int, h: Int): BooleanArray {
+        val result = BooleanArray(w * h)
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                if (!grid[y * w + x]) continue
+                // Keep pixel only if all 4-connected neighbors exist
+                val left = x == 0 || grid[y * w + (x - 1)]
+                val right = x == w - 1 || grid[y * w + (x + 1)]
+                val up = y == 0 || grid[(y - 1) * w + x]
+                val down = y == h - 1 || grid[(y + 1) * w + x]
+                result[y * w + x] = left && right && up && down
+            }
+        }
+        return result
+    }
+
+    /**
+     * Morphological closing (dilate then erode).
+     * Fills small gaps and connects nearby regions while preserving the original boundary size.
+     * This prevents the contour from expanding beyond the actual lesion area.
+     */
+    private fun morphClose(grid: BooleanArray, w: Int, h: Int): BooleanArray {
+        val dilated = morphDilate(grid, w, h)
+        return morphErode(dilated, w, h)
+    }
+
+    /**
+     * Chaikin's corner-cutting subdivision algorithm.
+     * Produces smooth, organic curves from angular polygon contours.
+     * Each iteration replaces each edge midpoint pair with 2 new points at 25%/75%,
+     * effectively rounding all corners while preserving overall shape.
+     *
+     * @param points Input polygon contour points
+     * @param iterations Number of smoothing passes (2 is optimal: smooth but not over-rounded)
+     */
+    private fun chaikinSmooth(points: List<PointF>, iterations: Int = 2): List<PointF> {
+        if (points.size < 3) return points
+        var current = points
+        repeat(iterations) {
+            val smoothed = ArrayList<PointF>(current.size * 2)
+            for (i in current.indices) {
+                val p0 = current[i]
+                val p1 = current[(i + 1) % current.size]
+                // Q = 3/4 * P[i] + 1/4 * P[i+1]
+                smoothed.add(PointF(
+                    (0.75f * p0.x + 0.25f * p1.x).coerceIn(0.02f, 0.98f),
+                    (0.75f * p0.y + 0.25f * p1.y).coerceIn(0.02f, 0.98f)
+                ))
+                // R = 1/4 * P[i] + 3/4 * P[i+1]
+                smoothed.add(PointF(
+                    (0.25f * p0.x + 0.75f * p1.x).coerceIn(0.02f, 0.98f),
+                    (0.25f * p0.y + 0.75f * p1.y).coerceIn(0.02f, 0.98f)
+                ))
+            }
+            current = smoothed
+        }
+        return current
     }
 
     /**

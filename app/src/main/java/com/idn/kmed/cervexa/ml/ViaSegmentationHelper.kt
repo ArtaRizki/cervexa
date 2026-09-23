@@ -233,9 +233,10 @@ class ViaSegmentationHelper(private val context: Context) {
 
         // Morphological closing (dilate then erode) to fill gaps WITHOUT expanding boundary
         binaryMask = morphClose(binaryMask, cropW, cropH)
+        val isolated = extractPrimaryLesionComponent(binaryMask, cropW, cropH) ?: binaryMask
 
         // Trace boundary using Moore Neighborhood algorithm
-        val boundaryPixels = mooreBoundaryTrace(binaryMask, cropW, cropH) ?: return null
+        val boundaryPixels = mooreBoundaryTrace(isolated, cropW, cropH) ?: return null
 
         // Convert pixel coordinates to normalized [0, 1] coordinates
         val contour = boundaryPixels.map { (px, py) ->
@@ -353,9 +354,14 @@ class ViaSegmentationHelper(private val context: Context) {
         val hsvBuffer = FloatArray(3)
         val step = 2
 
+        var totalSampled = 0
+        var cervicalMucosaCount = 0
+        var papayaCarotenoidCount = 0
+
         for (y in startY until endY step step) {
             val rowOffset = y * sampleW
             for (x in startX until endX step step) {
+                totalSampled++
                 val pixel = pixels[rowOffset + x]
                 val r = (pixel shr 16) and 0xFF
                 val g = (pixel shr 8) and 0xFF
@@ -373,16 +379,31 @@ class ViaSegmentationHelper(private val context: Context) {
                 val sat = hsvBuffer[1]       // 0-1
                 val value = hsvBuffer[2]     // 0-1
 
+                // Check for normal pink cervical mucosa:
+                // Healthy human cervix is pinkish-red, moderate saturation, gentle contrast
+                val isNormalMucosa = (hue < 18f || hue > 340f) && sat in 0.10f..0.42f && brightness in 65..210 && (r > g) && (g >= b - 20)
+                if (isNormalMucosa) {
+                    cervicalMucosaCount++
+                }
+
+                // Check for papaya / orange fruit carotenoid signature:
+                // Saturated yellow-orange (hue 20°-45°), high saturation, high green reflectance (g/r in 0.52..0.85)
+                val isCarotenoidOrange = hue in 20f..45f && sat > 0.45f && value > 0.40f && (r > 150) && ((g.toFloat() / r.toFloat().coerceAtLeast(1f)) in 0.52f..0.85f)
+                if (isCarotenoidOrange) {
+                    papayaCarotenoidCount++
+                }
+
                 // 1. Acetowhite: high brightness, low saturation (desaturated white/cream)
                 // Must be genuinely white/cream, not pink or specular
                 val isAcetowhite = value > 0.55f && sat < 0.22f && brightness > 140
                         && Math.abs(r - g) < 30 && Math.abs(g - b) < 30
 
-                // 2. Erythematous / erosion: red-dominant in HSV (hue 0-25° or 340-360°)
-                // with sufficient saturation to distinguish from normal pink mucosa
-                val isRedHue = hue < 25f || hue > 340f
-                val isErythematous = isRedHue && sat > 0.30f && value > 0.35f
-                        && (r - g) > 35 && (r - b) > 20
+                // 2. Erythematous / erosion: true vascular hemoglobin red
+                // Hemoglobin absorbs green strongly -> g/r < 0.58f, hue in true crimson/red (hue < 18° or > 342°)
+                val isTrueRedHue = hue < 18f || hue > 342f
+                val isHemoglobinRatio = (g.toFloat() / r.toFloat().coerceAtLeast(1f)) < 0.58f
+                val isErythematous = isTrueRedHue && sat > 0.28f && value > 0.35f
+                        && (r - g) > 35 && (r - b) > 20 && isHemoglobinRatio
 
                 if (isErythematous) {
                     redPoints.add(PointF(x.toFloat() / sampleW, y.toFloat() / sampleH))
@@ -392,42 +413,44 @@ class ViaSegmentationHelper(private val context: Context) {
             }
         }
 
+        val sampledFloat = totalSampled.toFloat().coerceAtLeast(1f)
+        val carotenoidRatio = papayaCarotenoidCount / sampledFloat
+        val mucosaRatio = cervicalMucosaCount / sampledFloat
+        val redRatio = redPoints.size / sampledFloat
+
+        // Anti False-Positive: Reject papaya and non-cervical orange/red objects
+        // 1) High concentration of fruit carotenoids (> 22% of frame is bright yellow-orange)
+        // 2) Overly massive "red" field (> 38% of frame is red without normal cervical mucosa)
+        // 3) Complete absence of cervical mucosa (< 3%) when supposed red lesion is detected
+        val isNonCervicalObject = carotenoidRatio > 0.22f ||
+                (redRatio > 0.38f && mucosaRatio < 0.08f) ||
+                (redPoints.size > 20 && mucosaRatio < 0.03f && carotenoidRatio > 0.12f)
+
+        if (isNonCervicalObject) {
+            Log.i(TAG, "[TissueValidator] Non-cervical object detected (carotenoid=${(carotenoidRatio * 100).toInt()}%, mucosa=${(mucosaRatio * 100).toInt()}%). Suppressing false-positive.")
+            return AbnormalityResult.Detected(
+                label = Classification.NORMAL,
+                confidenceScore = 0.90f,
+                boundingBox = null,
+                contourPoints = null,
+                lesionType = null,
+                isFallback = true
+            )
+        }
+
         // Choose dominant lesion cluster
         val isRedDominant = (redPoints.size >= 12 && redPoints.size >= whitePoints.size) || (redPoints.isNotEmpty() && whitePoints.size < 12)
         val targetPoints = if (isRedDominant) redPoints else whitePoints
 
         if (targetPoints.size < 6) {
-            if (isAlreadyAbnormal) {
-                val defaultBox = RectF(0.40f, 0.40f, 0.60f, 0.60f)
-                val defaultContour = generateContourFromBox(defaultBox)
-                return AbnormalityResult.Detected(
-                    label = Classification.ABNORMAL,
-                    confidenceScore = baseDetection.confidenceScore,
-                    boundingBox = defaultBox,
-                    contourPoints = defaultContour,
-                    lesionAreaRatio = 0.04f,
-                    isFallback = false,
-                    lesionType = "EROSION"
-                )
-            }
-            return baseDetection
-        }
-
-        // Compute centroid of lesion cluster
-        var sumX = 0f
-        var sumY = 0f
-        for (pt in targetPoints) {
-            sumX += pt.x
-            sumY += pt.y
-        }
-        val center = PointF(sumX / targetPoints.size, sumY / targetPoints.size)
-
-        // 3-category lesion classification
-        val detectedLesionType = if (!isRedDominant) {
-            "ACETOWHITE"
-        } else {
-            val distFromOs = Math.hypot((center.x - 0.5f).toDouble(), (center.y - 0.5f).toDouble())
-            if (distFromOs <= 0.18) "EROSION" else "ERYTHEMA"
+            return AbnormalityResult.Detected(
+                label = Classification.NORMAL,
+                confidenceScore = 0.85f,
+                boundingBox = null,
+                contourPoints = null,
+                lesionType = null,
+                isFallback = true
+            )
         }
 
         // Higher resolution grid (96x96) for precise contour tracing
@@ -442,8 +465,12 @@ class ViaSegmentationHelper(private val context: Context) {
         // Morphological closing (dilate→erode) to fill gaps without expanding final boundary
         val closed = morphClose(grid, gridSize, gridSize)
 
+        // Prioritize primary central lesion component (eliminating Slide 7 edge artifacts)
+        val primaryComponentGrid = extractPrimaryLesionComponent(closed, gridSize, gridSize)
+        val traceTarget = primaryComponentGrid ?: closed
+
         // Trace boundary using Moore Neighborhood algorithm
-        val boundaryPixels = mooreBoundaryTrace(closed, gridSize, gridSize)
+        val boundaryPixels = mooreBoundaryTrace(traceTarget, gridSize, gridSize)
 
         val contour: List<PointF> = if (boundaryPixels != null && boundaryPixels.size >= 4) {
             val rawContour = boundaryPixels.map { (px, py) ->
@@ -458,10 +485,21 @@ class ViaSegmentationHelper(private val context: Context) {
             val base = if (simplified.size >= 4) simplified else rawContour
             chaikinSmooth(base, iterations = 2)
         } else {
-            val pMinX = targetPoints.minOf { it.x }
-            val pMaxX = targetPoints.maxOf { it.x }
-            val pMinY = targetPoints.minOf { it.y }
-            val pMaxY = targetPoints.maxOf { it.y }
+            // Fallback: use only the isolated primary component pixels, preventing cross-screen spanning
+            val activeComponent = primaryComponentGrid ?: closed
+            val compPixels = ArrayList<PointF>()
+            for (y in 0 until gridSize) {
+                for (x in 0 until gridSize) {
+                    if (activeComponent[y * gridSize + x]) {
+                        compPixels.add(PointF(x.toFloat() / (gridSize - 1), y.toFloat() / (gridSize - 1)))
+                    }
+                }
+            }
+            val pts = if (compPixels.isNotEmpty()) compPixels else targetPoints
+            val pMinX = pts.minOf { it.x }
+            val pMaxX = pts.maxOf { it.x }
+            val pMinY = pts.minOf { it.y }
+            val pMaxY = pts.maxOf { it.y }
             generateContourFromBox(RectF(pMinX, pMinY, pMaxX, pMaxY))
         }
 
@@ -470,6 +508,14 @@ class ViaSegmentationHelper(private val context: Context) {
         val minY = contour.minOf { it.y }
         val maxY = contour.maxOf { it.y }
         val box = RectF(minX, minY, maxX, maxY)
+
+        // 3-category lesion classification based on the actual detected lesion contour position
+        val detectedLesionType = if (!isRedDominant) {
+            "ACETOWHITE"
+        } else {
+            val distFromOs = Math.hypot((box.centerX() - 0.5f).toDouble(), (box.centerY() - 0.5f).toDouble())
+            if (distFromOs <= 0.18) "EROSION" else "ERYTHEMA"
+        }
 
         return AbnormalityResult.Detected(
             label = Classification.ABNORMAL,
@@ -687,6 +733,92 @@ class ViaSegmentationHelper(private val context: Context) {
         return (Math.abs(
             (ldy * point.x - ldx * point.y + lineEnd.x * lineStart.y - lineEnd.y * lineStart.x).toDouble()
         ) / Math.sqrt(lengthSq.toDouble())).toFloat()
+    }
+
+    /**
+     * Finds all connected components in a binary grid using 4-connected BFS,
+     * scores each component based on pixel area and proximity to the cervical os (frame center),
+     * and returns a binary grid containing ONLY the winning primary lesion component.
+     * This eliminates edge artifacts (like thin crescents on the border) and ensures
+     * central cervical lesions are prioritized (fixing Slide 7).
+     */
+    private fun extractPrimaryLesionComponent(grid: BooleanArray, w: Int, h: Int): BooleanArray? {
+        val visited = BooleanArray(w * h)
+        var bestScore = -1.0
+        var bestComponent: List<Int>? = null
+
+        val centerX = w / 2.0
+        val centerY = h / 2.0
+        val maxDist = Math.hypot(centerX, centerY).coerceAtLeast(1.0)
+
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val idx = y * w + x
+                if (!grid[idx] || visited[idx]) continue
+
+                val comp = ArrayList<Int>()
+                val queue = ArrayDeque<Int>()
+                queue.add(idx)
+                visited[idx] = true
+
+                var sumCompX = 0
+                var sumCompY = 0
+
+                while (queue.isNotEmpty()) {
+                    val curr = queue.removeFirst()
+                    comp.add(curr)
+                    val cx = curr % w
+                    val cy = curr / w
+                    sumCompX += cx
+                    sumCompY += cy
+
+                    // 4-connected neighbors
+                    if (cx > 0) {
+                        val n = curr - 1
+                        if (grid[n] && !visited[n]) { visited[n] = true; queue.add(n) }
+                    }
+                    if (cx < w - 1) {
+                        val n = curr + 1
+                        if (grid[n] && !visited[n]) { visited[n] = true; queue.add(n) }
+                    }
+                    if (cy > 0) {
+                        val n = curr - w
+                        if (grid[n] && !visited[n]) { visited[n] = true; queue.add(n) }
+                    }
+                    if (cy < h - 1) {
+                        val n = curr + w
+                        if (grid[n] && !visited[n]) { visited[n] = true; queue.add(n) }
+                    }
+                }
+
+                // Filter out tiny noise clusters (< 8 pixels)
+                if (comp.size < 8) continue
+
+                val avgX = sumCompX.toDouble() / comp.size
+                val avgY = sumCompY.toDouble() / comp.size
+                val distFromCenter = Math.hypot(avgX - centerX, avgY - centerY) / maxDist
+
+                // Edge penalty: if centroid is in the outer margin, penalize heavily
+                val isNearBorder = avgX < w * 0.16 || avgX > w * 0.84 || avgY < h * 0.16 || avgY > h * 0.84
+                val borderPenalty = if (isNearBorder) 0.20 else 1.0
+
+                // Score: Area weighted by central proximity (higher near OUE)
+                val score = (comp.size.toDouble() / (1.0 + 3.0 * distFromCenter)) * borderPenalty
+
+                if (score > bestScore) {
+                    bestScore = score
+                    bestComponent = comp
+                }
+            }
+        }
+
+        if (bestComponent == null || bestComponent.isEmpty()) return null
+
+        val isolated = BooleanArray(w * h)
+        for (idx in bestComponent) {
+            isolated[idx] = true
+        }
+        return isolated
     }
 
     fun close() {

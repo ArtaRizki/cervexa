@@ -111,6 +111,10 @@ class AiDetector(
                 viaSegmentationHelper?.let { segHelper ->
                     try {
                         val segResult = segHelper.detectAndSegment(bitmap, isAlreadyAbnormal = true)
+                        if (segResult.label == Classification.NORMAL) {
+                            // Non-cervical tissue or false-positive rejected by tissue validator
+                            return segResult
+                        }
                         if (segResult.contourPoints != null) {
                             return classResult.copy(
                                 contourPoints = segResult.contourPoints,
@@ -133,6 +137,9 @@ class AiDetector(
                     viaSegmentationHelper?.let { segHelper ->
                         try {
                             val segResult = segHelper.detectAndSegment(bitmap, isAlreadyAbnormal = true)
+                            if (segResult.label == Classification.NORMAL) {
+                                return segResult
+                            }
                             if (segResult.contourPoints != null) {
                                 return acetowhiteResult.copy(
                                     contourPoints = segResult.contourPoints,

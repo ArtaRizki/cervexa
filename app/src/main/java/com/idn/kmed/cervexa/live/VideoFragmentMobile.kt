@@ -2,6 +2,7 @@ package com.idn.kmed.cervexa.live
 
 import android.annotation.SuppressLint
 import android.content.ComponentCallbacks2
+import android.content.Context
 import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -13,13 +14,19 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
+import android.net.wifi.WifiInfo
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.*
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.content.ContextCompat
@@ -217,8 +224,6 @@ class VideoFragmentMobile : Fragment() {
         if (record.get()) stopVideoRecording()
         stopVlcStream()
         hudHandler.removeCallbacks(hudTick)
-        val cm = requireContext().applicationContext.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
-        runCatching { cm?.bindProcessToNetwork(null) }
     }
 
     override fun onResume() {
@@ -350,7 +355,13 @@ class VideoFragmentMobile : Fragment() {
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
             object : OnBackPressedCallback(true) {
-                override fun handleOnBackPressed() { showExitConfirmDialog() }
+                override fun handleOnBackPressed() {
+                    if (isLandscape()) {
+                        requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    } else {
+                        showExitConfirmDialog()
+                    }
+                }
             })
         binding.topAppBar.setNavigationOnClickListener { showExitConfirmDialog() }
     }
@@ -421,7 +432,68 @@ class VideoFragmentMobile : Fragment() {
         true
     }
 
+    /**
+     * Mencari Network Wi-Fi kamera dengan ketat (termasuk Wi-Fi "No Internet" di Android 10+).
+     */
+    private fun findCameraWifiNetworkStrict(): Network? {
+        val ctx = context ?: return null
+        val prefs = ctx.getSharedPreferences(
+            getString(R.string.pref_application),
+            AppCompatActivity.MODE_PRIVATE
+        )
+        val exact = prefs.getString("camera_ssid_exact", null)
+        val prefix = prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_")
+
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return null
+        val all = cm.allNetworks ?: return null
+
+        for (n in all) {
+            val caps = cm.getNetworkCapabilities(n) ?: continue
+            if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+
+            var ssid: String? = null
+            if (Build.VERSION.SDK_INT >= 31) {
+                ssid = (caps.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
+            }
+
+            if (!exact.isNullOrBlank() && ssid == exact) return n
+            if (!prefix.isNullOrBlank() && ssid?.startsWith(prefix) == true) return n
+        }
+
+        if (com.idn.kmed.cervexa.utils.WifiMonitor.statusFlow.value.isCamera) {
+            for (n in all) {
+                val caps = cm.getNetworkCapabilities(n) ?: continue
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    return n
+                }
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Memastikan proses aplikasi ter-bind ke Wi-Fi kamera sebelum membuka socket RTSP.
+     * Mencegah traffic RTSP bocor ke paket data seluler (4G/LTE) saat rotasi layar.
+     */
+    private fun ensureCameraNetworkBound() {
+        val ctx = context ?: return
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        val camNet = findCameraWifiNetworkStrict()
+        if (camNet != null) {
+            if (Build.VERSION.SDK_INT >= 23) {
+                if (cm.boundNetworkForProcess != camNet) {
+                    Log.i(TAG, "[Network] Re-binding process to camera Wi-Fi: $camNet")
+                    runCatching { cm.bindProcessToNetwork(camNet) }
+                }
+            } else {
+                runCatching { ConnectivityManager.setProcessDefaultNetwork(camNet) }
+            }
+        }
+    }
+
     private fun startVlcStream() {
+        ensureCameraNetworkBound()
         val rtspUrl = liveViewModel.rtspRequest.value
         if (rtspUrl.isNullOrBlank()) {
             Toast.makeText(requireContext(), "❌ URL RTSP tidak valid", Toast.LENGTH_LONG).show()
@@ -484,7 +556,11 @@ class VideoFragmentMobile : Fragment() {
                 tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                     override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
                         tv.surfaceTextureListener = null
-                        if (isAdded) startVlcStream()
+                        if (isAdded) {
+                            tv.postDelayed({
+                                if (isAdded) startVlcStream()
+                            }, 150)
+                        }
                     }
                     override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
                     override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture) = false

@@ -63,15 +63,7 @@ class OverlayRenderer {
         val labelColor = getLabelColor(result)
         val labelText = formatLabel(result)
 
-        // Draw frame border based on classification color
-        when (result.label) {
-            Classification.ABNORMAL -> {
-                drawFrameBorder(canvas, width, height, strokeWidth, labelColor)
-            }
-            Classification.NORMAL -> {
-                drawFrameBorder(canvas, width, height, strokeWidth, COLOR_GREEN)
-            }
-        }
+        // Frame border dihilangkan sesuai permintaan user (tanpa garis bingkai kotak di sekeliling foto)
 
         // Draw lesion contour polygon and translucent mask if available
         result.contourPoints?.let { points ->
@@ -123,15 +115,7 @@ class OverlayRenderer {
         val labelColor = getLabelColor(result)
         val labelText = formatLabel(result)
 
-        // Draw frame border based on classification color
-        when (result.label) {
-            Classification.ABNORMAL -> {
-                drawFrameBorder(canvas, width, height, strokeWidth, labelColor)
-            }
-            Classification.NORMAL -> {
-                drawFrameBorder(canvas, width, height, strokeWidth, COLOR_GREEN)
-            }
-        }
+        // Frame border dihilangkan sesuai permintaan user (tanpa garis bingkai kotak di sekeliling foto)
 
         // Draw lesion contour polygon and translucent mask if available
         result.contourPoints?.let { points ->
@@ -213,17 +197,11 @@ class OverlayRenderer {
         val percentage = (result.confidenceScore * 100).roundToInt().coerceIn(50, 99)
 
         val classLabel = when (result.label) {
-            Classification.ABNORMAL -> {
-                when (result.lesionType) {
-                    "EROSION" -> "ABNORMAL (Erosi)"
-                    "ERYTHEMA" -> "ABNORMAL (Bercak Merah)"
-                    else -> "ABNORMAL"
-                }
-            }
+            Classification.ABNORMAL -> "ABNORMAL"
             Classification.NORMAL -> "NORMAL"
         }
 
-        return "AI: $classLabel ($percentage%)"
+        return "$classLabel ($percentage%)"
     }
 
     /**

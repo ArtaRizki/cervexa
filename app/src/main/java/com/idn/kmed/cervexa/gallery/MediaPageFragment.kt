@@ -275,11 +275,7 @@ class MediaPageFragment : Fragment() {
         }).roundToInt()
 
         val statusText = if (result.label == Classification.ABNORMAL) {
-            when (result.lesionType) {
-                "EROSION" -> "ABNORMAL (Erosi Serviks)"
-                "ERYTHEMA" -> "ABNORMAL (Bercak Merah / Eritema)"
-                else -> "ABNORMAL (Acetowhite / IVA+)"
-            }
+            "ABNORMAL"
         } else "NORMAL"
 
         val rekomendasiText = if (result.label == Classification.ABNORMAL) {

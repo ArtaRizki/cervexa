@@ -63,7 +63,15 @@ class OverlayRenderer {
         val labelColor = getLabelColor(result)
         val labelText = formatLabel(result)
 
-        // Frame border dihilangkan sesuai permintaan user (tanpa garis bingkai kotak di sekeliling foto)
+        // Draw frame border based on classification color
+        when (result.label) {
+            Classification.ABNORMAL -> {
+                drawFrameBorder(canvas, width, height, strokeWidth, labelColor)
+            }
+            Classification.NORMAL -> {
+                drawFrameBorder(canvas, width, height, strokeWidth, COLOR_GREEN)
+            }
+        }
 
         // Draw lesion contour polygon and translucent mask if available
         result.contourPoints?.let { points ->
@@ -115,7 +123,15 @@ class OverlayRenderer {
         val labelColor = getLabelColor(result)
         val labelText = formatLabel(result)
 
-        // Frame border dihilangkan sesuai permintaan user (tanpa garis bingkai kotak di sekeliling foto)
+        // Draw frame border based on classification color
+        when (result.label) {
+            Classification.ABNORMAL -> {
+                drawFrameBorder(canvas, width, height, strokeWidth, labelColor)
+            }
+            Classification.NORMAL -> {
+                drawFrameBorder(canvas, width, height, strokeWidth, COLOR_GREEN)
+            }
+        }
 
         // Draw lesion contour polygon and translucent mask if available
         result.contourPoints?.let { points ->

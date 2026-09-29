@@ -253,7 +253,7 @@ class MediaPageFragment : Fragment() {
                     val overlayBitmap = renderer.renderOverlay(bitmap, result)
                     photo.setImageBitmap(overlayBitmap)
                     btnHapusOverlay.visibility = View.VISIBLE
-                    showAiReportDialog(result)
+                    // Dialog laporan dihilangkan sesuai permintaan user
                 }
                 is AbnormalityResult.Error -> {
                     Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()

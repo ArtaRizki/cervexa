@@ -19,6 +19,123 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Wi-Fi & Network Information Helper
+WIFI_STATUS="Tidak Terdeteksi / Terputus"
+WIFI_SSID="-"
+WIFI_IP="-"
+WIFI_SIGNAL="-"
+WIFI_GATEWAY="-"
+WIFI_ADAPTER="-"
+
+get_wifi_network_info() {
+  # 1. Detection on Windows (MSYS / MINGW / Git Bash / Cygwin)
+  if command -v netsh.exe >/dev/null 2>&1; then
+    local wlan_out
+    wlan_out=$(netsh.exe wlan show interfaces 2>/dev/null)
+    local state_val
+    state_val=$(echo "$wlan_out" | grep -E '^[[:space:]]*State[[:space:]]*:' | head -n 1 | awk -F: '{print $2}' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    
+    if [[ "$state_val" =~ ^(connected|terhubung)$ ]]; then
+      WIFI_STATUS="Terhubung ($state_val)"
+      WIFI_SSID=$(echo "$wlan_out" | grep -E '^[[:space:]]*SSID[[:space:]]*:' | head -n 1 | awk -F: '{print $2}' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      WIFI_SIGNAL=$(echo "$wlan_out" | grep -E '^[[:space:]]*Signal[[:space:]]*:' | head -n 1 | awk -F: '{print $2}' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      WIFI_ADAPTER=$(echo "$wlan_out" | grep -E '^[[:space:]]*Name[[:space:]]*:' | head -n 1 | awk -F: '{print $2}' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    fi
+  fi
+
+  # 2. Resolve IPv4 using Node.js (cross-platform, reliable)
+  if command -v node >/dev/null 2>&1; then
+    local node_net_info
+    node_net_info=$(node -e '
+      const os = require("os");
+      const nets = os.networkInterfaces();
+      let wifiIp = "";
+      let fallbackIp = "";
+      for (const [name, addrs] of Object.entries(nets)) {
+        for (const net of addrs) {
+          if (net.family === "IPv4" && !net.internal) {
+            if (/wi-?fi|wlan|wireless/i.test(name)) {
+              wifiIp = net.address;
+              break;
+            } else if (!fallbackIp && !/vethernet|loopback|virtual/i.test(name)) {
+              fallbackIp = net.address;
+            }
+          }
+        }
+        if (wifiIp) break;
+      }
+      console.log(wifiIp || fallbackIp || "");
+    ' 2>/dev/null | tr -d '\r')
+    if [[ -n "$node_net_info" ]]; then
+      WIFI_IP="$node_net_info"
+    fi
+  fi
+
+  # Fallback to ipconfig if WIFI_IP is still empty on Windows
+  if [[ "$WIFI_IP" == "-" || -z "$WIFI_IP" ]] && command -v ipconfig.exe >/dev/null 2>&1; then
+    WIFI_IP=$(ipconfig.exe | awk '
+      /Wireless LAN adapter/ { in_wifi=1 }
+      in_wifi && /IPv4 Address/ {
+        split($0, a, ":")
+        gsub(/[[:space:]\r]/, "", a[2])
+        print a[2]
+        exit
+      }
+    ')
+  fi
+
+  # 3. Detection on Linux (nmcli / iwgetid / ip)
+  if [[ "$WIFI_STATUS" == "Tidak Terdeteksi / Terputus" ]] && command -v nmcli >/dev/null 2>&1; then
+    local nm_active
+    nm_active=$(nmcli -t -f active,ssid,signal,device dev wifi 2>/dev/null | grep '^yes:' | head -n 1)
+    if [[ -n "$nm_active" ]]; then
+      WIFI_STATUS="Terhubung"
+      WIFI_SSID=$(echo "$nm_active" | cut -d: -f2)
+      WIFI_SIGNAL="$(echo "$nm_active" | cut -d: -f3)%"
+      local dev
+      dev=$(echo "$nm_active" | cut -d: -f4)
+      if [[ -n "$dev" ]] && command -v ip >/dev/null 2>&1; then
+        local ip_found
+        ip_found=$(ip -4 addr show dev "$dev" 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
+        if [[ -n "$ip_found" ]]; then WIFI_IP="$ip_found"; fi
+      fi
+    fi
+  fi
+
+  # 4. Gateway detection
+  if command -v route.exe >/dev/null 2>&1; then
+    WIFI_GATEWAY=$(route.exe print 0.0.0.0 2>/dev/null | awk '$1=="0.0.0.0" && $2=="0.0.0.0" {print $3; exit}' | tr -d '\r')
+  elif command -v ip >/dev/null 2>&1; then
+    WIFI_GATEWAY=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
+  fi
+}
+
+display_wifi_network_info() {
+  get_wifi_network_info
+
+  echo "============================================================" >&2
+  echo "              INFORMASI JARINGAN & WI-FI AKTIF             " >&2
+  echo "============================================================" >&2
+  echo "  * Status Koneksi : ${WIFI_STATUS}" >&2
+  echo "  * Nama SSID WiFi : ${WIFI_SSID}" >&2
+  echo "  * Kekuatan Sinyal: ${WIFI_SIGNAL:-Tidak Diketahui}" >&2
+  echo "  * IP Address WiFi: ${WIFI_IP:-127.0.0.1}" >&2
+  if [[ -n "$WIFI_GATEWAY" && "$WIFI_GATEWAY" != "-" ]]; then
+    echo "  * Gateway Router : ${WIFI_GATEWAY}" >&2
+  fi
+  if [[ -n "$WIFI_ADAPTER" && "$WIFI_ADAPTER" != "-" ]]; then
+    echo "  * Interface Kartu: ${WIFI_ADAPTER}" >&2
+  fi
+  if [[ "$BIND_HOST" == "127.0.0.1" || "$BIND_HOST" == "localhost" ]]; then
+    echo "  * Host Binding   : 127.0.0.1 (Hanya lokal laptop)" >&2
+    echo "  * Tips Akses HP  : Gunakan '--host 0.0.0.0' jika ingin dibuka dari HP / Smart TV" >&2
+  else
+    echo "  * Host Binding   : ${BIND_HOST} (Dapat diakses perangkat lain via Wi-Fi)" >&2
+  fi
+  echo "============================================================" >&2
+  echo "" >&2
+}
+
 # Parse arguments
 PROJECT_DIR=""
 FOREGROUND="false"
@@ -26,6 +143,9 @@ FORCE_BACKGROUND="false"
 BIND_HOST="127.0.0.1"
 URL_HOST=""
 IDLE_TIMEOUT_MINUTES=""
+ONLY_WIFI_INFO="false"
+QUIET="false"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --project-dir)
@@ -56,6 +176,26 @@ while [[ $# -gt 0 ]]; do
       FORCE_BACKGROUND="true"
       shift
       ;;
+    --wifi|--ip|--info)
+      ONLY_WIFI_INFO="true"
+      shift
+      ;;
+    --quiet|--no-banner)
+      QUIET="true"
+      shift
+      ;;
+    --help|-h)
+      echo "Penggunaan: start-server.sh [options]"
+      echo "Options:"
+      echo "  --wifi, --ip, --info      Tampilkan info WiFi dan IP aktif lalu keluar"
+      echo "  --host <bind-host>        Host interface untuk bind (default: 127.0.0.1, gunakan 0.0.0.0 untuk Wi-Fi)"
+      echo "  --url-host <host>         Hostname yang ditampilkan pada URL"
+      echo "  --project-dir <path>      Direktori proyek untuk menyimpan state sesi"
+      echo "  --foreground              Jalankan di foreground terminal"
+      echo "  --background              Jalankan di background"
+      echo "  --quiet                   Sembunyikan banner informasi WiFi"
+      exit 0
+      ;;
     *)
       echo "{\"error\": \"Unknown argument: $1\"}"
       exit 1
@@ -63,9 +203,22 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# If user only requested Wi-Fi / IP info
+if [[ "$ONLY_WIFI_INFO" == "true" ]]; then
+  display_wifi_network_info
+  exit 0
+fi
+
+# Always display network/wifi banner unless suppressed
+if [[ "$QUIET" != "true" ]]; then
+  display_wifi_network_info
+fi
+
 if [[ -z "$URL_HOST" ]]; then
   if [[ "$BIND_HOST" == "127.0.0.1" || "$BIND_HOST" == "localhost" ]]; then
     URL_HOST="localhost"
+  elif [[ "$BIND_HOST" == "0.0.0.0" && "$WIFI_IP" != "-" && -n "$WIFI_IP" ]]; then
+    URL_HOST="$WIFI_IP"
   else
     URL_HOST="$BIND_HOST"
   fi

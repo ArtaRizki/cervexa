@@ -146,7 +146,10 @@ object PdfReportHelper {
                 val dstRect = RectF(drawX, y + 6f, drawX + drawW, y + 6f + drawH)
 
                 cv.drawRect(dstRect.left - 1, dstRect.top - 1, dstRect.right + 1, dstRect.bottom + 1, pStroke(COLOR_DIVIDER, 1f))
-                cv.drawBitmap(bmp, srcRect, dstRect, Paint(Paint.FILTER_BITMAP_FLAG))
+                val printPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+                    colorFilter = getPrintColorFilter()
+                }
+                cv.drawBitmap(bmp, srcRect, dstRect, printPaint)
                 bmp.recycle()
             }
         }
@@ -208,25 +211,33 @@ object PdfReportHelper {
             y += 12f
             y = drawSectionTitle(cv, y, "MEDIA")
 
-            /* Snapshot — grid 2 kolom (rasio 16:9 tanpa crop agar watermark utuh) */
-            val imgW = ((PW - 2 * M - 12) / 2).toInt()
-            val imgH = (imgW * 9 / 16)   // rasio 16:9
+            /* Snapshot — grid 2 kolom dengan ukuran proporsional (~6,35 cm x ~4,4 cm) */
+            val imgW = 180   // Lebar diperkecil dari 247 pt (~8.5 cm) menjadi 180 pt (~6.35 cm)
+            val imgH = 125   // Tinggi proporsional (~4.41 cm)
+            val colGap = 24  // Jarak antar kolom
+            val totalGridW = (2 * imgW) + colGap // 384 pt
+            val gridStartX = (M + (PW - 2 * M - totalGridW) / 2f).toInt() // Terpusat di tengah halaman A4
             var col = 0
 
             for (snap in snapshotFiles) {
-                // Butuh ruang untuk 1 baris gambar + label
-                val needed = imgH + 24f + 8f
+                val isSingle = snapshotFiles.size == 1
+                val needed = imgH + 20f + 8f
                 if (y + needed > PH - M - 20) {
                     drawFooter(cv)
                     doc.finishPage(page)
                     val np = newPage(); page = np.first; cv = np.second; y = M
                 }
 
-                val x = M + col * (imgW + 12)
-                drawSnapshotTile(cv, snap, x.toInt(), y.toInt(), imgW, imgH)
+                val x = if (isSingle) {
+                    (M + (PW - 2 * M - imgW) / 2f).toInt()
+                } else {
+                    gridStartX + col * (imgW + colGap)
+                }
 
-                if (col == 1 || snapshotFiles.indexOf(snap) == snapshotFiles.lastIndex) {
-                    y += imgH + 24f + 8f
+                drawSnapshotTile(cv, snap, x, y.toInt(), imgW, imgH)
+
+                if (isSingle || col == 1 || snapshotFiles.indexOf(snap) == snapshotFiles.lastIndex) {
+                    y += imgH + 20f + 12f
                     col = 0
                 } else col++
             }
@@ -414,7 +425,10 @@ object PdfReportHelper {
 
             val src = Rect(0, 0, bmp.width, bmp.height)
             val dst = RectF(drawX, drawY, drawX + drawW, drawY + drawH)
-            cv.drawBitmap(bmp, src, dst, Paint(Paint.FILTER_BITMAP_FLAG))
+            val printPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+                colorFilter = getPrintColorFilter()
+            }
+            cv.drawBitmap(bmp, src, dst, printPaint)
             bmp.recycle()
         } else {
             cv.drawRect(
@@ -443,7 +457,30 @@ object PdfReportHelper {
             (y + h + 20f),
             pFill(COLOR_LIGHT_BG)
         )
-        cv.drawText(fname, x + 4f, y + h + 13f, pText(COLOR_LABEL, 7f))
+        cv.drawText(fname, x + 6f, y + h + 13f, pText(COLOR_LABEL, 7.5f))
+    }
+
+    /**
+     * ColorMatrix khusus cetak: mengompensasi penyerapan tinta kertas HVS & ketiadaan backlight.
+     * Meningkatkan kecerahan (+16f offset), kontras (+6%), dan saturasi (+15%)
+     * agar hasil cetakan di kertas A4 terlihat cerah dan menyala seperti di layar HP.
+     */
+    private fun getPrintColorFilter(): ColorMatrixColorFilter {
+        val cm = ColorMatrix()
+        // 1. Boost saturasi (+15%) agar warna merah lesi serviks tidak kusam saat dicetak
+        cm.setSaturation(1.15f)
+
+        // 2. Tingkatkan kecerahan dan kontras untuk mengimbangi daya serap kertas HVS
+        val contrast = 1.06f
+        val brightness = 16f
+        val cmContrastBrightness = ColorMatrix(floatArrayOf(
+            contrast, 0f, 0f, 0f, brightness,
+            0f, contrast, 0f, 0f, brightness,
+            0f, 0f, contrast, 0f, brightness,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        cm.postConcat(cmContrastBrightness)
+        return ColorMatrixColorFilter(cm)
     }
 
     private fun drawVideoPlaceholder(cv: Canvas, y: Float, file: File): Float {

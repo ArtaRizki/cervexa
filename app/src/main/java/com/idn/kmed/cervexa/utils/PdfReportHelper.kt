@@ -129,7 +129,7 @@ object PdfReportHelper {
         }
 
         y += 8f
-        y = drawSectionTitle(cv, y, "GAMBAR HASIL TANGKAPAN (${mediaFile.name})")
+        y = drawSectionTitle(cv, y, "GAMBAR HASIL TANGKAPAN")
 
         // Draw large image centered on page
         val maxImgW = PW - 2 * M
@@ -211,17 +211,16 @@ object PdfReportHelper {
             y += 12f
             y = drawSectionTitle(cv, y, "MEDIA")
 
-            /* Snapshot — grid 2 kolom dengan ukuran proporsional (~6,35 cm x ~4,4 cm) */
-            val imgW = 180   // Lebar diperkecil dari 247 pt (~8.5 cm) menjadi 180 pt (~6.35 cm)
-            val imgH = 125   // Tinggi proporsional (~4.41 cm)
-            val colGap = 24  // Jarak antar kolom
-            val totalGridW = (2 * imgW) + colGap // 384 pt
-            val gridStartX = (M + (PW - 2 * M - totalGridW) / 2f).toInt() // Terpusat di tengah halaman A4
+            /* Snapshot — grid 2 kolom dengan ukuran sebelumnya (~8,5 cm x ~4,8 cm), tanpa label nama file */
+            val colGap = 12f
+            val rowGap = 12f
+            val imgW = ((PW - 2 * M - colGap) / 2).toInt() // 247 pt (~8.5 cm)
+            val imgH = (imgW * 9 / 16)                     // 138 pt (~4.8 cm, rasio 16:9)
             var col = 0
 
             for (snap in snapshotFiles) {
                 val isSingle = snapshotFiles.size == 1
-                val needed = imgH + 20f + 8f
+                val needed = imgH + rowGap
                 if (y + needed > PH - M - 20) {
                     drawFooter(cv)
                     doc.finishPage(page)
@@ -231,13 +230,13 @@ object PdfReportHelper {
                 val x = if (isSingle) {
                     (M + (PW - 2 * M - imgW) / 2f).toInt()
                 } else {
-                    gridStartX + col * (imgW + colGap)
+                    (M + col * (imgW + colGap)).toInt()
                 }
 
                 drawSnapshotTile(cv, snap, x, y.toInt(), imgW, imgH)
 
                 if (isSingle || col == 1 || snapshotFiles.indexOf(snap) == snapshotFiles.lastIndex) {
-                    y += imgH + 20f + 12f
+                    y += imgH + rowGap
                     col = 0
                 } else col++
             }
@@ -448,16 +447,6 @@ object PdfReportHelper {
             (y + h).toFloat(),
             pStroke(COLOR_DIVIDER, 1f)
         )
-        // Filename label
-        val fname = file.name.take(28)
-        cv.drawRect(
-            x.toFloat(),
-            (y + h).toFloat(),
-            (x + w).toFloat(),
-            (y + h + 20f),
-            pFill(COLOR_LIGHT_BG)
-        )
-        cv.drawText(fname, x + 6f, y + h + 13f, pText(COLOR_LABEL, 7.5f))
     }
 
     /**

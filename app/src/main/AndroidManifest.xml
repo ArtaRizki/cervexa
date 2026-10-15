@@ -125,6 +125,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".patient.ImportPatientMediaActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".video.VideoActivity"
             android:exported="false" />
 

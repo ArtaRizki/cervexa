@@ -407,27 +407,27 @@ object PdfReportHelper {
         }.getOrNull()
 
         if (bmp != null) {
-            val scale = minOf(w.toFloat() / bmp.width.toFloat(), h.toFloat() / bmp.height.toFloat())
-            val drawW = (bmp.width * scale).toInt()
-            val drawH = (bmp.height * scale).toInt()
-            val drawX = x + ((w - drawW) / 2f)
-            val drawY = y + ((h - drawH) / 2f)
+            // Center-crop (aspect fill) agar foto selalu mengisi penuh bingkai w x h (16:9) tanpa bilah hitam di sisi foto
+            val targetRatio = w.toFloat() / h.toFloat()
+            val bmpRatio = bmp.width.toFloat() / bmp.height.toFloat()
 
-            // Background hitam di belakang gambar
-            cv.drawRect(
-                x.toFloat(),
-                y.toFloat(),
-                (x + w).toFloat(),
-                (y + h).toFloat(),
-                pFill(Color.BLACK)
-            )
+            val srcRect = if (bmpRatio > targetRatio) {
+                // Gambar lebih lebar dari rasio target -> potong kiri dan kanan secara simetris
+                val newW = (bmp.height * targetRatio).toInt()
+                val cropX = (bmp.width - newW) / 2
+                Rect(cropX, 0, cropX + newW, bmp.height)
+            } else {
+                // Gambar lebih tinggi dari rasio target (misal 4:3 atau 1:1) -> potong atas dan bawah secara simetris
+                val newH = (bmp.width / targetRatio).toInt()
+                val cropY = (bmp.height - newH) / 2
+                Rect(0, cropY, bmp.width, cropY + newH)
+            }
 
-            val src = Rect(0, 0, bmp.width, bmp.height)
-            val dst = RectF(drawX, drawY, drawX + drawW, drawY + drawH)
+            val dstRect = RectF(x.toFloat(), y.toFloat(), (x + w).toFloat(), (y + h).toFloat())
             val printPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
                 colorFilter = getPrintColorFilter()
             }
-            cv.drawBitmap(bmp, src, dst, printPaint)
+            cv.drawBitmap(bmp, srcRect, dstRect, printPaint)
             bmp.recycle()
         } else {
             cv.drawRect(

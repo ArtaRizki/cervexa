@@ -7,6 +7,13 @@
     <!--        app:showAsAction="ifRoom|withText" />-->
 
     <item
+        android:id="@+id/action_add_media"
+        android:icon="@drawable/ic_add"
+        android:title="Tambah / Impor Pemeriksaan"
+        app:iconTint="@color/colorBlack"
+        app:showAsAction="always" />
+
+    <item
         android:id="@+id/action_system_info"
         android:title="Informasi Sistem"
         app:showAsAction="never" />

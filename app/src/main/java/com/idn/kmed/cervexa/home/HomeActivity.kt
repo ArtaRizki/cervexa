@@ -73,6 +73,11 @@ class HomeActivity : AppCompatActivity() {
         // Listener Menu
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                R.id.action_add_media -> {
+                    startActivity(Intent(this, com.idn.kmed.cervexa.patient.ImportPatientMediaActivity::class.java))
+                    true
+                }
+
                 R.id.action_system_info -> {
                     startActivity(Intent(this, SystemInfoActivity::class.java)); true
                 }
@@ -335,6 +340,11 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun showFragment(f: Fragment) {
+        val toolbar = findViewById<MaterialToolbar>(R.id.topAppBar)
+        val isMedia = f is MediaListFragment
+        toolbar.title = if (isMedia) "Media" else "Cervexa"
+        toolbar.menu.findItem(R.id.action_add_media)?.isVisible = isMedia
+
         supportFragmentManager.beginTransaction()
             .replace(R.id.navHost, f)
             .commit()

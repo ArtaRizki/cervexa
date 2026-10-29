@@ -15,6 +15,7 @@ import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 import java.nio.MappedByteBuffer
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -25,8 +26,8 @@ import kotlin.math.sqrt
  *
  * Supports:
  * 1. YOLOv8n-Seg TFLite model (`via_seg_model.tflite`) when available in assets.
- * 2. Intelligent acetowhite color contour extraction fallback when the segmentation model
- *    has not yet been placed into the assets folder.
+ * 2. Intelligent acetowhite & erythematous color contour extraction fallback when the segmentation model
+ *    does not match or when a vascular red lesion (Erosion/Erythema) is dominant.
  */
 class ViaSegmentationHelper(private val context: Context) {
 
@@ -77,6 +78,19 @@ class ViaSegmentationHelper(private val context: Context) {
             )
         }
 
+        // Run fast tissue & lesion contour analysis first to validate cervical mucosa
+        // and identify red vascular lesions (Erosion/Erythema) which YOLOv8-Seg was not trained on.
+        val heuristicResult = runHeuristicContourDetection(bitmap, isAlreadyAbnormal)
+        if (heuristicResult.label == Classification.NORMAL && heuristicResult.confidenceScore >= 0.89f) {
+            // Non-cervical object rejected by TissueValidator
+            return heuristicResult
+        }
+        if (heuristicResult.label == Classification.ABNORMAL &&
+            (heuristicResult.lesionType == "EROSION" || heuristicResult.lesionType == "ERYTHEMA")
+        ) {
+            return heuristicResult
+        }
+
         val currentInterpreter = interpreter
         if (ENABLE_TFLITE_SEGMENTATION && currentInterpreter != null) {
             try {
@@ -89,7 +103,7 @@ class ViaSegmentationHelper(private val context: Context) {
             }
         }
 
-        return runHeuristicContourDetection(bitmap, isAlreadyAbnormal)
+        return heuristicResult
     }
 
     /**
@@ -117,7 +131,7 @@ class ViaSegmentationHelper(private val context: Context) {
 
         interpreter.runForMultipleInputsOutputs(arrayOf(inputBuffer), outputMap)
 
-        // Parse highest confidence detection
+        // Parse highest confidence detection inside the cervical transformation zone
         val rawBoxes = boxBuffer.floatArray
         val numChannels = outputBoxShape[1]
         val numPredictions = outputBoxShape[2]
@@ -127,6 +141,7 @@ class ViaSegmentationHelper(private val context: Context) {
         val inputH = (if (isNCHW) inputShape[2] else inputShape[1]).toFloat()
 
         var bestScore = 0f
+        var bestWeightedScore = 0f
         var bestIdx = -1
         var bestCx = 0f
         var bestCy = 0f
@@ -135,13 +150,39 @@ class ViaSegmentationHelper(private val context: Context) {
 
         for (i in 0 until numPredictions) {
             val score = rawBoxes[4 * numPredictions + i] // class 0 (abnormal lesion score)
-            if (score > bestScore) {
+            if (score < ViaModelHelper.CLASSIFICATION_THRESHOLD) continue
+
+            val rawCx = rawBoxes[0 * numPredictions + i]
+            val rawCy = rawBoxes[1 * numPredictions + i]
+            val rawW = rawBoxes[2 * numPredictions + i]
+            val rawH = rawBoxes[3 * numPredictions + i]
+
+            // Ultralytics TFLite export (_NormalizeCoords) already normalizes coordinates to [0..1].
+            // Only divide by inputW/inputH if raw coordinates are in pixel space (> 2.0f).
+            val isAlreadyNormalized = rawCx <= 2.0f && rawCy <= 2.0f && rawW <= 2.0f && rawH <= 2.0f
+            val cx = if (isAlreadyNormalized) rawCx else rawCx / inputW
+            val cy = if (isAlreadyNormalized) rawCy else rawCy / inputH
+            val w = if (isAlreadyNormalized) rawW else rawW / inputW
+            val h = if (isAlreadyNormalized) rawH else rawH / inputH
+
+            // Reject detections outside the central cervical region (speculum blades / watermarks)
+            // or detections with unrealistic area
+            val dxNorm = (cx - 0.5f) / 0.36f
+            val dyNorm = (cy - 0.5f) / 0.38f
+            if (dxNorm * dxNorm + dyNorm * dyNorm > 1.0f) continue
+            if (w < 0.05f || h < 0.05f || w > 0.72f || h > 0.72f || (w * h) > 0.42f) continue
+
+            val distFromOs = hypot((cx - 0.5f).toDouble(), (cy - 0.5f).toDouble()).toFloat()
+            val weightedScore = score / (1f + 1.5f * distFromOs)
+
+            if (weightedScore > bestWeightedScore) {
+                bestWeightedScore = weightedScore
                 bestScore = score
                 bestIdx = i
-                bestCx = rawBoxes[0 * numPredictions + i] / inputW
-                bestCy = rawBoxes[1 * numPredictions + i] / inputH
-                bestW = rawBoxes[2 * numPredictions + i] / inputW
-                bestH = rawBoxes[3 * numPredictions + i] / inputH
+                bestCx = cx
+                bestCy = cy
+                bestW = w
+                bestH = h
             }
         }
 
@@ -156,10 +197,10 @@ class ViaSegmentationHelper(private val context: Context) {
         }
 
         val boundingBox = RectF(
-            (bestCx - bestW / 2f).coerceIn(0f, 1f),
-            (bestCy - bestH / 2f).coerceIn(0f, 1f),
-            (bestCx + bestW / 2f).coerceIn(0f, 1f),
-            (bestCy + bestH / 2f).coerceIn(0f, 1f)
+            (bestCx - bestW / 2f).coerceIn(0.14f, 0.86f),
+            (bestCy - bestH / 2f).coerceIn(0.14f, 0.86f),
+            (bestCx + bestW / 2f).coerceIn(0.14f, 0.86f),
+            (bestCy + bestH / 2f).coerceIn(0.14f, 0.86f)
         )
 
         // Decode prototype mask from Output 1 using 32 mask coefficients from Output 0
@@ -170,19 +211,30 @@ class ViaSegmentationHelper(private val context: Context) {
             }
         }
 
+        // Only use genuine decoded mask contours; if mask decoding fails, return null contourPoints
+        // so detectAndSegment falls back to pixel-accurate Moore boundary tracing.
         val contourPoints = if (maskBuffer != null && numChannels >= 37 && outputMaskShape != null) {
             decodeMaskToContour(maskBuffer.floatArray, maskWeights, outputMaskShape, boundingBox)
-                ?: generateContourFromBox(boundingBox)
         } else {
-            generateContourFromBox(boundingBox)
-        }
+            null
+        } ?: return AbnormalityResult.Detected(
+            label = Classification.NORMAL,
+            confidenceScore = 0.70f,
+            boundingBox = null,
+            contourPoints = null
+        )
 
-        val lesionAreaRatio = boundingBox.width() * boundingBox.height()
+        val minX = contourPoints.minOf { it.x }
+        val maxX = contourPoints.maxOf { it.x }
+        val minY = contourPoints.minOf { it.y }
+        val maxY = contourPoints.maxOf { it.y }
+        val tightBox = RectF(minX, minY, maxX, maxY)
+        val lesionAreaRatio = tightBox.width() * tightBox.height()
 
         return AbnormalityResult.Detected(
             label = Classification.ABNORMAL,
             confidenceScore = bestScore,
-            boundingBox = boundingBox,
+            boundingBox = tightBox,
             contourPoints = contourPoints,
             lesionAreaRatio = lesionAreaRatio,
             isFallback = false,
@@ -216,11 +268,17 @@ class ViaSegmentationHelper(private val context: Context) {
         val cropH = maxY - minY + 1
         if (cropW < 3 || cropH < 3) return null
 
-        // Build binary mask within the bounding box region
+        // Build binary mask within the bounding box region and inside the cervical ellipse
         var binaryMask = BooleanArray(cropW * cropH)
         for (y in minY..maxY) {
+            val normY = y.toFloat() / maskH
+            val dyNorm = (normY - 0.5f) / 0.38f
             val yOffset = y * maskW
             for (x in minX..maxX) {
+                val normX = x.toFloat() / maskW
+                val dxNorm = (normX - 0.5f) / 0.36f
+                if (dxNorm * dxNorm + dyNorm * dyNorm > 1.0f) continue
+
                 var logit = 0f
                 for (k in 0 until numProtos) {
                     logit += maskWeights[k] * protoMasks[k * maskArea + yOffset + x]
@@ -233,7 +291,7 @@ class ViaSegmentationHelper(private val context: Context) {
 
         // Morphological closing (dilate then erode) to fill gaps WITHOUT expanding boundary
         binaryMask = morphClose(binaryMask, cropW, cropH)
-        val isolated = extractPrimaryLesionComponent(binaryMask, cropW, cropH) ?: binaryMask
+        val isolated = extractPrimaryLesionComponent(binaryMask, cropW, cropH) ?: return null
 
         // Trace boundary using Moore Neighborhood algorithm
         val boundaryPixels = mooreBoundaryTrace(isolated, cropW, cropH) ?: return null
@@ -241,8 +299,8 @@ class ViaSegmentationHelper(private val context: Context) {
         // Convert pixel coordinates to normalized [0, 1] coordinates
         val contour = boundaryPixels.map { (px, py) ->
             PointF(
-                ((minX + px).toFloat() / maskW).coerceIn(0.01f, 0.99f),
-                ((minY + py).toFloat() / maskH).coerceIn(0.01f, 0.99f)
+                ((minX + px).toFloat() / maskW).coerceIn(0.05f, 0.95f),
+                ((minY + py).toFloat() / maskH).coerceIn(0.05f, 0.95f)
             )
         }
 
@@ -308,8 +366,8 @@ class ViaSegmentationHelper(private val context: Context) {
 
     /**
      * Fallback method using dual-characteristic (acetowhite & erythematous/erosion) color thresholding
-     * in HSV+RGB color space within the cervical transformation zone (15%-85%)
-     * with specular/shadow rejection and morphological closing for precise boundary.
+     * in HSV+RGB color space within the elliptical cervical transformation zone
+     * with specular/shadow rejection, focal core refinement, and morphological closing for precise boundary.
      */
     fun runHeuristicContourDetection(bitmap: Bitmap, isAlreadyAbnormal: Boolean = false): AbnormalityResult.Detected {
         val baseDetection = if (!isAlreadyAbnormal) {
@@ -343,14 +401,16 @@ class ViaSegmentationHelper(private val context: Context) {
             sampleBmp.recycle()
         }
 
-        // Wider analysis zone (15%-85%) for better edge coverage
-        val startX = (sampleW * 0.15).toInt()
-        val endX = (sampleW * 0.85).toInt()
-        val startY = (sampleH * 0.15).toInt()
-        val endY = (sampleH * 0.85).toInt()
+        // Bounding range for the elliptical cervical zone
+        val startX = (sampleW * 0.14).toInt()
+        val endX = (sampleW * 0.86).toInt()
+        val startY = (sampleH * 0.14).toInt()
+        val endY = (sampleH * 0.86).toInt()
 
         val redPoints = ArrayList<PointF>()
+        val redCorePoints = ArrayList<PointF>()
         val whitePoints = ArrayList<PointF>()
+        val whiteCorePoints = ArrayList<PointF>()
         val hsvBuffer = FloatArray(3)
         val step = 2
 
@@ -359,18 +419,23 @@ class ViaSegmentationHelper(private val context: Context) {
         var papayaCarotenoidCount = 0
 
         for (y in startY until endY step step) {
+            val normY = y.toFloat() / sampleH
+            val dyNorm = (normY - 0.5f) / 0.38f
             val rowOffset = y * sampleW
             for (x in startX until endX step step) {
+                val normX = x.toFloat() / sampleW
+                val dxNorm = (normX - 0.5f) / 0.36f
+                // Exclude outer corners (speculum blades, vaginal side walls, bottom watermarks)
+                if (dxNorm * dxNorm + dyNorm * dyNorm > 1.0f) continue
+
                 totalSampled++
                 val pixel = pixels[rowOffset + x]
                 val r = (pixel shr 16) and 0xFF
                 val g = (pixel shr 8) and 0xFF
                 val b = pixel and 0xFF
 
-                // Reject specular highlights (overexposed white glare from microscope light)
-                val brightness = (r + g + b) / 3
-                if (brightness > 225) continue
                 // Reject deep shadows (underexposed dark areas)
+                val brightness = (r + g + b) / 3
                 if (brightness < 45) continue
 
                 // Convert to HSV for more robust color classification
@@ -378,6 +443,9 @@ class ViaSegmentationHelper(private val context: Context) {
                 val hue = hsvBuffer[0]       // 0-360
                 val sat = hsvBuffer[1]       // 0-1
                 val value = hsvBuffer[2]     // 0-1
+
+                // Reject specular highlights & LED ring-light glare halos
+                if (brightness > 215 || (brightness > 195 && sat < 0.07f)) continue
 
                 // Check for normal pink cervical mucosa:
                 // Healthy human cervix is pinkish-red, moderate saturation, gentle contrast
@@ -393,10 +461,10 @@ class ViaSegmentationHelper(private val context: Context) {
                     papayaCarotenoidCount++
                 }
 
-                // 1. Acetowhite: high brightness, low saturation (desaturated white/cream)
-                // Must be genuinely white/cream, not pink or specular
-                val isAcetowhite = value > 0.55f && sat < 0.22f && brightness > 140
-                        && Math.abs(r - g) < 30 && Math.abs(g - b) < 30
+                // 1. Acetowhite: warm/neutral cream-white on mucosal stroma (not cool-blue speculum/LED glare)
+                val isAcetowhite = value > 0.56f && sat in 0.05f..0.22f && brightness in 145..212
+                        && (r >= g - 5) && (r >= b)
+                        && Math.abs(r - g) < 28 && Math.abs(g - b) < 28
 
                 // 2. Erythematous / erosion: true vascular hemoglobin red
                 // Hemoglobin absorbs green strongly -> g/r < 0.58f, hue in true crimson/red (hue < 18° or > 342°)
@@ -405,10 +473,17 @@ class ViaSegmentationHelper(private val context: Context) {
                 val isErythematous = isTrueRedHue && sat > 0.28f && value > 0.35f
                         && (r - g) > 35 && (r - b) > 20 && isHemoglobinRatio
 
+                val pt = PointF(normX, normY)
                 if (isErythematous) {
-                    redPoints.add(PointF(x.toFloat() / sampleW, y.toFloat() / sampleH))
+                    redPoints.add(pt)
+                    if ((r - g) > 46 && sat > 0.34f && (g.toFloat() / r.toFloat().coerceAtLeast(1f)) < 0.52f) {
+                        redCorePoints.add(pt)
+                    }
                 } else if (isAcetowhite) {
-                    whitePoints.add(PointF(x.toFloat() / sampleW, y.toFloat() / sampleH))
+                    whitePoints.add(pt)
+                    if (brightness in 162..208 && sat < 0.18f && Math.abs(r - g) < 20) {
+                        whiteCorePoints.add(pt)
+                    }
                 }
             }
         }
@@ -438,9 +513,15 @@ class ViaSegmentationHelper(private val context: Context) {
             )
         }
 
-        // Choose dominant lesion cluster
+        // Choose dominant lesion cluster, using focal core points if broad lighting caused over-selection (>16% of ROI)
         val isRedDominant = (redPoints.size >= 12 && redPoints.size >= whitePoints.size) || (redPoints.isNotEmpty() && whitePoints.size < 12)
-        val targetPoints = if (isRedDominant) redPoints else whitePoints
+        val rawTargetPoints = if (isRedDominant) redPoints else whitePoints
+        val coreTargetPoints = if (isRedDominant) redCorePoints else whiteCorePoints
+        val targetPoints = if (rawTargetPoints.size > (totalSampled * 0.16f).toInt() && coreTargetPoints.size >= 12) {
+            coreTargetPoints
+        } else {
+            rawTargetPoints
+        }
 
         if (targetPoints.size < 6) {
             return AbnormalityResult.Detected(

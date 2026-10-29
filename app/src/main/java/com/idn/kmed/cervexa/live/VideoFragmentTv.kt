@@ -1296,12 +1296,12 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }
     }
 
-    private var currentBrightness = 33f
-    private var currentContrast = 1.06f
-    private var currentSaturation = 1.06f
-    private var currentRed = 0.87f
-    private var currentGreen = 0.84f
-    private var currentBlue = 0.95f
+    private var currentBrightness = 0f
+    private var currentContrast = 1.00f
+    private var currentSaturation = 1.00f
+    private var currentRed = 1.00f
+    private var currentGreen = 1.00f
+    private var currentBlue = 1.00f
     private var currentHue = 0f
 
     private fun setupDebugPanel() {

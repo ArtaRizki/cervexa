@@ -149,12 +149,12 @@ class VideoFragmentMobile : Fragment() {
     // Paint di-cache di class level
     // =====================================================================
     private val paintText = Paint().apply {
-        color = Color.WHITE  // Putih dengan bayangan agar terbaca di background transparan
+        color = Color.parseColor("#FFEB3B") // Kuning sesuai timestamp bawaan kamera
         // textSize JANGAN hardcode (akan diskalakan berdasarkan frame)
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
-        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        setShadowLayer(4f, 1.5f, 1.5f, Color.BLACK)
+        typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+        setShadowLayer(2f, 1f, 1f, 0xAA000000.toInt())
     }
     private val paintBox = Paint().apply {
         color = Color.BLACK
@@ -702,6 +702,14 @@ class VideoFragmentMobile : Fragment() {
         tv.layoutParams = android.widget.FrameLayout.LayoutParams(finalW, finalH).also {
             it.gravity = android.view.Gravity.CENTER
         }
+        // Sejajarkan posisi & ukuran font tvOverlayInfo dengan frame video (mentok kiri-bawah video)
+        val videoLeftOffset = ((cW - finalW) / 2f).coerceAtLeast(0f)
+        val videoBottomOffset = ((cH - finalH) / 2f).coerceAtLeast(0f)
+        binding.tvOverlayInfo.translationX = videoLeftOffset
+        binding.tvOverlayInfo.translationY = -videoBottomOffset
+        val liveFontPx = (finalH * TEXT_SCALE).coerceIn(TEXT_MIN_PX, 64f)
+        binding.tvOverlayInfo.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
+
         lastFrameSize = Pair(finalW, finalH)
         baseScaleVlc = 1f
         baseTxVlc = 0f; baseTyVlc = 0f; panTxVlc = 0f; panTyVlc = 0f
@@ -953,28 +961,17 @@ class VideoFragmentMobile : Fragment() {
             safeSrc.recycle()
         }
 
-        // >>> FIX UTAMA: font & padding mengikuti ukuran frame <<<
+        // >>> FIX UTAMA: font & posisi sejajar mentok bawah dengan timestamp bawaan kamera <<<
         ensureOverlayTextSize(bitmap.height)
-        val pad = overlayPadding(bitmap.height)
-
-        // Timestamp kanan bawah menggunakan bawaan kamera (tidak digambar ulang oleh aplikasi).
-        // Identity kiri bawah (Nama RS / Rekam Medis) menggunakan background transparan.
-        val boxPadX = pad * 1.6f
-        val boxH = (paintText.textSize + pad * 1.8f).coerceAtLeast(pad * 2.6f)
-        val bottom = bitmap.height.toFloat()
-        val top = (bottom - boxH).coerceAtLeast(0f)
 
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
-        val infoTextW = paintText.measureText(info)
-        val infoBoxW = (infoTextW + boxPadX * 2f).coerceAtMost(bitmap.width * 0.55f)
-        val infoLeft = 0f
-        val infoRight = (infoLeft + infoBoxW).coerceAtMost(bitmap.width.toFloat())
-
-        val maxTextW = (infoRight - infoLeft - boxPadX * 2f).coerceAtLeast(0f)
+        val leftMargin = (bitmap.width * 0.008f).coerceAtLeast(6f)
+        val bottomMargin = (bitmap.height * 0.004f).coerceAtLeast(2f)
+        val maxTextW = (bitmap.width * 0.55f - leftMargin).coerceAtLeast(0f)
         val infoDraw = ellipsizeToWidth(info, paintText, maxTextW)
 
-        val infoCenterY = top + (boxH / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
-        canvas.drawText(infoDraw, infoLeft + boxPadX, infoCenterY, paintText)
+        val baselineY = bitmap.height - bottomMargin
+        canvas.drawText(infoDraw, leftMargin, baselineY, paintText)
 
         // AI overlay is now handled by OverlayRenderer — no inline AI drawing here
 
@@ -1511,10 +1508,10 @@ class VideoFragmentMobile : Fragment() {
 
 
         // ===== Overlay scaling =====
-        // 0.026f = ~2.6% tinggi frame, proporsional dengan live stream
-        private const val TEXT_SCALE = 0.026f
-        private const val TEXT_MIN_PX = 14f
-        private const val TEXT_MAX_PX = 32f
+        // 0.042f = ~4.2% tinggi frame, menyamai ukuran font timestamp bawaan kamera MS2
+        private const val TEXT_SCALE = 0.042f
+        private const val TEXT_MIN_PX = 18f
+        private const val TEXT_MAX_PX = 48f
 
         // Padding scale
         private const val PADDING_SCALE = 0.016f

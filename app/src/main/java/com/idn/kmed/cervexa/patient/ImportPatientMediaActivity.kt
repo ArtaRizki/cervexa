@@ -380,45 +380,32 @@ class ImportPatientMediaActivity : AppCompatActivity() {
         val frameHeight = bitmap.height
         val frameWidth = bitmap.width
 
-        val textScale = 0.026f
-        val textMinPx = 14f
-        val textMaxPx = 32f
+        val textScale = 0.042f
+        val textMinPx = 18f
+        val textMaxPx = 48f
         val fontPx = (frameHeight * textScale).coerceIn(textMinPx, textMaxPx)
 
-        val paddingScale = 0.016f
-        val padMinPx = 8f
-        val padMaxPx = 20f
-        val pad = (frameHeight * paddingScale).coerceIn(padMinPx, padMaxPx)
-
         val paintText = Paint().apply {
-            color = Color.WHITE
+            color = Color.parseColor("#FFEB3B") // Kuning sesuai timestamp bawaan kamera
             isAntiAlias = true
             textAlign = Paint.Align.LEFT
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
             textSize = fontPx
-            setShadowLayer(4f, 1.5f, 1.5f, Color.BLACK)
+            setShadowLayer(2f, 1f, 1f, 0xAA000000.toInt())
         }
 
-        val boxPadX = pad * 1.6f
-        val boxH = (fontPx + pad * 1.8f).coerceAtLeast(pad * 2.6f)
-        val bottom = frameHeight.toFloat()
-        val top = (bottom - boxH).coerceAtLeast(0f)
-
         // Timestamp kanan bawah di-hide (menggunakan bawaan kamera).
-        // Identity kiri bawah (Nama RS / Rekam Medis) menggunakan background transparan.
+        // Identity kiri bawah (Nama RS / Rekam Medis) disejajarkan mentok bawah dengan font Serif kuning.
         val info = if (nrm.isEmpty()) rs else "$rs/$nrm"
-        val infoTextW = paintText.measureText(info)
-        val infoBoxW = (infoTextW + boxPadX * 2f).coerceAtMost(frameWidth * 0.55f)
-        val infoLeft = 0f
-        val infoRight = (infoLeft + infoBoxW).coerceAtMost(frameWidth.toFloat())
-
-        val maxTextW = (infoRight - infoLeft - boxPadX * 2f).coerceAtLeast(0f)
+        val leftMargin = (frameWidth * 0.008f).coerceAtLeast(6f)
+        val bottomMargin = (frameHeight * 0.004f).coerceAtLeast(2f)
+        val maxTextW = (frameWidth * 0.55f - leftMargin).coerceAtLeast(0f)
         val infoDraw = if (paintText.measureText(info) > maxTextW) {
             TextUtils.ellipsize(info, TextPaint(paintText), maxTextW, TextUtils.TruncateAt.END).toString()
         } else info
 
-        val infoCenterY = top + (boxH / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
-        canvas.drawText(infoDraw, infoLeft + boxPadX, infoCenterY, paintText)
+        val baselineY = frameHeight - bottomMargin
+        canvas.drawText(infoDraw, leftMargin, baselineY, paintText)
 
         return bitmap
     }

@@ -153,11 +153,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
     }
     private val paintText = Paint().apply {
-        color = Color.WHITE  // Putih dengan bayangan agar terbaca di background transparan
+        color = Color.parseColor("#FFEB3B") // Kuning sesuai timestamp bawaan kamera
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
-        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        setShadowLayer(4f, 1.5f, 1.5f, Color.BLACK)
+        typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+        setShadowLayer(2f, 1f, 1f, 0xAA000000.toInt())
     }
     private val paintBox = Paint().apply {
         color = 0xFF000000.toInt()
@@ -723,6 +723,14 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }
 
         tv.layoutParams = tv.layoutParams.apply { this.width = finalW; this.height = finalH }
+        // Sejajarkan posisi & ukuran font tvOverlayInfo dengan frame video (mentok kiri-bawah video)
+        val videoLeftOffset = ((cW - finalW) / 2f).coerceAtLeast(0f)
+        val videoBottomOffset = ((cH - finalH) / 2f).coerceAtLeast(0f)
+        binding.tvOverlayInfo.translationX = videoLeftOffset
+        binding.tvOverlayInfo.translationY = -videoBottomOffset
+        val liveFontPx = (finalH * TEXT_SCALE).coerceIn(TEXT_MIN_PX, 64f)
+        binding.tvOverlayInfo.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
+
         baseScaleVlc = 1f
         baseTxVlc = (cW - finalW) / 2f; baseTyVlc = (cH - finalH) / 2f
         panTxVlc = 0f; panTyVlc = 0f
@@ -918,29 +926,18 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             safeSrc.recycle()
         }
 
-        // >>> FIX UTAMA: font mengikuti ukuran frame <<<
+        // >>> FIX UTAMA: font & posisi sejajar mentok bawah dengan timestamp bawaan kamera <<<
         ensureOverlayTextSize(bitmap.height)
 
-        // Timestamp kanan bawah menggunakan bawaan kamera (tidak digambar ulang oleh aplikasi).
-        // Identity kiri bawah (Nama RS / Rekam Medis) menggunakan background transparan.
-        val pad = (bitmap.height * 0.016f).coerceIn(8f, 20f)
-        val boxPadX = pad * 1.6f
-        val boxH = (paintText.textSize + pad * 1.8f).coerceAtLeast(pad * 2.6f)
-        val bottom = bitmap.height.toFloat()
-        val top = (bottom - boxH).coerceAtLeast(0f)
-
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
-        val infoTextW = paintText.measureText(info)
-        val infoBoxW = (infoTextW + boxPadX * 2f).coerceAtMost(bitmap.width * 0.55f)
-        val infoLeft = 0f
-        val infoRight = (infoLeft + infoBoxW).coerceAtMost(bitmap.width.toFloat())
-
-        val maxTextW = (infoRight - infoLeft - boxPadX * 2f).coerceAtLeast(0f)
+        val leftMargin = (bitmap.width * 0.008f).coerceAtLeast(6f)
+        val bottomMargin = (bitmap.height * 0.004f).coerceAtLeast(2f)
+        val maxTextW = (bitmap.width * 0.55f - leftMargin).coerceAtLeast(0f)
         val infoDraw = if (paintText.measureText(info) <= maxTextW) info
         else info.substring(0, ((info.length * maxTextW / paintText.measureText(info)).toInt()).coerceAtLeast(0)) + "…"
 
-        val infoCenterY = top + (boxH / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
-        canvas.drawText(infoDraw, infoLeft + boxPadX, infoCenterY, paintText)
+        val baselineY = bitmap.height - bottomMargin
+        canvas.drawText(infoDraw, leftMargin, baselineY, paintText)
 
         return bitmap
     }
@@ -1451,11 +1448,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         const val STB_BITRATE = 1_500_000 // 1.5 Mbps cukup untuk 640×480
 
         // ===== Overlay Text Scaling =====
-        // 0.026f = ~2.6% dari tinggi frame (~28px pada 1080p, proporsional dengan 18sp di live stream)
-        private const val TEXT_SCALE = 0.026f
+        // 0.042f = ~4.2% dari tinggi frame, menyamai ukuran font timestamp bawaan kamera MS2
+        private const val TEXT_SCALE = 0.042f
 
         // Batas aman agar tidak terlalu kecil / terlalu besar
-        private const val TEXT_MIN_PX = 14f
-        private const val TEXT_MAX_PX = 32f
+        private const val TEXT_MIN_PX = 18f
+        private const val TEXT_MAX_PX = 48f
     }
 }

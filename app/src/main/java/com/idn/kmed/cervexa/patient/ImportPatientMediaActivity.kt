@@ -396,65 +396,21 @@ class ImportPatientMediaActivity : AppCompatActivity() {
             textAlign = Paint.Align.LEFT
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             textSize = fontPx
-            setShadowLayer(2f, 1f, 1f, Color.BLACK)
-        }
-
-        val paintBox = Paint().apply {
-            color = Color.BLACK
-            alpha = 255
-            style = Paint.Style.FILL
-        }
-
-        val paintDateText = Paint().apply {
-            color = Color.WHITE
-            isAntiAlias = true
-            textAlign = Paint.Align.LEFT
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            textSize = fontPx
+            setShadowLayer(4f, 1.5f, 1.5f, Color.BLACK)
         }
 
         val boxPadX = pad * 1.6f
         val boxH = (fontPx + pad * 1.8f).coerceAtLeast(pad * 2.6f)
-        val cornerRadius = (boxH * 0.2f).coerceIn(6f, 14f)
         val bottom = frameHeight.toFloat()
         val top = (bottom - boxH).coerceAtLeast(0f)
 
-        // === Right-bottom date box (Timestamp) ===
-        val dateTextW = paintDateText.measureText(timestampStr)
-        val dateBoxW = (dateTextW + (boxPadX * 2f)).coerceAtLeast(frameWidth * 0.18f)
-        val right = frameWidth.toFloat()
-        val left = (right - dateBoxW).coerceAtLeast(0f)
-        val dateCenterY = top + (boxH / 2f) - ((paintDateText.descent() + paintDateText.ascent()) / 2f)
-
-        val rightRadii = floatArrayOf(
-            cornerRadius, cornerRadius,
-            0f, 0f,
-            0f, 0f,
-            cornerRadius, cornerRadius
-        )
-        val rightPath = Path().apply {
-            addRoundRect(RectF(left, top, right, bottom), rightRadii, Path.Direction.CW)
-        }
-        canvas.drawPath(rightPath, paintBox)
-        canvas.drawText(timestampStr, left + boxPadX, dateCenterY, paintDateText)
-
-        // === Left-bottom info box (RS/RM) ===
+        // Timestamp kanan bawah di-hide (menggunakan bawaan kamera).
+        // Identity kiri bawah (Nama RS / Rekam Medis) menggunakan background transparan.
         val info = if (nrm.isEmpty()) rs else "$rs/$nrm"
         val infoTextW = paintText.measureText(info)
-        val infoBoxW = (infoTextW + boxPadX * 2f).coerceAtLeast(dateBoxW * 0.85f).coerceAtMost(frameWidth * 0.48f)
+        val infoBoxW = (infoTextW + boxPadX * 2f).coerceAtMost(frameWidth * 0.55f)
         val infoLeft = 0f
         val infoRight = (infoLeft + infoBoxW).coerceAtMost(frameWidth.toFloat())
-
-        val leftRadii = floatArrayOf(
-            0f, 0f,
-            cornerRadius, cornerRadius,
-            cornerRadius, cornerRadius,
-            0f, 0f
-        )
-        val leftPath = Path().apply {
-            addRoundRect(RectF(infoLeft, top, infoRight, bottom), leftRadii, Path.Direction.CW)
-        }
-        canvas.drawPath(leftPath, paintBox)
 
         val maxTextW = (infoRight - infoLeft - boxPadX * 2f).coerceAtLeast(0f)
         val infoDraw = if (paintText.measureText(info) > maxTextW) {

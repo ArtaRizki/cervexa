@@ -153,11 +153,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
     }
     private val paintText = Paint().apply {
-        color = Color.WHITE  // Putih agar terbaca di background hitam
+        color = Color.WHITE  // Putih dengan bayangan agar terbaca di background transparan
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        setShadowLayer(2f, 1f, 1f, Color.BLACK)
+        setShadowLayer(4f, 1.5f, 1.5f, Color.BLACK)
     }
     private val paintBox = Paint().apply {
         color = 0xFF000000.toInt()
@@ -320,7 +320,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         binding = FragmentVideoTvBinding.inflate(inflater, container, false)
 
         textureView = binding.textureView
-        textureView?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
+        textureView?.apply {
+            scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f
+            applyHardwareBrightness(this)
+        }
 
         scaleDetector = ScaleGestureDetector(
             requireContext(),
@@ -596,12 +599,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 "--drop-late-frames",
                 "--skip-frames",
                 "--avcodec-skiploopfilter=4",
-                "--avcodec-fast",
-                "--video-filter=adjust",
-                "--brightness=1.15",
-                "--contrast=1.2",
-                "--saturation=1.1",
-                "--gamma=1.0"
+                "--avcodec-fast"
             )
             libVlc = LibVLC(requireContext(), options)
             mediaPlayer = MediaPlayer(libVlc)
@@ -907,76 +905,35 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
         } else src
 
-        // Gunakan mutable bitmap langsung tanpa filter saturasi/kontras buatan agar warna hasil snapshot
-        // identik (WYSIWYG) dengan apa yang dilihat dokter di layar Smart TV
-        val bitmap = if (safeSrc.isMutable) safeSrc else safeSrc.copy(Bitmap.Config.ARGB_8888, true)
+        // Terapkan matriks kalibrasi warna yang sama dengan live preview (WYSIWYG)
+        val bitmap = Bitmap.createBitmap(safeSrc.width, safeSrc.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        if (safeSrc !== src && safeSrc !== bitmap && !safeSrc.isRecycled) {
+        val paintFilter = Paint().apply {
+            colorFilter = ColorMatrixColorFilter(buildCalibrationColorMatrix())
+            isAntiAlias = false
+            isDither = false
+        }
+        canvas.drawBitmap(safeSrc, 0f, 0f, paintFilter)
+        if (safeSrc !== src && !safeSrc.isRecycled) {
             safeSrc.recycle()
         }
 
         // >>> FIX UTAMA: font mengikuti ukuran frame <<<
         ensureOverlayTextSize(bitmap.height)
 
-        val formatted = if (android.os.Build.VERSION.SDK_INT >= 26)
-            ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
-        else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
-
-        val pad = (bitmap.height * 0.016f).coerceIn(8f, 20f) // padding ikut skala proporsional live stream
-
-        // === Box padding merata & simetris antara kiri (RS/RM) dan kanan (Timestamp) ===
+        // Timestamp kanan bawah menggunakan bawaan kamera (tidak digambar ulang oleh aplikasi).
+        // Identity kiri bawah (Nama RS / Rekam Medis) menggunakan background transparan.
+        val pad = (bitmap.height * 0.016f).coerceIn(8f, 20f)
         val boxPadX = pad * 1.6f
-        val boxH = (paintDateText.textSize + pad * 1.8f).coerceAtLeast(pad * 2.6f)
-        val cornerRadius = (boxH * 0.2f).coerceIn(6f, 14f)
+        val boxH = (paintText.textSize + pad * 1.8f).coerceAtLeast(pad * 2.6f)
         val bottom = bitmap.height.toFloat()
         val top = (bottom - boxH).coerceAtLeast(0f)
 
-        // === Right-bottom date box ===
-        val dateTextW = paintDateText.measureText(formatted)
-        val dateBoxW = (dateTextW + (boxPadX * 2f)).coerceAtLeast(bitmap.width * 0.18f)
-        val right = bitmap.width.toFloat()
-        val left = (right - dateBoxW).coerceAtLeast(0f)
-        val dateCenterY = top + (boxH / 2f) - ((paintDateText.descent() + paintDateText.ascent()) / 2f)
-
-        // Draw specific rounded corners: top-left & bottom-left
-        val rightRadii = floatArrayOf(
-            cornerRadius, cornerRadius, // top-left
-            0f, 0f,                     // top-right
-            0f, 0f,                     // bottom-right
-            cornerRadius, cornerRadius  // bottom-left
-        )
-        val rightPath = android.graphics.Path().apply {
-            addRoundRect(
-                android.graphics.RectF(left, top, right, bottom),
-                rightRadii,
-                android.graphics.Path.Direction.CW
-            )
-        }
-        canvas.drawPath(rightPath, paintDateBg)
-        canvas.drawText(formatted, left + boxPadX, dateCenterY, paintDateText)
-
-        // === Left-bottom info box (RS/RM) - disesuaikan sama besar & simetris ===
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
         val infoTextW = paintText.measureText(info)
-        val infoBoxW = (infoTextW + boxPadX * 2f).coerceAtLeast(dateBoxW * 0.85f).coerceAtMost(bitmap.width * 0.48f)
+        val infoBoxW = (infoTextW + boxPadX * 2f).coerceAtMost(bitmap.width * 0.55f)
         val infoLeft = 0f
         val infoRight = (infoLeft + infoBoxW).coerceAtMost(bitmap.width.toFloat())
-
-        // Draw specific rounded corners: top-right & bottom-right
-        val leftRadii = floatArrayOf(
-            0f, 0f,                     // top-left
-            cornerRadius, cornerRadius, // top-right
-            cornerRadius, cornerRadius, // bottom-right
-            0f, 0f                      // bottom-left
-        )
-        val leftPath = android.graphics.Path().apply {
-            addRoundRect(
-                android.graphics.RectF(infoLeft, top, infoRight, bottom),
-                leftRadii,
-                android.graphics.Path.Direction.CW
-            )
-        }
-        canvas.drawPath(leftPath, paintBox)
 
         val maxTextW = (infoRight - infoLeft - boxPadX * 2f).coerceAtLeast(0f)
         val infoDraw = if (paintText.measureText(info) <= maxTextW) info
@@ -1079,18 +1036,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     }
 
     private fun startOverlayClock() {
-        if (clockJob?.isActive == true) return
-        clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
-            while (isActive) {
-                binding.tvOverlayClock.text =
-                    if (android.os.Build.VERSION.SDK_INT >= 26)
-                        ZonedDateTime.now()
-                            .format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
-                    else
-                        SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
-                delay(1000)
-            }
-        }
+        clockJob?.cancel()
+        binding.tvOverlayClock.visibility = View.GONE
     }
 
     private fun setKeepScreenOn(enable: Boolean) {
@@ -1296,21 +1243,83 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }
     }
 
-    private var currentBrightness = 0f
-    private var currentContrast = 1.00f
-    private var currentSaturation = 1.00f
-    private var currentRed = 1.00f
-    private var currentGreen = 1.00f
-    private var currentBlue = 1.00f
+    private var currentBrightness = 35f
+    private var currentContrast = 1.15f
+    private var currentSaturation = 0.60f
+    private var currentRed = 0.80f
+    private var currentGreen = 0.88f
+    private var currentBlue = 0.92f
     private var currentHue = 0f
 
+    private fun buildCalibrationColorMatrix(
+        brightnessOffset: Float = currentBrightness,
+        contrast: Float = currentContrast,
+        saturation: Float = currentSaturation,
+        redBoost: Float = currentRed,
+        greenBoost: Float = currentGreen,
+        blueBoost: Float = currentBlue,
+        hueOffset: Float = currentHue
+    ): ColorMatrix {
+        val cm = ColorMatrix()
+        cm.setSaturation(saturation)
+
+        if (hueOffset != 0f) {
+            val theta = Math.PI * hueOffset / 180.0
+            val c = Math.cos(theta).toFloat()
+            val s = Math.sin(theta).toFloat()
+
+            val hueMatrix = ColorMatrix(floatArrayOf(
+                0.213f + 0.787f * c - 0.213f * s, 0.715f - 0.715f * c - 0.715f * s, 0.072f - 0.072f * c + 0.928f * s, 0f, 0f,
+                0.213f - 0.213f * c + 0.143f * s, 0.715f + 0.285f * c + 0.140f * s, 0.072f - 0.072f * c - 0.283f * s, 0f, 0f,
+                0.213f - 0.213f * c - 0.787f * s, 0.715f - 0.715f * c + 0.715f * s, 0.072f + 0.928f * c + 0.072f * s, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f
+            ))
+            cm.postConcat(hueMatrix)
+        }
+
+        val brightnessAndContrast = ColorMatrix(floatArrayOf(
+            contrast * redBoost, 0f, 0f, 0f, brightnessOffset,
+            0f, contrast * greenBoost, 0f, 0f, brightnessOffset,
+            0f, 0f, contrast * blueBoost, 0f, brightnessOffset,
+            0f, 0f, 0f, 1f, 0f
+        ))
+        cm.postConcat(brightnessAndContrast)
+        return cm
+    }
+
+    private fun applyHardwareBrightness(
+        tv: android.view.TextureView,
+        brightnessOffset: Float = currentBrightness,
+        contrast: Float = currentContrast,
+        saturation: Float = currentSaturation,
+        redBoost: Float = currentRed,
+        greenBoost: Float = currentGreen,
+        blueBoost: Float = currentBlue,
+        hueOffset: Float = currentHue
+    ) {
+        val cm = buildCalibrationColorMatrix(
+            brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset
+        )
+        val paint = Paint().apply {
+            colorFilter = ColorMatrixColorFilter(cm)
+        }
+        tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
+    }
+
     private fun setupDebugPanel() {
+        val updateFilter = {
+            textureView?.let {
+                applyHardwareBrightness(it)
+            }
+        }
+
         val sbContrast = binding.root.findViewById<android.widget.SeekBar>(R.id.sbContrast)
         val tvContrastVal = binding.root.findViewById<android.widget.TextView>(R.id.tvContrastVal)
         sbContrast?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentContrast = progress / 100f
                 tvContrastVal?.text = String.format("%.2f", currentContrast)
+                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1322,6 +1331,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentBrightness = (progress - 100).toFloat()
                 tvBrightnessVal?.text = currentBrightness.toString()
+                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1333,6 +1343,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentSaturation = progress / 100f
                 tvSaturationVal?.text = String.format("%.2f", currentSaturation)
+                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1344,6 +1355,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentRed = progress / 100f
                 tvRedVal?.text = String.format("%.2f", currentRed)
+                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1355,6 +1367,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentGreen = progress / 100f
                 tvGreenVal?.text = String.format("%.2f", currentGreen)
+                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1366,6 +1379,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentBlue = progress / 100f
                 tvBlueVal?.text = String.format("%.2f", currentBlue)
+                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -1377,6 +1391,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                 currentHue = (progress - 180).toFloat()
                 tvHueVal?.text = currentHue.toInt().toString()
+                updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}

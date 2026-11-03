@@ -149,12 +149,12 @@ class VideoFragmentMobile : Fragment() {
     // Paint di-cache di class level
     // =====================================================================
     private val paintText = Paint().apply {
-        color = Color.WHITE  // Putih agar terbaca di background hitam
+        color = Color.WHITE  // Putih dengan bayangan agar terbaca di background transparan
         // textSize JANGAN hardcode (akan diskalakan berdasarkan frame)
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        setShadowLayer(2f, 1f, 1f, Color.BLACK)
+        setShadowLayer(4f, 1.5f, 1.5f, Color.BLACK)
     }
     private val paintBox = Paint().apply {
         color = Color.BLACK
@@ -957,71 +957,22 @@ class VideoFragmentMobile : Fragment() {
         ensureOverlayTextSize(bitmap.height)
         val pad = overlayPadding(bitmap.height)
 
-        val formatted = if (android.os.Build.VERSION.SDK_INT >= 26)
-            ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
-        else SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
-
-        // === Box padding merata & simetris antara kiri (RS/RM) dan kanan (Timestamp) ===
+        // Timestamp kanan bawah menggunakan bawaan kamera (tidak digambar ulang oleh aplikasi).
+        // Identity kiri bawah (Nama RS / Rekam Medis) menggunakan background transparan.
         val boxPadX = pad * 1.6f
-        val boxH = (paintDateText.textSize + pad * 1.8f).coerceAtLeast(pad * 2.6f)
-        val cornerRadius = (boxH * 0.2f).coerceIn(6f, 14f)
+        val boxH = (paintText.textSize + pad * 1.8f).coerceAtLeast(pad * 2.6f)
         val bottom = bitmap.height.toFloat()
         val top = (bottom - boxH).coerceAtLeast(0f)
 
-        // === Right-bottom date box ===
-        val dateTextW = paintDateText.measureText(formatted)
-        val dateBoxW = (dateTextW + (boxPadX * 2f)).coerceAtLeast(bitmap.width * 0.18f)
-        val right = bitmap.width.toFloat()
-        val left = (right - dateBoxW).coerceAtLeast(0f)
-        val dateCenterY = top + (boxH / 2f) - ((paintDateText.descent() + paintDateText.ascent()) / 2f)
-
-        // Draw specific rounded corners: top-left & bottom-left
-        val rightRadii = floatArrayOf(
-            cornerRadius, cornerRadius, // top-left
-            0f, 0f,                     // top-right
-            0f, 0f,                     // bottom-right
-            cornerRadius, cornerRadius  // bottom-left
-        )
-        val rightPath = android.graphics.Path().apply {
-            addRoundRect(
-                android.graphics.RectF(left, top, right, bottom),
-                rightRadii,
-                android.graphics.Path.Direction.CW
-            )
-        }
-        canvas.drawPath(rightPath, paintDateBg)
-
-        // Teks ditengah box (centered)
-        canvas.drawText(formatted, left + boxPadX, dateCenterY, paintDateText)
-
-        // === Left-bottom info box (RS/RM) - disesuaikan sama besar & simetris ===
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
         val infoTextW = paintText.measureText(info)
-        val infoBoxW = (infoTextW + boxPadX * 2f).coerceAtLeast(dateBoxW * 0.85f).coerceAtMost(bitmap.width * 0.48f)
+        val infoBoxW = (infoTextW + boxPadX * 2f).coerceAtMost(bitmap.width * 0.55f)
         val infoLeft = 0f
         val infoRight = (infoLeft + infoBoxW).coerceAtMost(bitmap.width.toFloat())
 
-        // Draw specific rounded corners: top-right & bottom-right
-        val leftRadii = floatArrayOf(
-            0f, 0f,                     // top-left
-            cornerRadius, cornerRadius, // top-right
-            cornerRadius, cornerRadius, // bottom-right
-            0f, 0f                      // bottom-left
-        )
-        val leftPath = android.graphics.Path().apply {
-            addRoundRect(
-                android.graphics.RectF(infoLeft, top, infoRight, bottom),
-                leftRadii,
-                android.graphics.Path.Direction.CW
-            )
-        }
-        canvas.drawPath(leftPath, paintBox)
-
-        // Kalau text terlalu panjang sampai melewati box, kita potong (ellipsize manual sederhana)
         val maxTextW = (infoRight - infoLeft - boxPadX * 2f).coerceAtLeast(0f)
         val infoDraw = ellipsizeToWidth(info, paintText, maxTextW)
 
-        // Hitung juga center Y untuk text sebelah kiri agar simetris
         val infoCenterY = top + (boxH / 2f) - ((paintText.descent() + paintText.ascent()) / 2f)
         canvas.drawText(infoDraw, infoLeft + boxPadX, infoCenterY, paintText)
 
@@ -1113,18 +1064,8 @@ class VideoFragmentMobile : Fragment() {
     }
 
     private fun startOverlayClock() {
-        if (clockJob?.isActive == true) return
-        clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
-            while (isActive) {
-                binding.tvOverlayClock.text =
-                    if (android.os.Build.VERSION.SDK_INT >= 26)
-                        ZonedDateTime.now()
-                            .format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
-                    else
-                        SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date())
-                delay(1000)
-            }
-        }
+        clockJob?.cancel()
+        binding.tvOverlayClock.visibility = View.GONE
     }
 
     private fun stopStreamAndExit() {
@@ -1367,12 +1308,12 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private var currentBrightness = 0f
-    private var currentContrast = 1.00f
-    private var currentSaturation = 1.00f
-    private var currentRed = 1.00f
-    private var currentGreen = 1.00f
-    private var currentBlue = 1.00f
+    private var currentBrightness = 35f
+    private var currentContrast = 1.15f
+    private var currentSaturation = 0.60f
+    private var currentRed = 0.80f
+    private var currentGreen = 0.88f
+    private var currentBlue = 0.92f
     private var currentHue = 0f
 
     private fun buildCalibrationColorMatrix(

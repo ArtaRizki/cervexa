@@ -88,24 +88,24 @@
                 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Brightness" />
-                    <TextView android:id="@+id/tvBrightnessVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0" />
+                    <TextView android:id="@+id/tvBrightnessVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="35" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="12dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
+                <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="135" android:layout_marginBottom="12dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Contrast" />
-                    <TextView android:id="@+id/tvContrastVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.00" />
+                    <TextView android:id="@+id/tvContrastVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.15" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="24dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
+                <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="115" android:layout_marginBottom="24dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
 
                 <!-- Color Settings -->
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#BBBBBB" android:text="COLOR SETTINGS" android:textSize="12sp" android:textStyle="bold" />
                 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Saturation" />
-                    <TextView android:id="@+id/tvSaturationVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.00" />
+                    <TextView android:id="@+id/tvSaturationVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0.60" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="12dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
+                <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="60" android:layout_marginBottom="12dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Hue" />
@@ -118,21 +118,21 @@
                 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#FF8888" android:text="Red" />
-                    <TextView android:id="@+id/tvRedVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF8888" android:text="1.00" />
+                    <TextView android:id="@+id/tvRedVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF8888" android:text="0.80" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbRed" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="12dp" android:progressTint="#FF8888" android:thumbTint="@android:color/white"/>
+                <SeekBar android:id="@+id/sbRed" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="80" android:layout_marginBottom="12dp" android:progressTint="#FF8888" android:thumbTint="@android:color/white"/>
 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#66E0D7" android:text="Green" />
-                    <TextView android:id="@+id/tvGreenVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#66E0D7" android:text="1.00" />
+                    <TextView android:id="@+id/tvGreenVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#66E0D7" android:text="0.88" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="12dp" android:progressTint="#66E0D7" android:thumbTint="@android:color/white"/>
+                <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="88" android:layout_marginBottom="12dp" android:progressTint="#66E0D7" android:thumbTint="@android:color/white"/>
 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#5CC9E6" android:text="Blue" />
-                    <TextView android:id="@+id/tvBlueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#5CC9E6" android:text="1.00" />
+                    <TextView android:id="@+id/tvBlueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#5CC9E6" android:text="0.92" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbBlue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="24dp" android:progressTint="#5CC9E6" android:thumbTint="@android:color/white"/>
+                <SeekBar android:id="@+id/sbBlue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="92" android:layout_marginBottom="24dp" android:progressTint="#5CC9E6" android:thumbTint="@android:color/white"/>
 
             </LinearLayout>
         </ScrollView>
@@ -157,13 +157,17 @@
             android:layout_gravity="bottom|start"
             android:layout_marginStart="0dp"
             android:layout_marginBottom="0dp"
-            android:background="#FF000000"
+            android:background="@android:color/transparent"
             android:fontFamily="sans-serif-medium"
             android:gravity="center_vertical"
             android:maxLines="1"
             android:ellipsize="end"
             android:paddingHorizontal="16dp"
             android:paddingVertical="12dp"
+            android:shadowColor="#CC000000"
+            android:shadowDx="1"
+            android:shadowDy="1"
+            android:shadowRadius="4"
             android:text="Nama RS / NRM"
             android:textColor="@android:color/white"
             android:textSize="16sp"
@@ -185,7 +189,7 @@
             android:text="0000-00-00 00:00:00"
             android:textColor="@android:color/white"
             android:textSize="16sp"
-            android:visibility="visible" />
+            android:visibility="gone" />
 
     </FrameLayout>
 

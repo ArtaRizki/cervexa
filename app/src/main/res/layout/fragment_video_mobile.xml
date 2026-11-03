@@ -115,24 +115,24 @@
                 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Brightness" />
-                    <TextView android:id="@+id/tvBrightnessVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0" />
+                    <TextView android:id="@+id/tvBrightnessVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="35" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="12dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
+                <SeekBar android:id="@+id/sbBrightness" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="135" android:layout_marginBottom="12dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Contrast" />
-                    <TextView android:id="@+id/tvContrastVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.00" />
+                    <TextView android:id="@+id/tvContrastVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.15" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="24dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
+                <SeekBar android:id="@+id/sbContrast" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="115" android:layout_marginBottom="24dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
 
                 <!-- Color Settings -->
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#BBBBBB" android:text="COLOR SETTINGS" android:textSize="12sp" android:textStyle="bold" />
                 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Saturation" />
-                    <TextView android:id="@+id/tvSaturationVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="1.00" />
+                    <TextView android:id="@+id/tvSaturationVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@android:color/white" android:text="0.60" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="12dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
+                <SeekBar android:id="@+id/sbSaturation" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="60" android:layout_marginBottom="12dp" android:thumbTint="@android:color/white" android:progressTint="#DDDDDD" />
 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="@android:color/white" android:text="Hue" />
@@ -145,21 +145,21 @@
                 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#FF8888" android:text="Red" />
-                    <TextView android:id="@+id/tvRedVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF8888" android:text="1.00" />
+                    <TextView android:id="@+id/tvRedVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF8888" android:text="0.80" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbRed" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="12dp" android:progressTint="#FF8888" android:thumbTint="@android:color/white"/>
+                <SeekBar android:id="@+id/sbRed" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="80" android:layout_marginBottom="12dp" android:progressTint="#FF8888" android:thumbTint="@android:color/white"/>
 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#66E0D7" android:text="Green" />
-                    <TextView android:id="@+id/tvGreenVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#66E0D7" android:text="1.00" />
+                    <TextView android:id="@+id/tvGreenVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#66E0D7" android:text="0.88" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="12dp" android:progressTint="#66E0D7" android:thumbTint="@android:color/white"/>
+                <SeekBar android:id="@+id/sbGreen" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="88" android:layout_marginBottom="12dp" android:progressTint="#66E0D7" android:thumbTint="@android:color/white"/>
 
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#5CC9E6" android:text="Blue" />
-                    <TextView android:id="@+id/tvBlueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#5CC9E6" android:text="1.00" />
+                    <TextView android:id="@+id/tvBlueVal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#5CC9E6" android:text="0.92" />
                 </LinearLayout>
-                <SeekBar android:id="@+id/sbBlue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="100" android:layout_marginBottom="24dp" android:progressTint="#5CC9E6" android:thumbTint="@android:color/white"/>
+                <SeekBar android:id="@+id/sbBlue" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="200" android:progress="92" android:layout_marginBottom="24dp" android:progressTint="#5CC9E6" android:thumbTint="@android:color/white"/>
 
             </LinearLayout>
         </ScrollView>
@@ -182,8 +182,8 @@
     <TextView
         android:id="@+id/tvOverlayInfo"
         android:layout_width="wrap_content"
-        android:layout_height="0dp"
-        android:background="#FF000000"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
         android:elevation="5dp"
         android:fontFamily="monospace"
         android:gravity="center_vertical"
@@ -191,16 +191,19 @@
         android:ellipsize="end"
         android:paddingHorizontal="10dp"
         android:paddingVertical="12dp"
+        android:shadowColor="#CC000000"
+        android:shadowDx="1"
+        android:shadowDy="1"
+        android:shadowRadius="4"
         android:text="Nama RS / NRM"
         android:textColor="@android:color/white"
         android:textSize="13sp"
         android:textStyle="bold"
         app:layout_constrainedWidth="true"
         app:layout_constraintHorizontal_bias="0.0"
-        app:layout_constraintTop_toTopOf="@+id/tvOverlayClock"
-        app:layout_constraintBottom_toBottomOf="@+id/tvOverlayClock"
+        app:layout_constraintBottom_toBottomOf="@id/videoContainer"
         app:layout_constraintStart_toStartOf="@id/videoContainer"
-        app:layout_constraintEnd_toStartOf="@+id/tvOverlayClock" />
+        app:layout_constraintEnd_toEndOf="@id/videoContainer" />
 
     <TextView
         android:id="@+id/tvOverlayClock"
@@ -219,6 +222,7 @@
         android:textColor="@android:color/white"
         android:textSize="13sp"
         android:textStyle="bold"
+        android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@id/videoContainer"
         app:layout_constraintEnd_toEndOf="@id/videoContainer" />
 

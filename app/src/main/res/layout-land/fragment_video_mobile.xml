@@ -23,6 +23,7 @@
         android:id="@+id/videoContainer"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        app:layout_constraintDimensionRatio="16:9"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -174,9 +175,9 @@
         android:visibility="visible"
         app:layout_constrainedWidth="true"
         app:layout_constraintHorizontal_bias="0.0"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintBottom_toBottomOf="@id/videoContainer"
+        app:layout_constraintStart_toStartOf="@id/videoContainer"
+        app:layout_constraintEnd_toEndOf="@id/videoContainer" />
 
     <!-- ✅ Overlay CLOCK - DIMODIFIKASI untuk menutupi timestamp kuning -->
     <TextView

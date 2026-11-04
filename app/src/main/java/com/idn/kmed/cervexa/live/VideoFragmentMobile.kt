@@ -148,13 +148,22 @@ class VideoFragmentMobile : Fragment() {
     // =====================================================================
     // Paint di-cache di class level
     // =====================================================================
+    private val paintTextStroke = Paint().apply {
+        color = Color.BLACK
+        isAntiAlias = true
+        textAlign = Paint.Align.LEFT
+        typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+        style = Paint.Style.STROKE
+        strokeJoin = Paint.Join.ROUND
+        strokeCap = Paint.Cap.ROUND
+    }
     private val paintText = Paint().apply {
-        color = Color.parseColor("#FFEB3B") // Kuning sesuai timestamp bawaan kamera
+        color = Color.WHITE // Putih dengan stroke hitam agar terbaca di objek putih maupun gelap
         // textSize JANGAN hardcode (akan diskalakan berdasarkan frame)
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
         typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
-        setShadowLayer(2f, 1f, 1f, 0xAA000000.toInt())
+        style = Paint.Style.FILL
     }
     private val paintBox = Paint().apply {
         color = Color.BLACK
@@ -926,6 +935,8 @@ class VideoFragmentMobile : Fragment() {
 
         val fontPx = (frameHeight * TEXT_SCALE).coerceIn(TEXT_MIN_PX, TEXT_MAX_PX)
         paintText.textSize = fontPx
+        paintTextStroke.textSize = fontPx
+        paintTextStroke.strokeWidth = (fontPx * 0.15f).coerceIn(3f, 8f)
         paintDateText.textSize = fontPx
 
         lastOverlayTargetHeight = frameHeight
@@ -971,6 +982,7 @@ class VideoFragmentMobile : Fragment() {
         val infoDraw = ellipsizeToWidth(info, paintText, maxTextW)
 
         val baselineY = bitmap.height - bottomMargin
+        canvas.drawText(infoDraw, leftMargin, baselineY, paintTextStroke)
         canvas.drawText(infoDraw, leftMargin, baselineY, paintText)
 
         // AI overlay is now handled by OverlayRenderer — no inline AI drawing here

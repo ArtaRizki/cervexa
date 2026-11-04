@@ -179,7 +179,7 @@
             
     </FrameLayout>
 
-    <TextView
+    <com.idn.kmed.cervexa.utils.StrokedTextView
         android:id="@+id/tvOverlayInfo"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -194,12 +194,8 @@
         android:paddingEnd="8dp"
         android:paddingTop="0dp"
         android:paddingBottom="1dp"
-        android:shadowColor="#AA000000"
-        android:shadowDx="1"
-        android:shadowDy="1"
-        android:shadowRadius="2"
         android:text="Nama RS / NRM"
-        android:textColor="#FFEB3B"
+        android:textColor="@android:color/white"
         android:textSize="11sp"
         android:textStyle="normal"
         app:layout_constrainedWidth="true"

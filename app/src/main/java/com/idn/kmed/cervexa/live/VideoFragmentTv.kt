@@ -152,12 +152,21 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         textAlign = Paint.Align.LEFT
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
     }
-    private val paintText = Paint().apply {
-        color = Color.parseColor("#FFEB3B") // Kuning sesuai timestamp bawaan kamera
+    private val paintTextStroke = Paint().apply {
+        color = Color.BLACK
         isAntiAlias = true
         textAlign = Paint.Align.LEFT
         typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
-        setShadowLayer(2f, 1f, 1f, 0xAA000000.toInt())
+        style = Paint.Style.STROKE
+        strokeJoin = Paint.Join.ROUND
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val paintText = Paint().apply {
+        color = Color.WHITE // Putih dengan stroke hitam agar terbaca di objek putih maupun gelap
+        isAntiAlias = true
+        textAlign = Paint.Align.LEFT
+        typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+        style = Paint.Style.FILL
     }
     private val paintBox = Paint().apply {
         color = 0xFF000000.toInt()
@@ -899,6 +908,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             .coerceIn(TEXT_MIN_PX, TEXT_MAX_PX)
 
         paintText.textSize = fontPx
+        paintTextStroke.textSize = fontPx
+        paintTextStroke.strokeWidth = (fontPx * 0.15f).coerceIn(3f, 8f)
         paintDateText.textSize = fontPx
         lastOverlayFontPx = fontPx
         lastOverlayTargetHeight = targetHeight
@@ -937,6 +948,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         else info.substring(0, ((info.length * maxTextW / paintText.measureText(info)).toInt()).coerceAtLeast(0)) + "…"
 
         val baselineY = bitmap.height - bottomMargin
+        canvas.drawText(infoDraw, leftMargin, baselineY, paintTextStroke)
         canvas.drawText(infoDraw, leftMargin, baselineY, paintText)
 
         return bitmap

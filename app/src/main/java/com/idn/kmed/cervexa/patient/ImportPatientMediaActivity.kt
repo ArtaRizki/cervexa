@@ -385,17 +385,29 @@ class ImportPatientMediaActivity : AppCompatActivity() {
         val textMaxPx = 48f
         val fontPx = (frameHeight * textScale).coerceIn(textMinPx, textMaxPx)
 
-        val paintText = Paint().apply {
-            color = Color.parseColor("#FFEB3B") // Kuning sesuai timestamp bawaan kamera
+        val paintTextStroke = Paint().apply {
+            color = Color.BLACK
             isAntiAlias = true
             textAlign = Paint.Align.LEFT
             typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
             textSize = fontPx
-            setShadowLayer(2f, 1f, 1f, 0xAA000000.toInt())
+            style = Paint.Style.STROKE
+            strokeJoin = Paint.Join.ROUND
+            strokeCap = Paint.Cap.ROUND
+            strokeWidth = (fontPx * 0.15f).coerceIn(3f, 8f)
+        }
+
+        val paintText = Paint().apply {
+            color = Color.WHITE // Putih dengan stroke hitam agar terbaca di objek putih maupun gelap
+            isAntiAlias = true
+            textAlign = Paint.Align.LEFT
+            typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            textSize = fontPx
+            style = Paint.Style.FILL
         }
 
         // Timestamp kanan bawah di-hide (menggunakan bawaan kamera).
-        // Identity kiri bawah (Nama RS / Rekam Medis) disejajarkan mentok bawah dengan font Serif kuning.
+        // Identity kiri bawah (Nama RS / Rekam Medis) disejajarkan mentok bawah dengan font Serif putih stroke hitam.
         val info = if (nrm.isEmpty()) rs else "$rs/$nrm"
         val leftMargin = (frameWidth * 0.008f).coerceAtLeast(6f)
         val bottomMargin = (frameHeight * 0.004f).coerceAtLeast(2f)
@@ -405,6 +417,7 @@ class ImportPatientMediaActivity : AppCompatActivity() {
         } else info
 
         val baselineY = frameHeight - bottomMargin
+        canvas.drawText(infoDraw, leftMargin, baselineY, paintTextStroke)
         canvas.drawText(infoDraw, leftMargin, baselineY, paintText)
 
         return bitmap

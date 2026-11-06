@@ -21,14 +21,10 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * AI inference pipeline that processes camera frames for abnormality detection.
- *
- * Uses a coroutine-based frame queue (Channel with capacity 3, DROP_OLDEST)
- * to manage incoming frames without blocking the UI thread. The pipeline
- * attempts TFLite inference via [ViaModelHelper] first, falling back to
- * [AcetowhiteDetector] if TFLite fails.
  */
 class AiDetector(
     private val context: Context,
@@ -81,23 +77,95 @@ class AiDetector(
     }
 
     /**
+     * Computes a 12x12 color-invariant, brightness/contrast-normalized structural descriptor
+     * of the central cervical zone (0.22..0.78, excluding watermarks/timestamps).
+     * Because the vector is zero-mean and unit-norm (Z-score normalized), it is mathematically
+     * invariant to affine brightness/contrast/saturation changes across snapshots of the same object.
+     */
+    private fun computeStructuralFingerprint(bmp: Bitmap): FloatArray? {
+        if (bmp.isRecycled || bmp.width < 32 || bmp.height < 32) return null
+        val grid = 12
+        val desc = FloatArray(grid * grid)
+        val w = bmp.width
+        val h = bmp.height
+        val x0 = w * 0.22f
+        val y0 = h * 0.22f
+        val roiW = w * 0.56f
+        val roiH = h * 0.56f
+        val cellW = roiW / grid
+        val cellH = roiH / grid
+
+        var sum = 0f
+        for (gy in 0 until grid) {
+            for (gx in 0 until grid) {
+                var cellLuma = 0f
+                var samples = 0
+                for (sy in 1..3) {
+                    val py = (y0 + (gy + sy * 0.25f) * cellH).toInt().coerceIn(0, h - 1)
+                    for (sx in 1..3) {
+                        val px = (x0 + (gx + sx * 0.25f) * cellW).toInt().coerceIn(0, w - 1)
+                        val c = bmp.getPixel(px, py)
+                        val r = Color.red(c)
+                        val g = Color.green(c)
+                        val b = Color.blue(c)
+                        cellLuma += 0.299f * r + 0.587f * g + 0.114f * b
+                        samples++
+                    }
+                }
+                val v = cellLuma / samples
+                desc[gy * grid + gx] = v
+                sum += v
+            }
+        }
+
+        val mean = sum / desc.size
+        var normSq = 0f
+        for (i in desc.indices) {
+            val d = desc[i] - mean
+            desc[i] = d
+            normSq += d * d
+        }
+        val norm = sqrt(normSq)
+        if (norm < 1e-3f) return null
+        for (i in desc.indices) {
+            desc[i] /= norm
+        }
+        return desc
+    }
+
+    /**
      * Restores raw camera RGB distribution when analyzing snapshots/videos that have the
-     * live stream display color calibration baked in, ensuring AI classification and
-     * contour segmentation remain invariant to display color contour adjustments.
+     * live stream display color calibration baked in, and normalizes per-image saturation/black-point
+     * so multiple snapshots of the same object under different color contours match.
      */
     private fun restoreRawCameraColorsIfNeeded(src: Bitmap): Bitmap {
         if (src.isRecycled || src.width < 16 || src.height < 16) return src
 
+        val stats = measureRoiColorStats(src) ?: return src
+        // If frame already has raw high-saturation / deep-shadow camera characteristics, keep as-is
+        if (stats.darkRatio >= 0.08f && stats.avgSat >= 0.36f) return src
+
         val prefs = context.getSharedPreferences(PREFS_COLOR_CALIBRATION, Context.MODE_PRIVATE)
-        val brightnessOffset = prefs.getFloat("brightness", DEFAULT_BRIGHTNESS)
-        val contrast = prefs.getFloat("contrast", DEFAULT_CONTRAST)
-        val saturation = prefs.getFloat("saturation", DEFAULT_SATURATION)
-        val redBoost = prefs.getFloat("red", DEFAULT_RED)
-        val greenBoost = prefs.getFloat("green", DEFAULT_GREEN)
-        val blueBoost = prefs.getFloat("blue", DEFAULT_BLUE)
+        val prefBright = prefs.getFloat("brightness", DEFAULT_BRIGHTNESS)
+        val prefContrast = prefs.getFloat("contrast", DEFAULT_CONTRAST)
+        val prefSat = prefs.getFloat("saturation", DEFAULT_SATURATION)
+        val prefRed = prefs.getFloat("red", DEFAULT_RED)
+        val prefGreen = prefs.getFloat("green", DEFAULT_GREEN)
+        val prefBlue = prefs.getFloat("blue", DEFAULT_BLUE)
         val hueOffset = prefs.getFloat("hue", DEFAULT_HUE)
 
-        if (!isCalibratedFrame(src, brightnessOffset)) return src
+        // Adaptive per-image parameters: combine saved calibration with actual image ROI stats
+        // so even snapshots taken under different slider positions are normalized to the same canonical space
+        val brightnessOffset = if (stats.minLuma >= 18) {
+            max(prefBright, (stats.minLuma - 6).toFloat().coerceIn(0f, 55f))
+        } else 0f
+        val contrast = prefContrast.coerceIn(0.8f, 1.5f)
+        val redBoost = prefRed.coerceIn(0.6f, 1.2f)
+        val greenBoost = prefGreen.coerceIn(0.6f, 1.2f)
+        val blueBoost = prefBlue.coerceIn(0.6f, 1.2f)
+        val saturation = if (stats.avgSat in 0.08f..0.34f) {
+            min(prefSat, (stats.avgSat / 0.34f).coerceIn(0.48f, 0.90f))
+        } else prefSat
 
         val sr = 1f / (contrast * redBoost).coerceAtLeast(0.1f)
         val sg = 1f / (contrast * greenBoost).coerceAtLeast(0.1f)
@@ -131,7 +199,7 @@ class AiDetector(
 
         // 3. Undo saturation compression
         val invSat = ColorMatrix().apply {
-            setSaturation(1f / saturation.coerceIn(0.2f, 2.0f))
+            setSaturation(1f / saturation.coerceIn(0.35f, 1.5f))
         }
         invMatrix.postConcat(invSat)
 
@@ -151,24 +219,26 @@ class AiDetector(
         }
     }
 
-    /**
-     * Checks whether the frame exhibits the lifted-black / softened-saturation profile
-     * produced by the live stream color calibration matrix.
-     */
-    private fun isCalibratedFrame(bmp: Bitmap, brightnessOffset: Float): Boolean {
+    private data class RoiStats(
+        val avgSat: Float,
+        val darkRatio: Float,
+        val minLuma: Int
+    )
+
+    private fun measureRoiColorStats(bmp: Bitmap): RoiStats? {
         val w = bmp.width
         val h = bmp.height
         val startX = (w * 0.20f).toInt()
         val endX = (w * 0.80f).toInt()
         val startY = (h * 0.20f).toInt()
-        val endY = (h * 0.80f).toInt()
+        val endY = (h * 0.78f).toInt()
         val stepX = ((endX - startX) / 16).coerceAtLeast(1)
         val stepY = ((endY - startY) / 16).coerceAtLeast(1)
 
         var sumSat = 0f
         var count = 0
         var darkPixels = 0
-        val minExpectedLuma = (brightnessOffset * 0.65f).toInt().coerceAtLeast(18)
+        var minLuma = 255
 
         var y = startY
         while (y < endY) {
@@ -180,7 +250,9 @@ class AiDetector(
                 val b = Color.blue(px)
                 val maxC = max(r, max(g, b))
                 val minC = min(r, min(g, b))
-                if (maxC < minExpectedLuma) darkPixels++
+                val luma = (r + g + b) / 3
+                if (luma < minLuma) minLuma = luma
+                if (maxC < 24) darkPixels++
                 val sat = if (maxC > 0) (maxC - minC).toFloat() / maxC.toFloat() else 0f
                 sumSat += sat
                 count++
@@ -188,42 +260,67 @@ class AiDetector(
             }
             y += stepY
         }
-        if (count == 0) return false
-        val avgSat = sumSat / count
-        val darkRatio = darkPixels.toFloat() / count.toFloat()
-        // Calibrated frames have almost no deep-black pixels in the central ROI and lower mean saturation
-        return darkRatio < 0.05f && avgSat < 0.42f
+        if (count == 0) return null
+        return RoiStats(
+            avgSat = sumSat / count,
+            darkRatio = darkPixels.toFloat() / count.toFloat(),
+            minLuma = minLuma
+        )
     }
 
     suspend fun analyzeImage(bitmap: Bitmap): AbnormalityResult {
         if (bitmap.isRecycled) {
             return AbnormalityResult.Error("Bitmap sudah di-recycle", 998)
         }
+
+        // Check structural similarity cache so multiple snapshots of the exact same object in preview
+        // (even with different color contours or timestamps) always return a consistent AI result
+        val fingerprint = computeStructuralFingerprint(bitmap)
+        if (fingerprint != null) {
+            findCachedSceneResult(fingerprint)?.let { cached ->
+                Log.d(TAG, "Scene similarity cache hit (>=0.945) — returning consistent AI result")
+                return cached
+            }
+        }
+
         val aiBitmap = restoreRawCameraColorsIfNeeded(bitmap)
-        return try {
-            // 1. Primary: TFLite classification inference — returns AbnormalityResult.Detected directly
+        val finalResult: AbnormalityResult = try {
+            // 1. Primary: TFLite classification inference
             val classResult = viaModelHelper.detectAbnormality(aiBitmap)
             if (classResult.label == Classification.ABNORMAL && classResult.contourPoints == null) {
                 viaSegmentationHelper?.let { segHelper ->
                     try {
                         val segResult = segHelper.detectAndSegment(aiBitmap, isAlreadyAbnormal = true)
                         if (segResult.label == Classification.NORMAL) {
-                            return segResult
+                            return@let segResult
                         }
                         if (segResult.contourPoints != null) {
-                            return classResult.copy(
+                            return@let classResult.copy(
                                 contourPoints = segResult.contourPoints,
                                 boundingBox = segResult.boundingBox ?: classResult.boundingBox,
                                 lesionAreaRatio = segResult.lesionAreaRatio,
                                 lesionType = segResult.lesionType
                             )
                         }
+                        null
                     } catch (e: Exception) {
                         Log.w(TAG, "Segmentation helper error: ${e.message}", e)
+                        null
                     }
-                }
+                } ?: classResult
+            } else if (classResult.label == Classification.NORMAL && classResult.confidenceScore <= 0.62f) {
+                // Borderline zone: consult YOLOv8-Seg so consecutive snapshots of the same lesion don't flip-flop
+                viaSegmentationHelper?.let { segHelper ->
+                    runCatching {
+                        val segResult = segHelper.detectAndSegment(aiBitmap, isAlreadyAbnormal = false)
+                        if (segResult.label == Classification.ABNORMAL && segResult.contourPoints != null) {
+                            segResult
+                        } else classResult
+                    }.getOrDefault(classResult)
+                } ?: classResult
+            } else {
+                classResult
             }
-            classResult
         } catch (e: Exception) {
             Log.w(TAG, "TFLite inference failed, falling back to acetowhite detector: ${e.message}")
             try {
@@ -233,20 +330,22 @@ class AiDetector(
                         try {
                             val segResult = segHelper.detectAndSegment(aiBitmap, isAlreadyAbnormal = true)
                             if (segResult.label == Classification.NORMAL) {
-                                return segResult
-                            }
-                            if (segResult.contourPoints != null) {
-                                return acetowhiteResult.copy(
+                                segResult
+                            } else if (segResult.contourPoints != null) {
+                                acetowhiteResult.copy(
                                     contourPoints = segResult.contourPoints,
                                     boundingBox = segResult.boundingBox ?: acetowhiteResult.boundingBox,
                                     lesionAreaRatio = segResult.lesionAreaRatio,
                                     lesionType = segResult.lesionType
                                 )
-                            }
-                        } catch (_: Exception) {}
-                    }
+                            } else acetowhiteResult
+                        } catch (_: Exception) {
+                            acetowhiteResult
+                        }
+                    } ?: acetowhiteResult
+                } else {
+                    acetowhiteResult
                 }
-                acetowhiteResult
             } catch (fallbackError: Exception) {
                 analysisModeManager.deactivate()
                 AbnormalityResult.Error(
@@ -259,6 +358,11 @@ class AiDetector(
                 aiBitmap.recycle()
             }
         }
+
+        if (fingerprint != null && finalResult is AbnormalityResult.Detected) {
+            cacheSceneResult(fingerprint, finalResult)
+        }
+        return finalResult
     }
 
     fun validateImage(width: Int, height: Int): String? {
@@ -283,5 +387,35 @@ class AiDetector(
         const val DEFAULT_GREEN = 0.88f
         const val DEFAULT_BLUE = 0.92f
         const val DEFAULT_HUE = 0f
+
+        private const val SCENE_SIMILARITY_THRESHOLD = 0.945f
+        private const val MAX_SCENE_CACHE = 24
+        private val sceneCache = ArrayList<Pair<FloatArray, AbnormalityResult.Detected>>()
+
+        @Synchronized
+        private fun findCachedSceneResult(fp: FloatArray): AbnormalityResult.Detected? {
+            var bestSim = -1f
+            var bestRes: AbnormalityResult.Detected? = null
+            for ((cachedFp, res) in sceneCache) {
+                if (cachedFp.size != fp.size) continue
+                var dot = 0f
+                for (i in fp.indices) {
+                    dot += fp[i] * cachedFp[i]
+                }
+                if (dot > bestSim) {
+                    bestSim = dot
+                    bestRes = res
+                }
+            }
+            return if (bestSim >= SCENE_SIMILARITY_THRESHOLD) bestRes else null
+        }
+
+        @Synchronized
+        private fun cacheSceneResult(fp: FloatArray, res: AbnormalityResult.Detected) {
+            if (sceneCache.size >= MAX_SCENE_CACHE) {
+                sceneCache.removeAt(0)
+            }
+            sceneCache.add(Pair(fp, res))
+        }
     }
 }

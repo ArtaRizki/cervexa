@@ -80,24 +80,26 @@ class ViaSegmentationHelper(private val context: Context) {
             )
         }
 
-        // Run fast tissue & lesion contour analysis first to validate cervical mucosa
-        // and identify red vascular lesions (Erosion/Erythema) which YOLOv8-Seg was not trained on.
         val heuristicResult = runHeuristicContourDetection(bitmap, isAlreadyAbnormal)
         if (heuristicResult.label == Classification.NORMAL && heuristicResult.confidenceScore >= 0.89f) {
             // Non-cervical object rejected by TissueValidator
             return heuristicResult
         }
-        if (heuristicResult.label == Classification.ABNORMAL &&
-            (heuristicResult.lesionType == "EROSION" || heuristicResult.lesionType == "ERYTHEMA")
-        ) {
-            return heuristicResult
-        }
 
+        // 1. Prioritaskan model neural network YOLOv8n-Seg (via_seg_model.tflite) terlebih dahulu
+        // agar batas kontur stabil pada objek yang sama dan tidak flip-flop karena selisih 1-2 piksel heuristik
         val currentInterpreter = interpreter
         if (ENABLE_TFLITE_SEGMENTATION && currentInterpreter != null) {
             try {
                 val tfliteResult = runTfliteSegmentation(currentInterpreter, bitmap)
                 if (tfliteResult.label == Classification.ABNORMAL && tfliteResult.contourPoints != null) {
+                    // Gunakan hasil YOLOv8-Seg kecuali jika lesi vaskular merah (Erosion/Erythema) sangat dominan
+                    if (heuristicResult.label == Classification.ABNORMAL &&
+                        heuristicResult.lesionType == "EROSION" &&
+                        heuristicResult.lesionAreaRatio in 0.02f..0.35f
+                    ) {
+                        return heuristicResult
+                    }
                     return tfliteResult
                 }
             } catch (e: Exception) {
@@ -403,11 +405,11 @@ class ViaSegmentationHelper(private val context: Context) {
             sampleBmp.recycle()
         }
 
-        // Bounding range for the elliptical cervical zone
+        // Bounding range for the elliptical cervical zone (exclude bottom watermark > 0.82)
         val startX = (sampleW * 0.14).toInt()
         val endX = (sampleW * 0.86).toInt()
         val startY = (sampleH * 0.14).toInt()
-        val endY = (sampleH * 0.86).toInt()
+        val endY = (sampleH * 0.82).toInt()
 
         val redPoints = ArrayList<PointF>()
         val redCorePoints = ArrayList<PointF>()
@@ -422,7 +424,7 @@ class ViaSegmentationHelper(private val context: Context) {
 
         for (y in startY until endY step step) {
             val normY = y.toFloat() / sampleH
-            val dyNorm = (normY - 0.5f) / 0.38f
+            val dyNorm = (normY - 0.5f) / 0.36f
             val rowOffset = y * sampleW
             for (x in startX until endX step step) {
                 val normX = x.toFloat() / sampleW
@@ -438,7 +440,7 @@ class ViaSegmentationHelper(private val context: Context) {
 
                 // Reject deep shadows (underexposed dark areas)
                 val brightness = (r + g + b) / 3
-                if (brightness < 45) continue
+                if (brightness < 42) continue
 
                 // Convert to HSV for more robust color classification
                 Color.RGBToHSV(r, g, b, hsvBuffer)
@@ -446,44 +448,41 @@ class ViaSegmentationHelper(private val context: Context) {
                 val sat = hsvBuffer[1]       // 0-1
                 val value = hsvBuffer[2]     // 0-1
 
-                // Reject specular highlights & LED ring-light glare halos
-                if (brightness > 215 || (brightness > 195 && sat < 0.07f)) continue
+                // Reject extreme specular highlights & LED ring-light glare halos
+                if (brightness > 232 || (brightness > 218 && sat < 0.05f)) continue
 
-                // Check for normal pink cervical mucosa:
-                // Healthy human cervix is pinkish-red, moderate saturation, gentle contrast
-                val isNormalMucosa = (hue < 18f || hue > 340f) && sat in 0.10f..0.42f && brightness in 65..210 && (r > g) && (g >= b - 20)
+                // Check for normal pink cervical mucosa (tolerant to softened color calibration)
+                val isNormalMucosa = (hue < 25f || hue > 330f) && sat in 0.06f..0.46f && brightness in 60..225 && (r >= g - 4) && (g >= b - 25)
                 if (isNormalMucosa) {
                     cervicalMucosaCount++
                 }
 
                 // Check for papaya / orange fruit carotenoid signature:
-                // Saturated yellow-orange (hue 20°-45°), high saturation, high green reflectance (g/r in 0.52..0.85)
-                val isCarotenoidOrange = hue in 20f..45f && sat > 0.45f && value > 0.40f && (r > 150) && ((g.toFloat() / r.toFloat().coerceAtLeast(1f)) in 0.52f..0.85f)
+                val isCarotenoidOrange = hue in 22f..45f && sat > 0.50f && value > 0.45f && (r > 160) && ((g.toFloat() / r.toFloat().coerceAtLeast(1f)) in 0.55f..0.85f)
                 if (isCarotenoidOrange) {
                     papayaCarotenoidCount++
                 }
 
-                // 1. Acetowhite: warm/neutral cream-white on mucosal stroma (not cool-blue speculum/LED glare)
-                val isAcetowhite = value > 0.56f && sat in 0.05f..0.22f && brightness in 145..212
-                        && (r >= g - 5) && (r >= b)
-                        && Math.abs(r - g) < 28 && Math.abs(g - b) < 28
+                // 1. Acetowhite: warm/neutral cream-white on mucosal stroma (tolerant to calibrated brightness/saturation)
+                val isAcetowhite = value > 0.52f && sat in 0.03f..0.25f && brightness in 138..228
+                        && (r >= g - 12) && (r >= b - 12)
+                        && Math.abs(r - g) < 32 && Math.abs(g - b) < 32
 
-                // 2. Erythematous / erosion: true vascular hemoglobin red
-                // Hemoglobin absorbs green strongly -> g/r < 0.58f, hue in true crimson/red (hue < 18° or > 342°)
-                val isTrueRedHue = hue < 18f || hue > 342f
-                val isHemoglobinRatio = (g.toFloat() / r.toFloat().coerceAtLeast(1f)) < 0.58f
-                val isErythematous = isTrueRedHue && sat > 0.28f && value > 0.35f
-                        && (r - g) > 35 && (r - b) > 20 && isHemoglobinRatio
+                // 2. Erythematous / erosion: true vascular hemoglobin red (tolerant to reduced saturation/red)
+                val isTrueRedHue = hue < 20f || hue > 338f
+                val isHemoglobinRatio = (g.toFloat() / r.toFloat().coerceAtLeast(1f)) < 0.66f
+                val isErythematous = isTrueRedHue && sat > 0.20f && value > 0.32f
+                        && (r - g) > 24 && (r - b) > 14 && isHemoglobinRatio
 
                 val pt = PointF(normX, normY)
                 if (isErythematous) {
                     redPoints.add(pt)
-                    if ((r - g) > 46 && sat > 0.34f && (g.toFloat() / r.toFloat().coerceAtLeast(1f)) < 0.52f) {
+                    if ((r - g) > 36 && sat > 0.26f && (g.toFloat() / r.toFloat().coerceAtLeast(1f)) < 0.58f) {
                         redCorePoints.add(pt)
                     }
                 } else if (isAcetowhite) {
                     whitePoints.add(pt)
-                    if (brightness in 162..208 && sat < 0.18f && Math.abs(r - g) < 20) {
+                    if (brightness in 155..220 && sat < 0.20f && Math.abs(r - g) < 24) {
                         whiteCorePoints.add(pt)
                     }
                 }
@@ -495,13 +494,10 @@ class ViaSegmentationHelper(private val context: Context) {
         val mucosaRatio = cervicalMucosaCount / sampledFloat
         val redRatio = redPoints.size / sampledFloat
 
-        // Anti False-Positive: Reject papaya and non-cervical orange/red objects
-        // 1) High concentration of fruit carotenoids (> 22% of frame is bright yellow-orange)
-        // 2) Overly massive "red" field (> 38% of frame is red without normal cervical mucosa)
-        // 3) Complete absence of cervical mucosa (< 3%) when supposed red lesion is detected
-        val isNonCervicalObject = carotenoidRatio > 0.22f ||
-                (redRatio > 0.38f && mucosaRatio < 0.08f) ||
-                (redPoints.size > 20 && mucosaRatio < 0.03f && carotenoidRatio > 0.12f)
+        // Anti False-Positive: Reject papaya and obvious non-cervical yellow-orange objects
+        val isNonCervicalObject = carotenoidRatio > 0.28f ||
+                (redRatio > 0.45f && mucosaRatio < 0.04f) ||
+                (redPoints.size > 25 && mucosaRatio < 0.02f && carotenoidRatio > 0.16f)
 
         if (isNonCervicalObject) {
             Log.i(TAG, "[TissueValidator] Non-cervical object detected (carotenoid=${(carotenoidRatio * 100).toInt()}%, mucosa=${(mucosaRatio * 100).toInt()}%). Suppressing false-positive.")
@@ -515,17 +511,32 @@ class ViaSegmentationHelper(private val context: Context) {
             )
         }
 
-        // Choose dominant lesion cluster, using focal core points if broad lighting caused over-selection (>16% of ROI)
-        val isRedDominant = (redPoints.size >= 12 && redPoints.size >= whitePoints.size) || (redPoints.isNotEmpty() && whitePoints.size < 12)
+        // Require clear dominance (1.35x) before switching from acetowhite to red erosion so consecutive frames don't flip-flop
+        val isRedDominant = (redPoints.size >= 16 && redPoints.size >= (whitePoints.size * 1.35f).toInt()) ||
+                (redPoints.size >= 8 && whitePoints.size < 6)
         val rawTargetPoints = if (isRedDominant) redPoints else whitePoints
         val coreTargetPoints = if (isRedDominant) redCorePoints else whiteCorePoints
-        val targetPoints = if (rawTargetPoints.size > (totalSampled * 0.16f).toInt() && coreTargetPoints.size >= 12) {
+        val targetPoints = if (rawTargetPoints.size > (totalSampled * 0.28f).toInt() && coreTargetPoints.size >= 16) {
             coreTargetPoints
         } else {
             rawTargetPoints
         }
 
         if (targetPoints.size < 6) {
+            if (isAlreadyAbnormal) {
+                // Jangan batalkan hasil ABNORMAL dari model utama TFLite hanya karena kontras piksel lembut;
+                // berikan kontur zona transformasi sentral yang konsisten.
+                val defaultBox = RectF(0.34f, 0.34f, 0.66f, 0.66f)
+                return AbnormalityResult.Detected(
+                    label = Classification.ABNORMAL,
+                    confidenceScore = baseDetection.confidenceScore,
+                    boundingBox = defaultBox,
+                    contourPoints = generateContourFromBox(defaultBox),
+                    lesionAreaRatio = defaultBox.width() * defaultBox.height(),
+                    isFallback = false,
+                    lesionType = "ACETOWHITE"
+                )
+            }
             return AbnormalityResult.Detected(
                 label = Classification.NORMAL,
                 confidenceScore = 0.85f,

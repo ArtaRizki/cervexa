@@ -689,7 +689,9 @@ class VideoFragmentMobile : Fragment() {
         val container = binding.videoContainer
         val cW = container.width; val cH = container.height
         if (cW <= 0 || cH <= 0) {
-            container.postDelayed({ applyIjkLayout(videoW, videoH, sarNum, sarDen) }, 100); return
+            container.postDelayed({
+                if (isAdded && view != null) applyIjkLayout(videoW, videoH, sarNum, sarDen)
+            }, 100); return
         }
         if (videoW <= 0 || videoH <= 0) return
 
@@ -896,28 +898,33 @@ class VideoFragmentMobile : Fragment() {
             }
         }
         if (dir == null || !dir!!.exists()) {
-            requireActivity().runOnUiThread {
+            activity?.runOnUiThread {
+                val ctx = context ?: return@runOnUiThread
+                if (!isAdded) return@runOnUiThread
                 Toast.makeText(
-                    requireContext(),
+                    ctx,
                     "❌ Gagal membuat direktori snapshot",
                     Toast.LENGTH_LONG
                 ).show()
             }; return
         }
         runCatching { StorageUtils.saveJpegWithPrefix(dir!!, bmp, prefix = "ss") }
-            .onSuccess { savedFile ->
+            .onSuccess {
                 if (!isMetadataSaved) saveSessionMetadata()
-                // apiDelegate.uploadSnapshot(savedFile) // DIHAPUS - Seperti Commit 1665902
-                requireActivity().runOnUiThread {
-                    Toast.makeText(requireContext(), "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT)
+                activity?.runOnUiThread {
+                    val ctx = context ?: return@runOnUiThread
+                    if (!isAdded || view == null) return@runOnUiThread
+                    Toast.makeText(ctx, "📸 SNAPSHOT TERSIMPAN!", Toast.LENGTH_SHORT)
                         .show()
                     refreshThumbs()
                 }
             }
             .onFailure { err ->
-                requireActivity().runOnUiThread {
+                activity?.runOnUiThread {
+                    val ctx = context ?: return@runOnUiThread
+                    if (!isAdded) return@runOnUiThread
                     Toast.makeText(
-                        requireContext(),
+                        ctx,
                         "❌ Gagal simpan: ${err.message}",
                         Toast.LENGTH_LONG
                     ).show()
@@ -948,6 +955,7 @@ class VideoFragmentMobile : Fragment() {
         return (frameHeight * PADDING_SCALE).coerceIn(PADDING_MIN_PX, PADDING_MAX_PX)
     }
 
+    @Synchronized
     private fun processTextToBitmapSafe(src: Bitmap, aiProb: Float = -1f): Bitmap {
         if (src.isRecycled) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         
@@ -1379,6 +1387,16 @@ class VideoFragmentMobile : Fragment() {
             colorFilter = ColorMatrixColorFilter(cm)
         }
         tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
+        context?.getSharedPreferences("cervexa_color_calibration", Context.MODE_PRIVATE)?.edit()?.apply {
+            putFloat("brightness", brightnessOffset)
+            putFloat("contrast", contrast)
+            putFloat("saturation", saturation)
+            putFloat("red", redBoost)
+            putFloat("green", greenBoost)
+            putFloat("blue", blueBoost)
+            putFloat("hue", hueOffset)
+            apply()
+        }
     }
 
     private fun setupDebugPanel() {

@@ -106,9 +106,6 @@ class MediaPageFragment : Fragment() {
             return root
         }
 
-        // Initialize AI components (shared for image & video)
-        initAiDetector()
-
         if (type.equals("IMAGE", ignoreCase = true)) {
             // --- MODE GAMBAR ---
             imageMode.visibility = View.VISIBLE
@@ -192,8 +189,9 @@ class MediaPageFragment : Fragment() {
     // AI DETECTOR INIT
     // =====================================================================
 
-    private fun initAiDetector() {
-        val ctx = context ?: return
+    private fun ensureAiDetector(): Boolean {
+        if (aiDetector != null && overlayRenderer != null) return true
+        val ctx = context ?: return false
         val prefs = ctx.getSharedPreferences("cervexa_ai_prefs", Context.MODE_PRIVATE)
         val viaModelHelper = ViaModelHelper(ctx)
         val acetowhiteDetector = AcetowhiteDetector()
@@ -201,6 +199,7 @@ class MediaPageFragment : Fragment() {
         val viaSegmentationHelper = ViaSegmentationHelper(ctx)
         aiDetector = AiDetector(ctx, viaModelHelper, acetowhiteDetector, analysisModeManager, viaSegmentationHelper)
         overlayRenderer = OverlayRenderer()
+        return true
     }
 
     // =====================================================================
@@ -214,6 +213,7 @@ class MediaPageFragment : Fragment() {
         btnHapusOverlay: LinearLayout,
         pbAiLoading: ProgressBar
     ) {
+        if (!ensureAiDetector()) return
         val detector = aiDetector ?: return
         val renderer = overlayRenderer ?: return
 
@@ -240,6 +240,7 @@ class MediaPageFragment : Fragment() {
                 }
             }
 
+            if (!isAdded || view == null) return@launch
             pbAiLoading.visibility = View.GONE
 
             if (result == null) {
@@ -420,6 +421,7 @@ class MediaPageFragment : Fragment() {
         btnHapusOverlay: LinearLayout,
         pbAiLoading: ProgressBar
     ) {
+        if (!ensureAiDetector()) return
         val detector = aiDetector ?: return
         val renderer = overlayRenderer ?: return
 
@@ -487,9 +489,7 @@ class MediaPageFragment : Fragment() {
         isVideoAiActive = false
         videoAiJob?.cancel()
         videoAiJob = null
-        reusableAiBmp?.recycle()
         reusableAiBmp = null
-        reusableOverlayBmp?.recycle()
         reusableOverlayBmp = null
     }
 
@@ -511,6 +511,7 @@ class MediaPageFragment : Fragment() {
             mediaPlayer?.release()
             mediaPlayer = null
         } catch (_: Exception) {}
+        aiDetector?.close()
         aiDetector = null
         overlayRenderer = null
         originalBitmap = null

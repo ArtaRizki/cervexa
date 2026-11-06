@@ -14,19 +14,12 @@ import java.nio.MappedByteBuffer
 
 /**
  * Wrapper around TFLite Interpreter for the VIA model (`via_model.tflite`).
- *
- * Responsibilities:
- * - Load and manage the TFLite model lifecycle
- * - Run inference on bitmap frames and return [AbnormalityResult.Detected]
- * - Extract bounding box coordinates from model output (if supported)
- * - Propagate exceptions to the caller (AiDetector handles fallback)
- *
- * This class does NOT handle fallback logic — that is the responsibility of [AiDetector].
  */
 class ViaModelHelper(private val context: Context) {
     private var interpreter: Interpreter? = null
     private var initException: Exception? = null
     private val modelName = "via_model.tflite"
+    @Volatile
     private var isClosed = false
 
     // Based on EfficientNet input size
@@ -41,7 +34,7 @@ class ViaModelHelper(private val context: Context) {
         try {
             val tfliteModel: MappedByteBuffer = FileUtil.loadMappedFile(context, modelName)
             val options = Interpreter.Options()
-            options.setNumThreads(4)
+            options.setNumThreads(2)
             interpreter = Interpreter(tfliteModel, options)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load TFLite model", e)
@@ -49,18 +42,11 @@ class ViaModelHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Runs abnormality detection inference on the given bitmap.
-     *
-     * Returns [AbnormalityResult.Detected] containing classification label,
-     * confidence score, and bounding box (if the model output supports it).
-     *
-     * @param bitmap The input frame to analyze
-     * @return [AbnormalityResult.Detected] with inference results
-     * @throws IllegalStateException if the TFLite interpreter is not loaded
-     * @throws Exception if inference fails (propagated for AiDetector to handle fallback)
-     */
+    @Synchronized
     fun detectAbnormality(bitmap: Bitmap): AbnormalityResult.Detected {
+        if (isClosed || bitmap.isRecycled) {
+            throw IllegalStateException("TFLite interpreter closed or bitmap recycled")
+        }
         val currentInterpreter = interpreter
             ?: throw IllegalStateException("TFLite interpreter not loaded — ${initException?.message ?: "model file may be missing or corrupted"}", initException)
 
@@ -80,7 +66,6 @@ class ViaModelHelper(private val context: Context) {
 
         val scores = outputBuffer.floatArray
         val abnormalScore = scores[0]
-        val normalScore = scores[1]
         Log.d(TAG, "Inference raw output: abnormal=${scores[0]}, normal=${scores[1]}")
 
         // Klasifikasi berbasis threshold yang dikalibrasi (0.65f) untuk mencegah false-positive berlebih
@@ -90,10 +75,6 @@ class ViaModelHelper(private val context: Context) {
             Classification.NORMAL
         }
 
-        // Kalibrasi persentase keyakinan (confidence score):
-        // Jika ABNORMAL: skala dimulai secara proporsional dari rentang moderat (55%-60%)
-        // dan tidak langsung melonjak ekstrem 90%+ kecuali bukti abnormalitas sangat kuat (>0.90).
-        // Jika NORMAL: gunakan keyakinan terhadap kelas normal secara konsisten.
         val calibratedScore = if (label == Classification.ABNORMAL) {
             val normalized = ((abnormalScore - CLASSIFICATION_THRESHOLD) / (1f - CLASSIFICATION_THRESHOLD)).coerceIn(0f, 1f)
             0.55f + (normalized * 0.40f)
@@ -112,38 +93,22 @@ class ViaModelHelper(private val context: Context) {
         )
     }
 
-    /**
-     * Attempts to extract bounding box coordinates from the model output.
-     *
-     * If the model has a second output tensor with shape [1, 4] (representing
-     * normalized coordinates [top, left, bottom, right]), it will be extracted.
-     * Otherwise returns null.
-     *
-     * Bounding box is only relevant for ABNORMAL classifications.
-     *
-     * @param interpreter The active TFLite interpreter
-     * @param label The classification result
-     * @return [RectF] with normalized coordinates (0-1), or null if not available/NORMAL
-     */
     private fun extractBoundingBox(interpreter: Interpreter, label: Classification): RectF? {
         if (label == Classification.NORMAL) return null
 
         return try {
-            // Check if model has a second output tensor for bounding box
             val outputTensorCount = interpreter.outputTensorCount
             if (outputTensorCount < 2) return null
 
             val bboxTensor = interpreter.getOutputTensor(1)
             val bboxShape = bboxTensor.shape()
 
-            // Expected shape: [1, 4] for [top, left, bottom, right]
             if (bboxShape.size == 2 && bboxShape[1] == 4) {
                 val bboxBuffer = TensorBuffer.createFixedSize(
                     bboxShape,
                     org.tensorflow.lite.DataType.FLOAT32
                 )
                 val coords = bboxBuffer.floatArray
-                // Coordinates are normalized [0, 1]: top, left, bottom, right
                 RectF(coords[1], coords[0], coords[3], coords[2])
             } else {
                 null
@@ -154,13 +119,7 @@ class ViaModelHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Closes the TFLite interpreter and releases resources.
-     *
-     * Safe to call multiple times — subsequent calls after the first are no-ops.
-     * If interpreter close fails, the error is logged and the interpreter reference
-     * is still cleared to prevent resource leaks.
-     */
+    @Synchronized
     fun close() {
         if (isClosed) return
         isClosed = true

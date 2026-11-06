@@ -33,6 +33,7 @@ class ViaSegmentationHelper(private val context: Context) {
 
     private var interpreter: Interpreter? = null
     private val modelName = "via_seg_model.tflite"
+    @Volatile
     private var isClosed = false
 
     private val inputSize = 384
@@ -68,6 +69,7 @@ class ViaSegmentationHelper(private val context: Context) {
      * @param isAlreadyAbnormal Set to true if the caller (e.g. [AiDetector]) already confirmed the image
      *        is ABNORMAL via the primary classifier and needs lesion contour extraction.
      */
+    @Synchronized
     fun detectAndSegment(bitmap: Bitmap, isAlreadyAbnormal: Boolean = false): AbnormalityResult.Detected {
         if (isClosed || bitmap.isRecycled) {
             return AbnormalityResult.Detected(
@@ -902,10 +904,11 @@ class ViaSegmentationHelper(private val context: Context) {
         return isolated
     }
 
+    @Synchronized
     fun close() {
         if (!isClosed) {
             isClosed = true
-            interpreter?.close()
+            runCatching { interpreter?.close() }
             interpreter = null
         }
     }

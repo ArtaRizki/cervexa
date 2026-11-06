@@ -471,7 +471,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             panTxVlc = 0f; panTyVlc = 0f
         }
         tv.translationX = baseTxVlc + panTxVlc; tv.translationY = baseTyVlc + panTyVlc
-        applyColorEnhancement()
     }
 
     private fun applyColorEnhancement() {
@@ -709,14 +708,16 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         val cH = binding.videoContainer.height
         if (cW <= 0 || cH <= 0) {
             binding.videoContainer.postDelayed({
-                applyVlcLayoutAndBaseTransform(
-                    width,
-                    height,
-                    visibleWidth,
-                    visibleHeight,
-                    sarNum,
-                    sarDen
-                )
+                if (isAdded && view != null) {
+                    applyVlcLayoutAndBaseTransform(
+                        width,
+                        height,
+                        visibleWidth,
+                        visibleHeight,
+                        sarNum,
+                        sarDen
+                    )
+                }
             }, 100); return
         }
         var videoW = (if (visibleWidth > 0) visibleWidth else width).toFloat()
@@ -756,10 +757,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         libVlc = null
 
         player?.setEventListener(null)
+        runCatching { player?.vlcVout?.detachViews() }
         Thread {
             runCatching {
                 player?.stop()
-                player?.vlcVout?.detachViews()
                 player?.release()
                 vlc?.release()
             }
@@ -915,6 +916,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         lastOverlayTargetHeight = targetHeight
     }
 
+    @Synchronized
     private fun processTextToBitmapSafe(src: Bitmap): Bitmap {
         if (src.isRecycled) return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
 
@@ -985,7 +987,12 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         // - Disk I/O (saveJpegWithPrefix)
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
-                StorageUtils.saveJpegWithPrefix(saveDir, processTextToBitmapSafe(bmpCopy), prefix = "ss")
+                val outBmp = processTextToBitmapSafe(bmpCopy)
+                try {
+                    StorageUtils.saveJpegWithPrefix(saveDir, outBmp, prefix = "ss")
+                } finally {
+                    if (outBmp !== bmpCopy && !outBmp.isRecycled) outBmp.recycle()
+                }
             }.onSuccess {
                 withContext(Dispatchers.Main) {
                     if (isAdded) {
@@ -1313,6 +1320,16 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             colorFilter = ColorMatrixColorFilter(cm)
         }
         tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
+        context?.getSharedPreferences("cervexa_color_calibration", android.content.Context.MODE_PRIVATE)?.edit()?.apply {
+            putFloat("brightness", brightnessOffset)
+            putFloat("contrast", contrast)
+            putFloat("saturation", saturation)
+            putFloat("red", redBoost)
+            putFloat("green", greenBoost)
+            putFloat("blue", blueBoost)
+            putFloat("hue", hueOffset)
+            apply()
+        }
     }
 
     private fun setupDebugPanel() {

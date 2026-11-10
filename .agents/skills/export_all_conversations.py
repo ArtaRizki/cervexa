@@ -1,0 +1,173 @@
+import json
+import re
+import shutil
+from pathlib import Path
+
+TRANSCRIPT_PATH = Path(r"C:\Users\it-arta\.gemini\antigravity\brain\d34d4348-c575-4c80-b16f-2f00055bda25\.system_generated\logs\transcript_full.jsonl")
+EXPORT_PATH = Path(r"c:\Users\it-arta\projects\cervexa\conversation_export.md")
+DOWNLOADS_EXPORT_PATH = Path(r"C:\Users\it-arta\Downloads\conversation_export.md")
+
+steps = []
+with TRANSCRIPT_PATH.open("r", encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            steps.append(json.loads(line))
+        except Exception:
+            pass
+
+sessions = []
+current_session = None
+
+for st in steps:
+    stype = st.get("type", "")
+    if stype == "USER_INPUT":
+        raw_content = st.get("content", "") or ""
+        m = re.search(r"<USER_REQUEST>\s*(.*?)\s*</USER_REQUEST>", raw_content, flags=re.S)
+        user_text = (m.group(1) if m else raw_content).strip()
+        media = st.get("media") or []
+        if not user_text and media:
+            user_text = f"[Lampiran Foto / Screenshot Pengujian ({len(media)} berkas)]"
+        elif media:
+            user_text = f"{user_text}\n\n*(Lampiran: {len(media)} berkas gambar/screenshot)*"
+        current_session = {
+            "user": user_text,
+            "assistant_texts": [],
+            "actions": []
+        }
+        sessions.append(current_session)
+    elif stype == "PLANNER_RESPONSE" and current_session is not None:
+        c = (st.get("content") or "").strip()
+        if c:
+            current_session["assistant_texts"].append(c)
+        for tc in (st.get("tool_calls") or []):
+            tname = tc.get("name") or tc.get("tool_name") or ""
+            args = tc.get("arguments") or tc.get("args") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except Exception:
+                    args = {}
+            if tname in ("edit_file", "write_file"):
+                p = Path(args.get("Path", "")).name
+                if p:
+                    current_session["actions"].append(f"**Perubahan Berkas**: `{p}`")
+            elif tname == "run_command":
+                cmd = (args.get("CommandLine") or "").strip().replace("\r\n", " ").replace("\n", " ")
+                if len(cmd) > 120:
+                    cmd = cmd[:117] + "..."
+                if cmd:
+                    current_session["actions"].append(f"**Terminal Command**: `{cmd}`")
+
+print(f"Total sessions extracted from transcript: {len(sessions)}")
+
+# Read existing conversation_export.md
+orig_text = EXPORT_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+# Find where Sesi 177 starts in the session blocks
+anchor_177 = '<a name="sesi-177"></a>'
+pos_177 = orig_text.find(anchor_177)
+assert pos_177 != -1, "Anchor sesi-177 not found in conversation_export.md"
+
+# Preserve everything up to anchor_177 for the body
+base_text = orig_text[:pos_177].rstrip()
+
+# Update header metadata
+base_text = re.sub(
+    r"\*\*Conversation ID\*\*:.*",
+    "**Conversation ID**: `df1e1ea0-0fbb-4765-b57c-159bb22c3674`, `d34d4348-c575-4c80-b16f-2f00055bda25`  ",
+    base_text,
+    count=1
+)
+base_text = re.sub(
+    r"\*\*Waktu Export\*\*:.*",
+    "**Waktu Export**: 2026-11-10 16:55:00 WIB  ",
+    base_text,
+    count=1
+)
+
+start_session_num = 177
+end_session_num = start_session_num + len(sessions) - 1
+
+# Milestone 16 definition
+milestone_16 = f"""16. **Kalibrasi Kontur Warna Live Stream, Penyelarasan Watermark RS/NRM Ber-Outline Hitam, Perbaikan Crash, Stabilisasi Konsistensi AI, & Revert Bersih Polling Timestamp (Sesi 177 s.d. {end_session_num})**:
+    - **Penghapusan Duplikasi Timestamp & Watermark RS/NRM Transparan**: Menyembunyikan `tvOverlayClock` aplikasi agar hanya menampilkan timestamp bawaan kamera MS2 di kanan bawah, serta membuat background identitas `RS/NRM` di kiri bawah transparan, sejajar mentok bawah, dan menggunakan huruf putih ber-outline hitam (`StrokedTextView.kt`) dengan ukuran proporsional (`TEXT_SCALE = 0.042f`).
+    - **Penguncian Aspect Ratio 16:9 di Mode Landscape**: Mengunci `videoContainer` ke rasio `16:9` pada layout landscape (`fragment_video_mobile.xml` dan `fragment_video_tv.xml`) agar teks `RS/NRM` tidak keluar ke area pillarbox hitam.
+    - **Perbaikan Crash `"Cervexa has stopped"` Saat Running**: Mengganti pemanggilan `setTextColor()` di dalam `StrokedTextView.onDraw()` dengan rendering langsung pada `layout.draw(canvas)`, mengamankan callback asinkron (`processSnapshot`, `postDelayed`, `vlcVout.detachViews()` di UI thread), serta menutup interpreter TFLite (`aiDetector?.close()`) pada `MediaPageFragment.onDestroyView()`.
+    - **Konsistensi & Stabilisasi Hasil Analisis AI Terhadap Perubahan Kontur Warna (`AiDetector.kt` & `ViaSegmentationHelper.kt`)**: Menerapkan matriks inversi kalibrasi warna (`restoreRawCameraColorsIfNeeded`), memprioritaskan model `YOLOv8n-Seg` di atas heuristik piksel, membatasi area sampling di atas area watermark (`normY <= 0.82`), serta menambahkan *Structural Scene Fingerprint Cache* (12x12 Z-score normalized) sehingga banyak snapshot dari objek yang sama menghasilkan deteksi AI yang 100% konsisten.
+    - **Revert Bersih Polling Timestamp & Kompilasi APK Final**: Membatalkan eksperimen polling bitmap TextureView (`93eee3d`) demi memastikan video stream tetap 0 latency, 0 noise, dan ultra-smooth; memverifikasi bahwa modul deteksi kontur AI tetap utuh 100%; mengompilasi APK debug bersih (`cervexa-debug.apk`); serta mendokumentasikan tata cara navigasi menu hardware Elikliv MS2 (tekan tombol MENU 2x) untuk cap waktu."""
+
+# Update or insert Milestone 16
+if "16. **Kalibrasi Kontur Warna Live Stream" in base_text:
+    # Replace existing milestone 16
+    base_text = re.sub(
+        r"16\. \*\*Kalibrasi Kontur Warna Live Stream.*?(?=\n\n\d+\.|\n\n##|\Z)",
+        milestone_16,
+        base_text,
+        flags=re.S
+    )
+else:
+    target_m15 = "15. **Konsolidasi & Sinkronisasi Ekspor Percakapan Markdown Lengkap (Sesi 1 s.d. 176)**:\n    - Seluruh proses dialog teknis, implementasi kode fitur baru, perbaikan bug di lapangan, kompilasi APK, hingga konversi dokumen percakapan telah disinkronkan secara menyeluruh ke file Markdown `conversation_export.md` di direktori proyek dan folder Downloads."
+    base_text = base_text.replace(target_m15, target_m15 + "\n\n" + milestone_16, 1)
+
+# Rebuild TOC entries for 177..end_session_num
+toc_lines = []
+session_blocks = []
+
+for idx, sess in enumerate(sessions):
+    snum = start_session_num + idx
+    first_line = sess["user"].splitlines()[0].strip() if sess["user"].strip() else f"[Lampiran Foto / Screenshot Pengujian Sesi {snum}]"
+    if len(first_line) > 80:
+        first_line = first_line[:77] + "..."
+    # Clean up markdown chars in TOC label
+    cleaned_label = first_line.replace("[", "").replace("]", "").replace("*", "")
+    toc_lines.append(f"{snum}. [Sesi {snum}: {cleaned_label}](#sesi-{snum})")
+
+    user_quote = "\n".join(f"> {line}" if line.strip() else ">" for line in (sess["user"] or "(Lampiran Media)").splitlines())
+    assistant_body = "\n\n".join(sess["assistant_texts"]) if sess["assistant_texts"] else "*(Sedang mengekspor riwayat percakapan)*"
+
+    actions_block = ""
+    if sess["actions"]:
+        dedup_actions = list(dict.fromkeys(sess["actions"]))
+        actions_md = "\n".join(f"- {a}" for a in dedup_actions[:20])
+        actions_block = f"\n\n#### ⚙️ Tindakan Teknis & Modifikasi Berkas:\n{actions_md}"
+
+    block = f"""<a name="sesi-{snum}"></a>
+## Sesi {snum}
+
+### 👤 User
+{user_quote}
+
+### 🤖 Assistant
+{assistant_body}{actions_block}
+
+---
+"""
+    session_blocks.append(block)
+
+# Clean existing TOC lines from 177 onward
+toc_anchor = "176. [Sesi 176: konversi percakapan ini dari awal hingga akhir dalam bentuk markdown](#sesi-176)"
+assert toc_anchor in base_text, "TOC anchor sesi-176 not found"
+
+# Split at toc_anchor
+p1, p2 = base_text.split(toc_anchor, 1)
+# In p2, remove any old lines starting with digits (e.g. 177..190) up until a blank line or next section
+p2_cleaned = re.sub(r"^\n(?:\d+\. \[Sesi \d+:.*?\n)+", "\n", p2)
+
+new_toc = toc_anchor + "\n" + "\n".join(toc_lines)
+base_text = p1 + new_toc + p2_cleaned
+
+# Combine everything
+final_text = base_text.rstrip() + "\n\n" + "\n".join(session_blocks) + "\n"
+
+# Write out
+EXPORT_PATH.write_text(final_text.replace("\n", "\r\n"), encoding="utf-8")
+print(f"Successfully wrote {EXPORT_PATH} (size: {len(final_text)} chars, Sesi 1..{end_session_num})")
+
+try:
+    shutil.copyfile(EXPORT_PATH, DOWNLOADS_EXPORT_PATH)
+    print(f"Successfully copied to {DOWNLOADS_EXPORT_PATH}")
+except Exception as e:
+    print(f"Warning: Failed to copy to Downloads: {e}")

@@ -713,13 +713,16 @@ class VideoFragmentMobile : Fragment() {
         tv.layoutParams = android.widget.FrameLayout.LayoutParams(finalW, finalH).also {
             it.gravity = android.view.Gravity.CENTER
         }
-        // Sejajarkan posisi & ukuran font tvOverlayInfo dengan frame video (mentok kiri-bawah video)
+        // Sejajarkan posisi & ukuran font tvOverlayInfo & tvOverlayClock dengan frame video (mentok bawah video)
         val videoLeftOffset = ((cW - finalW) / 2f).coerceAtLeast(0f)
         val videoBottomOffset = ((cH - finalH) / 2f).coerceAtLeast(0f)
         binding.tvOverlayInfo.translationX = videoLeftOffset
         binding.tvOverlayInfo.translationY = -videoBottomOffset
+        binding.tvOverlayClock.translationX = -videoLeftOffset
+        binding.tvOverlayClock.translationY = -videoBottomOffset
         val liveFontPx = (finalH * TEXT_SCALE).coerceIn(TEXT_MIN_PX, 64f)
         binding.tvOverlayInfo.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
+        binding.tvOverlayClock.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
 
         lastFrameSize = Pair(finalW, finalH)
         baseScaleVlc = 1f
@@ -964,6 +967,8 @@ class VideoFragmentMobile : Fragment() {
         val safeSrc = if (src.height > cropTop) {
             Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
         } else src
+
+        val hasBuiltInTs = CameraTimestampDetector.hasBuiltInTimestamp(safeSrc)
         
         // Terapkan matriks kalibrasi warna yang sama dengan live preview (WYSIWYG)
         // TextureView.getBitmap() hanya mengambil raw frame, sehingga ColorMatrix GPU harus digambar ke Canvas
@@ -992,6 +997,15 @@ class VideoFragmentMobile : Fragment() {
         val baselineY = bitmap.height - bottomMargin
         canvas.drawText(infoDraw, leftMargin, baselineY, paintTextStroke)
         canvas.drawText(infoDraw, leftMargin, baselineY, paintText)
+
+        // Jika kamera tidak memunculkan timestamp bawaan di kanan bawah, gambar timestamp aplikasi secara otomatis
+        if (!hasBuiltInTs) {
+            val tsDraw = CameraTimestampDetector.currentTimestampText()
+            val tsW = paintText.measureText(tsDraw)
+            val tsX = (bitmap.width - leftMargin - tsW).coerceAtLeast(bitmap.width * 0.50f)
+            canvas.drawText(tsDraw, tsX, baselineY, paintTextStroke)
+            canvas.drawText(tsDraw, tsX, baselineY, paintText)
+        }
 
         // AI overlay is now handled by OverlayRenderer — no inline AI drawing here
 
@@ -1082,7 +1096,20 @@ class VideoFragmentMobile : Fragment() {
 
     private fun startOverlayClock() {
         clockJob?.cancel()
-        binding.tvOverlayClock.visibility = View.GONE
+        clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
+            while (isActive) {
+                if (isAdded && view != null) {
+                    val hasBuiltIn = CameraTimestampDetector.checkTextureView(textureView)
+                    if (hasBuiltIn) {
+                        binding.tvOverlayClock.visibility = View.GONE
+                    } else {
+                        binding.tvOverlayClock.text = CameraTimestampDetector.currentTimestampText()
+                        binding.tvOverlayClock.visibility = View.VISIBLE
+                    }
+                }
+                delay(1000L)
+            }
+        }
     }
 
     private fun stopStreamAndExit() {

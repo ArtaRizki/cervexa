@@ -173,23 +173,27 @@
             android:textStyle="normal"
             android:visibility="visible" />
 
-        <TextView
+        <com.idn.kmed.cervexa.utils.StrokedTextView
             android:id="@+id/tvOverlayClock"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|end"
             android:layout_marginEnd="0dp"
             android:layout_marginBottom="0dp"
-            android:background="@drawable/bg_overlay_black"
-            android:fontFamily="sans-serif-medium"
-            android:gravity="center_vertical"
-            android:paddingStart="48dp"
-            android:paddingEnd="40dp"
-            android:paddingVertical="12dp"
-            android:text="0000-00-00 00:00:00"
+            android:background="@android:color/transparent"
+            android:fontFamily="serif"
+            android:gravity="bottom|end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:paddingStart="8dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="0dp"
+            android:paddingBottom="1dp"
+            android:text="0000/00/00 00:00:00"
             android:textColor="@android:color/white"
-            android:textSize="16sp"
-            android:visibility="gone" />
+            android:textSize="13sp"
+            android:textStyle="normal"
+            android:visibility="visible" />
 
     </FrameLayout>
 

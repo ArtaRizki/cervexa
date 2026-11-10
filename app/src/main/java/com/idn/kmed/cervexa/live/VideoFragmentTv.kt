@@ -733,16 +733,13 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }
 
         tv.layoutParams = tv.layoutParams.apply { this.width = finalW; this.height = finalH }
-        // Sejajarkan posisi & ukuran font tvOverlayInfo & tvOverlayClock dengan frame video (mentok bawah video)
+        // Sejajarkan posisi & ukuran font tvOverlayInfo dengan frame video (mentok kiri-bawah video)
         val videoLeftOffset = ((cW - finalW) / 2f).coerceAtLeast(0f)
         val videoBottomOffset = ((cH - finalH) / 2f).coerceAtLeast(0f)
         binding.tvOverlayInfo.translationX = videoLeftOffset
         binding.tvOverlayInfo.translationY = -videoBottomOffset
-        binding.tvOverlayClock.translationX = -videoLeftOffset
-        binding.tvOverlayClock.translationY = -videoBottomOffset
         val liveFontPx = (finalH * TEXT_SCALE).coerceIn(TEXT_MIN_PX, 64f)
         binding.tvOverlayInfo.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
-        binding.tvOverlayClock.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
 
         baseScaleVlc = 1f
         baseTxVlc = (cW - finalW) / 2f; baseTyVlc = (cH - finalH) / 2f
@@ -929,8 +926,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
         } else src
 
-        val hasBuiltInTs = CameraTimestampDetector.hasBuiltInTimestamp(safeSrc)
-
         // Terapkan matriks kalibrasi warna yang sama dengan live preview (WYSIWYG)
         val bitmap = Bitmap.createBitmap(safeSrc.width, safeSrc.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -957,15 +952,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         val baselineY = bitmap.height - bottomMargin
         canvas.drawText(infoDraw, leftMargin, baselineY, paintTextStroke)
         canvas.drawText(infoDraw, leftMargin, baselineY, paintText)
-
-        // Jika kamera tidak memunculkan timestamp bawaan di kanan bawah, gambar timestamp aplikasi secara otomatis
-        if (!hasBuiltInTs) {
-            val tsDraw = CameraTimestampDetector.currentTimestampText()
-            val tsW = paintText.measureText(tsDraw)
-            val tsX = (bitmap.width - leftMargin - tsW).coerceAtLeast(bitmap.width * 0.50f)
-            canvas.drawText(tsDraw, tsX, baselineY, paintTextStroke)
-            canvas.drawText(tsDraw, tsX, baselineY, paintText)
-        }
 
         return bitmap
     }
@@ -1067,20 +1053,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
     private fun startOverlayClock() {
         clockJob?.cancel()
-        clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
-            while (isActive) {
-                if (isAdded && view != null) {
-                    val hasBuiltIn = CameraTimestampDetector.checkTextureView(textureView)
-                    if (hasBuiltIn) {
-                        binding.tvOverlayClock.visibility = View.GONE
-                    } else {
-                        binding.tvOverlayClock.text = CameraTimestampDetector.currentTimestampText()
-                        binding.tvOverlayClock.visibility = View.VISIBLE
-                    }
-                }
-                delay(1000L)
-            }
-        }
+        binding.tvOverlayClock.visibility = View.GONE
     }
 
     private fun setKeepScreenOn(enable: Boolean) {

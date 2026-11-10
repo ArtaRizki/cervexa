@@ -204,27 +204,24 @@
         app:layout_constraintStart_toStartOf="@id/videoContainer"
         app:layout_constraintEnd_toEndOf="@id/videoContainer" />
 
-    <com.idn.kmed.cervexa.utils.StrokedTextView
+    <TextView
         android:id="@+id/tvOverlayClock"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="0dp"
         android:layout_marginBottom="0dp"
-        android:background="@android:color/transparent"
+        android:background="@drawable/bg_overlay_black"
         android:elevation="5dp"
-        android:fontFamily="serif"
-        android:gravity="bottom|end"
-        android:includeFontPadding="false"
-        android:maxLines="1"
-        android:paddingStart="8dp"
-        android:paddingEnd="6dp"
-        android:paddingTop="0dp"
-        android:paddingBottom="1dp"
-        android:text="2025/06/17 10:12:49"
+        android:fontFamily="monospace"
+        android:gravity="center_vertical"
+        android:paddingStart="48dp"
+        android:paddingEnd="40dp"
+        android:paddingVertical="12dp"
+        android:text="2025-06-17 10:12:49"
         android:textColor="@android:color/white"
-        android:textSize="11sp"
-        android:textStyle="normal"
-        android:visibility="visible"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="@id/videoContainer"
         app:layout_constraintEnd_toEndOf="@id/videoContainer" />
 

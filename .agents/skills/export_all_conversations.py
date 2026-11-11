@@ -64,16 +64,22 @@ for st in steps:
 
 print(f"Total sessions extracted from transcript: {len(sessions)}")
 
-# Read existing conversation_export.md
-orig_text = EXPORT_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
+# Read existing conversation_export.md safely (normalizing CRCRLF/CRLF to LF)
+orig_text = (
+    EXPORT_PATH.read_bytes()
+    .decode("utf-8")
+    .replace("\r\r\n", "\n")
+    .replace("\r\n", "\n")
+    .replace("\r", "\n")
+)
 
-# Find where Sesi 177 starts in the session blocks
+# Find where Sesi 177 starts in the session blocks (optional if starting from clean 1..176 base)
 anchor_177 = '<a name="sesi-177"></a>'
 pos_177 = orig_text.find(anchor_177)
-assert pos_177 != -1, "Anchor sesi-177 not found in conversation_export.md"
+base_text = orig_text[:pos_177].rstrip() if pos_177 != -1 else orig_text.rstrip()
 
-# Preserve everything up to anchor_177 for the body
-base_text = orig_text[:pos_177].rstrip()
+# Collapse any runaway blank lines from earlier CRCRLF writes (keep at most 2 newlines)
+base_text = re.sub(r"\n{3,}", "\n\n", base_text)
 
 # Update header metadata
 base_text = re.sub(
@@ -93,6 +99,7 @@ base_text = re.sub(
 start_session_num = 177
 end_session_num = start_session_num + len(sessions) - 1
 milestone16_end = min(198, end_session_num)
+milestone17_end = min(206, end_session_num)
 
 # Milestone 16 definition
 milestone_16 = f"""16. **Kalibrasi Kontur Warna Live Stream, Penyelarasan Watermark RS/NRM Ber-Outline Hitam, Perbaikan Crash, Stabilisasi Konsistensi AI, & Revert Bersih Polling Timestamp (Sesi 177 s.d. {milestone16_end})**:
@@ -104,24 +111,32 @@ milestone_16 = f"""16. **Kalibrasi Kontur Warna Live Stream, Penyelarasan Waterm
 
 milestone_17 = f"""
 
-17. **Perbaikan Koneksi Wi-Fi/SSID Lapangan, Probe Hardware `192.168.1.1:554`, Stabilitas RTSP Indoor, & Toggle Timestamp Aplikasi (Sesi 199 s.d. {end_session_num})**:
+17. **Perbaikan Koneksi Wi-Fi/SSID Lapangan, Probe Hardware `192.168.1.1:554`, Stabilitas RTSP Indoor, & Toggle Timestamp Aplikasi (Sesi 199 s.d. {milestone17_end})**:
     - **Hapus Lock SSID Kantor & Kewajiban Clear Data (`ffe572b`)**: Menghapus penyimpanan `camera_ssid_exact` serta `addCameraWifiSuggestion`, membersihkan cache SSID/suggestion lama secara otomatis (`WifiMonitor` & `WifiCamConnection`), dan menstandarkan deteksi ke prefix default `wifi_camera_MS2_` (case-insensitive).
     - **Deteksi Koneksi Manual ("lewat luar aplikasi") & Fix MIUI Redaction**: Menambahkan `NetworkRequest` khusus `TRANSPORT_WIFI` + `FLAG_INCLUDE_LOCATION_INFO` (API 31+), caching SSID per `networkHandle`, serta TCP RTSP probe ringan ke `192.168.1.1:554` (400 ms di `Dispatchers.IO`) pada jaringan Wi-Fi unvalidated.
     - **Hapus Redirect Paksa ke App Info & Fix Permission**: Menyatukan alur koneksi di `WifiCamConnection.ensureCameraReadyOrShowConnectFlow()` dengan dialog pilihan (*Cari Kamera Otomatis*, *Pengaturan Wi-Fi*, *Izin Aplikasi*), menggabungkan request permission API 33+ di `HomeActivity`, dan menghapus `findCameraWifiNetworkStrict()` duplikat.
     - **Stabilitas Stream RTSP Indoor**: Menambahkan opsi IjkPlayer `stimeout=5000000` dan `sync-av-start=0` serta `scheduleStreamRetry()` (1,5 detik) pada `VideoFragmentMobile` dan `VideoFragmentTv` (disertai `ensureCameraNetworkBound()` di TV).
     - **Toggle Timestamp Aplikasi Default ON Tanpa Delay (`6c366ab`)**: Menambahkan switch **Tampilkan Timestamp Aplikasi** di `SettingsActivity`, memperbarui `tvOverlayClock` di 4 layout Mobile/TV menjadi `StrokedTextView` transparan seragam dengan `tvOverlayInfo` memakai coroutine timer 1 detik tanpa scan piksel, serta mencetak timestamp opsional via `StorageUtils.drawOverlayWatermarkRow()` di snapshot, video, dan import media.""" if end_session_num >= 199 else ""
 
-# Update or insert Milestone 16 & 17
+milestone_18 = f"""
+
+18. **Audit & Perbaikan Potensi Force Close, Clean Rebuild APK, & Unit Test (`25eb2e5`) (Sesi 207 s.d. {end_session_num})**:
+    - **Perbaikan Threading & Monitor Wi-Fi (`WifiMonitor.kt`)**: Menghapus early return saat `!hasWifiPermission(ctx)` di `start()`, membatasi pendaftaran `wifiEventCallback` (`TRANSPORT_WIFI`) ke `Build.VERSION.SDK_INT < 31` dan melepasnya di `stopInternal()`, serta memastikan fallback `publishCurrent()` memanggil `simpleCallback`/`statusCallback` di Main thread.
+    - **Hardening Dialog & Lifecycle Beranda (`WifiCamConnection.kt`, `HomeActivity.kt`, `HomeDashboardFragment.kt`)**: Mengubah `showConnectCameraDialog()` memakai `MaterialAlertDialogBuilder` (`R.style.MyAlertDialogTheme`) + `runCatching`, mengganti `fragment.requestPermissions(...)` ke `ActivityCompat.requestPermissions(activity, ...)` dengan guard lifecycle, memindahkan cek `on_boarding` ke awal `HomeActivity.onCreate()`, menjaga `WifiMonitor.stopMonitoring()` dengan `!isChangingConfigurations`, dan memindahkan `repeatOnLifecycle` di `HomeDashboardFragment` ke `onViewCreated()`.
+    - **Hardening Lifecycle Live Camera (`VideoFragmentMobile.kt`, `VideoFragmentTv.kt`)**: Memindahkan `startOverlayClock()` dan `onBackPressedDispatcher.addCallback(...)` ke `onViewCreated()`, memindahkan pembatalan coroutine/stream ke sebelum `super.onDestroyView()`, serta menambah guard `!isAdded || view == null` pada `VideoFragmentTv.startOverlayClock()`.
+    - **Clean Build APK & Unit Test (`OverlayAndWifiLogicTest.kt`)**: Menjalankan `clean assembleDebug` menghasilkan `cervexa-debug.apk` bersih (`123,602,735` bytes), dan memverifikasi `OverlayAndWifiLogicTest` (2/2 lulus untuk `StorageUtils.formatOverlayTimestamp()` dan `WifiMonitor.isCameraSsid()`) tanpa mengubah modul AI (`ml/`).""" if end_session_num >= 207 else ""
+
+# Update or insert Milestone 16, 17 & 18
 if "16. **Kalibrasi Kontur Warna Live Stream" in base_text:
     base_text = re.sub(
-        r"16\. \*\*Kalibrasi Kontur Warna Live Stream.*?(?=\n\n##|\Z)",
-        milestone_16 + milestone_17,
+        r"16\. \*\*Kalibrasi Kontur Warna Live Stream.*?(?=\n\n---|\n\n##|\Z)",
+        milestone_16 + milestone_17 + milestone_18,
         base_text,
         flags=re.S
     )
 else:
     target_m15 = "15. **Konsolidasi & Sinkronisasi Ekspor Percakapan Markdown Lengkap (Sesi 1 s.d. 176)**:\n    - Seluruh proses dialog teknis, implementasi kode fitur baru, perbaikan bug di lapangan, kompilasi APK, hingga konversi dokumen percakapan telah disinkronkan secara menyeluruh ke file Markdown `conversation_export.md` di direktori proyek dan folder Downloads."
-    base_text = base_text.replace(target_m15, target_m15 + "\n\n" + milestone_16 + milestone_17, 1)
+    base_text = base_text.replace(target_m15, target_m15 + "\n\n" + milestone_16 + milestone_17 + milestone_18, 1)
 
 # Rebuild TOC entries for 177..end_session_num
 toc_lines = []
@@ -164,8 +179,8 @@ assert toc_anchor in base_text, "TOC anchor sesi-176 not found"
 
 # Split at toc_anchor
 p1, p2 = base_text.split(toc_anchor, 1)
-# In p2, remove any old lines starting with digits (e.g. 177..190) up until a blank line or next section
-p2_cleaned = re.sub(r"^\n(?:\d+\. \[Sesi \d+:.*?\n)+", "\n", p2)
+# Remove any old Sesi 177+ TOC lines (including across blank lines) up to section divider
+p2_cleaned = re.sub(r"^(?:\s*\d+\. \[Sesi \d+:.*?\n)+", "\n", p2)
 
 new_toc = toc_anchor + "\n" + "\n".join(toc_lines)
 base_text = p1 + new_toc + p2_cleaned
@@ -173,8 +188,8 @@ base_text = p1 + new_toc + p2_cleaned
 # Combine everything
 final_text = base_text.rstrip() + "\n\n" + "\n".join(session_blocks) + "\n"
 
-# Write out
-EXPORT_PATH.write_text(final_text.replace("\n", "\r\n"), encoding="utf-8")
+# Write clean CRLF bytes without Windows text-mode double-CR conversion
+EXPORT_PATH.write_bytes(final_text.replace("\n", "\r\n").encode("utf-8"))
 print(f"Successfully wrote {EXPORT_PATH} (size: {len(final_text)} chars, Sesi 1..{end_session_num})")
 
 try:

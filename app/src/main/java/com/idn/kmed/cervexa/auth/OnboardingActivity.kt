@@ -66,12 +66,49 @@ class OnboardingActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btnConnect2).setOnClickListener {
             val prefs = getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
-            val prefix =
-                prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_") ?: "wifi_camera_MS2_"
-            connectToCameraWifiWithFallback(
+            val prefix = com.idn.kmed.cervexa.utils.WifiMonitor.DEFAULT_PREFIX
+            prefs.edit {
+                remove("camera_ssid_exact")
+                putString("camera_ssid_prefix", prefix)
+            }
+            com.idn.kmed.cervexa.utils.WifiCamConnection.clearWifiSuggestions(this)
+
+            val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+            val existingNet = com.idn.kmed.cervexa.utils.WifiMonitor.findCameraWifiNetwork(this)
+            if (existingNet != null) {
+                com.idn.kmed.cervexa.utils.WifiMonitor.ensureBoundToCameraNetwork(this, existingNet)
+                onCameraWifiConnectedByAnyMeans(
+                    network = existingNet,
+                    ssidPrefix = prefix,
+                    cm = cm,
+                    password = null
+                )
+                return@setOnClickListener
+            }
+
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                com.idn.kmed.cervexa.utils.WifiCamConnection.openWifiSettings(this)
+                return@setOnClickListener
+            }
+
+            com.idn.kmed.cervexa.utils.WifiCamConnection.connectToCameraWifi(
+                context = this,
                 ssidPrefix = prefix,
-                password = null,     // isi jika perlu
-                timeoutMs = 12_000L
+                timeoutMs = 15_000L,
+                onConnected = { net ->
+                    com.idn.kmed.cervexa.utils.WifiMonitor.ensureBoundToCameraNetwork(this, net)
+                    onCameraWifiConnectedByAnyMeans(
+                        network = net,
+                        ssidPrefix = prefix,
+                        cm = cm,
+                        password = null
+                    )
+                },
+                onUnavailableOrTimeout = {
+                    if (!isFinishing && !isDestroyed) {
+                        com.idn.kmed.cervexa.utils.WifiCamConnection.openWifiSettings(this)
+                    }
+                }
             )
         }
 
@@ -174,40 +211,36 @@ class OnboardingActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             openWifiSettings(); return
         }
-        if (!hasWifiPermissions()) {
-            requestWifiPermissions()
-            openWifiSettings()
+        val cleanPrefix = ssidPrefix.trim().ifBlank { com.idn.kmed.cervexa.utils.WifiMonitor.DEFAULT_PREFIX }
+        val prefs = getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
+        prefs.edit {
+            remove("camera_ssid_exact")
+            putString("camera_ssid_prefix", cleanPrefix)
+        }
+        com.idn.kmed.cervexa.utils.WifiCamConnection.clearWifiSuggestions(this)
+
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val existingNet = com.idn.kmed.cervexa.utils.WifiMonitor.findCameraWifiNetwork(this)
+        if (existingNet != null) {
+            onCameraWifiConnectedByAnyMeans(existingNet, cleanPrefix, cm, password)
             return
         }
 
-        val spec = WifiNetworkSpecifier.Builder()
-            .setSsidPattern(PatternMatcher(ssidPrefix, PatternMatcher.PATTERN_PREFIX))
-            .apply { if (!password.isNullOrEmpty()) setWpa2Passphrase(password) }
-            .build()
+        if (!com.idn.kmed.cervexa.utils.WifiMonitor.hasRequiredWifiPermissions(this)) {
+            requestWifiPermissions()
+            return
+        }
 
-        val request = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .setNetworkSpecifier(spec)
-            .build()
-
-        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                super.onAvailable(network)
-
-                // Simpan sementara (opsional). HomeActivity nanti akan bind lagi via allNetworks.
-                WifiCamConnection.hold(network, this)
-
-                runOnUiThread {
-                    cancelFallbackTimer()
-                    onCameraWifiConnectedByAnyMeans(network, ssidPrefix, cm, password)
-                }
-            }
-
-            override fun onUnavailable() {
-                super.onUnavailable()
-                runOnUiThread {
+        com.idn.kmed.cervexa.utils.WifiCamConnection.connectToCameraWifi(
+            context = this,
+            ssidPrefix = cleanPrefix,
+            timeoutMs = timeoutMs,
+            onConnected = { network ->
+                cancelFallbackTimer()
+                onCameraWifiConnectedByAnyMeans(network, cleanPrefix, cm, password)
+            },
+            onUnavailableOrTimeout = {
+                if (!isFinishing && !isDestroyed) {
                     Toast.makeText(
                         this@OnboardingActivity,
                         "Jaringan kamera tidak ditemukan",
@@ -216,10 +249,7 @@ class OnboardingActivity : AppCompatActivity() {
                     openWifiSettings()
                 }
             }
-        }
-
-        cm.requestNetwork(request, callback)
-        startFallbackTimer(timeoutMs) { openWifiSettings() }
+        )
     }
 
     /** Dipanggil saat konek via specifier ATAU saat kita mendeteksi koneksi setelah balik dari Settings */
@@ -229,25 +259,16 @@ class OnboardingActivity : AppCompatActivity() {
         cm: ConnectivityManager,
         password: String?
     ) {
-        // Ambil SSID jika tersedia (API 31+ via transportInfo)
-        val ssid = runCatching {
-            val caps =
-                if (network != null) cm.getNetworkCapabilities(network) else cm.getNetworkCapabilities(
-                    cm.activeNetwork
-                )
-            if (Build.VERSION.SDK_INT >= 31) {
-                (caps?.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
-            } else null
-        }.getOrNull()
-
+        val cleanPrefix = ssidPrefix.trim().ifBlank { com.idn.kmed.cervexa.utils.WifiMonitor.DEFAULT_PREFIX }
         val prefs = getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
-        prefs.edit { putBoolean("on_boarding", true) }
-        prefs.edit { putString("camera_ssid_prefix", ssidPrefix) }
-        if (!ssid.isNullOrBlank()) {
-            prefs.edit { putString("camera_ssid_exact", ssid) }
+        prefs.edit {
+            putBoolean("on_boarding", true)
+            remove("camera_ssid_exact")
+            putString("camera_ssid_prefix", cleanPrefix)
         }
 
-        addCameraWifiSuggestion(ssid = ssid ?: ssidPrefix, password = password)
+        com.idn.kmed.cervexa.utils.WifiCamConnection.clearWifiSuggestions(this)
+        com.idn.kmed.cervexa.utils.WifiMonitor.ensureBoundToCameraNetwork(this, network)
 
         // Beres → pindah ke Home (bypass login)
         val nextClass = HomeActivity::class.java
@@ -257,19 +278,6 @@ class OnboardingActivity : AppCompatActivity() {
             putExtra("from_onboarding", true)
         })
         finish()
-    }
-
-    private fun addCameraWifiSuggestion(ssid: String, password: String?) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
-        val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-
-        val builder = WifiNetworkSuggestion.Builder()
-            .setSsid(ssid)
-            .setIsAppInteractionRequired(false)
-
-        if (!password.isNullOrEmpty()) builder.setWpa2Passphrase(password)
-
-        wm.addNetworkSuggestions(listOf(builder.build()))
     }
 
     private fun startFallbackTimer(timeoutMs: Long, action: () -> Unit) {
@@ -341,38 +349,18 @@ class OnboardingActivity : AppCompatActivity() {
     }
 
     /**
-     * Cari jaringan kamera dari allNetworks:
-     * - Coba exact (jika tersimpan saat connect sebelumnya).
-     * - Coba prefix.
-     * - Heuristik: Wi-Fi tanpa internet/validasi.
+     * Cari jaringan kamera dari allNetworks tanpa mengunci SSID satu perangkat tertentu.
      */
     private fun findCameraWifiNetwork(ssidPrefix: String, cm: ConnectivityManager): Network? {
-        val prefs = getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
-        val exact = prefs.getString("camera_ssid_exact", null)
+        com.idn.kmed.cervexa.utils.WifiMonitor.findCameraWifiNetwork(this)?.let { return it }
 
-        val all = cm.allNetworks ?: return null
-
-        if (Build.VERSION.SDK_INT >= 31 && !exact.isNullOrBlank()) {
-            for (n in all) {
-                val caps = cm.getNetworkCapabilities(n) ?: continue
-                if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
-                if (ssidFromCaps(caps) == exact) return n
-            }
-        }
-        if (Build.VERSION.SDK_INT >= 31) {
-            for (n in all) {
-                val caps = cm.getNetworkCapabilities(n) ?: continue
-                if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
-                val ssid = ssidFromCaps(caps) ?: continue
-                if (ssid.startsWith(ssidPrefix, ignoreCase = false)) return n
-            }
-        }
-
-        // Heuristik: Wi-Fi tanpa internet/validasi (umum pada kamera)
+        val all = cm.allNetworks
         var fallbackWifi: Network? = null
         for (n in all) {
             val caps = cm.getNetworkCapabilities(n) ?: continue
             if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+            val ssid = ssidFromCaps(caps)
+            if (com.idn.kmed.cervexa.utils.WifiMonitor.isCameraSsid(ssid, ssidPrefix)) return n
             val hasInternet = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             val validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             if (!validated || !hasInternet) return n

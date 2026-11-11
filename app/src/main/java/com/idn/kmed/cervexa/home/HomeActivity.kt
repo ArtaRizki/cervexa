@@ -150,44 +150,15 @@ class HomeActivity : AppCompatActivity() {
     // PERMISSIONS LOGIC (SESUAI MANIFEST)
     // ==========================================
     private fun checkAndRequestPermissions() {
-        // Cek versi Android untuk menentukan permission mana yang diminta
-        if (Build.VERSION.SDK_INT >= 33) {
-            // Android 13 (Tiramisu) ke atas: Butuh NEARBY_WIFI_DEVICES
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.NEARBY_WIFI_DEVICES
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES),
-                    REQ_PERMISSION_CONN
-                )
-            }
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                    REQ_PERMISSION_CONN
-                )
-            }
-        } else {
-            // Android 12 (S) ke bawah: Butuh FINE_LOCATION untuk baca SSID
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                    REQ_PERMISSION_CONN
-                )
-            }
+        val missing = WifiMonitor.requiredWifiPermissionsArray().filter { perm ->
+            ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this,
+                missing.toTypedArray(),
+                REQ_PERMISSION_CONN
+            )
         }
     }
 
@@ -198,13 +169,10 @@ class HomeActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        // Teruskan hasil ke WifiMonitor
         WifiMonitor.handlePermissionResult(requestCode, grantResults, this)
 
-        // Jika permission diberikan, paksa refresh status Wi-Fi segera
-        // Ini memastikan status "Unknown SSID" langsung berubah jadi nama SSID
-        if (requestCode == REQ_PERMISSION_CONN && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            WifiMonitor.init(this) { }
+        if (requestCode == REQ_PERMISSION_CONN && grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
+            WifiMonitor.refreshNow()
         }
     }
 

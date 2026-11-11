@@ -442,62 +442,21 @@ class VideoFragmentMobile : Fragment() {
     }
 
     /**
-     * Mencari Network Wi-Fi kamera dengan ketat (termasuk Wi-Fi "No Internet" di Android 10+).
-     */
-    private fun findCameraWifiNetworkStrict(): Network? {
-        val ctx = context ?: return null
-        val prefs = ctx.getSharedPreferences(
-            getString(R.string.pref_application),
-            AppCompatActivity.MODE_PRIVATE
-        )
-        val exact = prefs.getString("camera_ssid_exact", null)
-        val prefix = prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_")
-
-        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return null
-        val all = cm.allNetworks ?: return null
-
-        for (n in all) {
-            val caps = cm.getNetworkCapabilities(n) ?: continue
-            if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
-
-            var ssid: String? = null
-            if (Build.VERSION.SDK_INT >= 31) {
-                ssid = (caps.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
-            }
-
-            if (!exact.isNullOrBlank() && ssid == exact) return n
-            if (!prefix.isNullOrBlank() && ssid?.startsWith(prefix) == true) return n
-        }
-
-        if (com.idn.kmed.cervexa.utils.WifiMonitor.statusFlow.value.isCamera) {
-            for (n in all) {
-                val caps = cm.getNetworkCapabilities(n) ?: continue
-                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                    return n
-                }
-            }
-        }
-
-        return null
-    }
-
-    /**
      * Memastikan proses aplikasi ter-bind ke Wi-Fi kamera sebelum membuka socket RTSP.
      * Mencegah traffic RTSP bocor ke paket data seluler (4G/LTE) saat rotasi layar.
      */
     private fun ensureCameraNetworkBound() {
         val ctx = context ?: return
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
-        val camNet = findCameraWifiNetworkStrict()
-        if (camNet != null) {
-            if (Build.VERSION.SDK_INT >= 23) {
-                if (cm.boundNetworkForProcess != camNet) {
-                    Log.i(TAG, "[Network] Re-binding process to camera Wi-Fi: $camNet")
-                    runCatching { cm.bindProcessToNetwork(camNet) }
-                }
-            } else {
-                runCatching { ConnectivityManager.setProcessDefaultNetwork(camNet) }
+        val camNet = com.idn.kmed.cervexa.utils.WifiMonitor.findCameraWifiNetwork(ctx) ?: return
+        if (Build.VERSION.SDK_INT >= 23) {
+            if (cm.boundNetworkForProcess != camNet) {
+                Log.i(TAG, "[Network] Re-binding process to camera Wi-Fi: $camNet")
+                com.idn.kmed.cervexa.utils.WifiMonitor.ensureBoundToCameraNetwork(ctx, camNet)
             }
+        } else {
+            @Suppress("DEPRECATION")
+            runCatching { ConnectivityManager.setProcessDefaultNetwork(camNet) }
         }
     }
 
@@ -526,6 +485,7 @@ class VideoFragmentMobile : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "stimeout", "5000000")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L)
                 // Deteksi stream — 32KB cukup cepat tapi tidak menyebabkan jitter koneksi
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
@@ -544,6 +504,7 @@ class VideoFragmentMobile : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
                 // Matikan audio sepenuhnya (tidak ada audio di mikroskop)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "an", 1L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "sync-av-start", 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
 
                 // ── CODEC (decoder) ──
@@ -582,17 +543,19 @@ class VideoFragmentMobile : Fragment() {
             player.setOnErrorListener { _, _, _ ->
                 activity?.runOnUiThread {
                     if (!isAdded) return@runOnUiThread
-                    binding.tvStatusImage?.text = "Error"
+                    binding.tvStatusImage?.text = "Menghubungkan ulang..."
                     binding.pbLoadingImage.visibility = View.GONE
+                    scheduleStreamRetry()
                 }
                 true
             }
             player.setOnCompletionListener {
                 activity?.runOnUiThread {
                     if (!isAdded) return@runOnUiThread
-                    binding.tvStatusImage?.text = "Disconnected"
+                    binding.tvStatusImage?.text = "Terputus — Menghubungkan ulang..."
                     binding.vShutterImage.apply { alpha = 1f; visibility = View.VISIBLE }
                     setKeepScreenOn(false)
+                    scheduleStreamRetry()
                 }
             }
             player.setOnVideoSizeChangedListener { _, w, h, sarNum, sarDen ->
@@ -612,15 +575,30 @@ class VideoFragmentMobile : Fragment() {
             Log.e(TAG, "IJK start error", it)
             binding.pbLoadingImage.visibility = View.GONE
             Toast.makeText(requireContext(), "❌ Gagal konek: ${it.message}", Toast.LENGTH_SHORT).show()
+            scheduleStreamRetry()
         }
     }
 
-    private fun stopVlcStream() {
+    private var retryStreamJob: Job? = null
+
+    private fun scheduleStreamRetry() {
+        if (!isAdded || !isResumed || record.get()) return
+        if (retryStreamJob?.isActive == true) return
+        retryStreamJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(1500L)
+            if (!isAdded || !isResumed || record.get()) return@launch
+            context?.let { com.idn.kmed.cervexa.utils.WifiMonitor.verifyOrProbeCameraNetwork(it) }
+            releasePlayerOnly()
+            startVlcStream()
+        }
+    }
+
+    private fun releasePlayerOnly() {
         liveResyncJob?.cancel()
         liveFrameJob?.cancel()
         val oldPlayer = ijkPlayer
         ijkPlayer = null
-        
+
         // Hancurkan player lama di background thread agar UI tidak macet (ANR/Freeze)
         Thread {
             runCatching {
@@ -628,10 +606,16 @@ class VideoFragmentMobile : Fragment() {
                 oldPlayer?.release()
             }
         }.start()
-        
+
         setKeepScreenOn(false)
         baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
+    }
+
+    private fun stopVlcStream() {
+        retryStreamJob?.cancel()
+        retryStreamJob = null
+        releasePlayerOnly()
     }
 
     private var resyncJob: Job? = null

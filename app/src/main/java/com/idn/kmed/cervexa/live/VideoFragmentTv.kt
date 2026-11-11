@@ -590,8 +590,16 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     // VLC STREAM
     // =====================================================================
 
+    private var retryStreamJob: Job? = null
+
+    private fun ensureCameraNetworkBound() {
+        val ctx = context ?: return
+        com.idn.kmed.cervexa.utils.WifiMonitor.ensureBoundToCameraNetwork(ctx)
+    }
+
     private fun startVlcStream() {
         if (usePhoneCamera) return
+        ensureCameraNetworkBound()
         binding.pbLoadingImage.visibility = View.VISIBLE
         binding.vShutterImage.visibility = View.VISIBLE
 
@@ -643,13 +651,15 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                         if (!isAdded) return@runOnUiThread
                         binding.tvStatusImage?.text = "Error — Retrying..."
                         binding.pbLoadingImage.visibility = View.GONE
+                        scheduleStreamRetry()
                     }
 
                     MediaPlayer.Event.EndReached -> activity?.runOnUiThread {
                         if (!isAdded) return@runOnUiThread
-                        binding.tvStatusImage?.text = "Disconnected"
+                        binding.tvStatusImage?.text = "Disconnected — Retrying..."
                         binding.vShutterImage.visibility = View.VISIBLE
                         setKeepScreenOn(false)
+                        scheduleStreamRetry()
                     }
 
                     else -> Unit
@@ -670,6 +680,19 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             binding.pbLoadingImage.visibility = View.GONE
             Toast.makeText(requireContext(), "Gagal konek: ${it.message}", Toast.LENGTH_SHORT)
                 .show()
+            scheduleStreamRetry()
+        }
+    }
+
+    private fun scheduleStreamRetry() {
+        if (!isAdded || !isResumed || usePhoneCamera) return
+        if (retryStreamJob?.isActive == true) return
+        retryStreamJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(1500L)
+            if (!isAdded || !isResumed || usePhoneCamera) return@launch
+            context?.let { com.idn.kmed.cervexa.utils.WifiMonitor.verifyOrProbeCameraNetwork(it) }
+            releaseVlcOnly()
+            startVlcStream()
         }
     }
 
@@ -750,7 +773,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         applyZoomAndPan()
     }
 
-    private fun stopVlcStream() {
+    private fun releaseVlcOnly() {
         val player = mediaPlayer
         val vlc = libVlc
         mediaPlayer = null
@@ -771,6 +794,12 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         setKeepScreenOn(false)
         baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
+    }
+
+    private fun stopVlcStream() {
+        retryStreamJob?.cancel()
+        retryStreamJob = null
+        releaseVlcOnly()
     }
 
     override fun onSurfacesCreated(vlcVout: IVLCVout?) {}

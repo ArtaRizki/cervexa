@@ -28,6 +28,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -40,6 +41,7 @@ import com.idn.kmed.cervexa.utils.DeviceTypeDetector
 import com.idn.kmed.cervexa.R
 import com.idn.kmed.cervexa.patient.RegistrationPatientActivity
 import com.idn.kmed.cervexa.gallery.SessionMediaActivity
+import com.idn.kmed.cervexa.utils.WifiCamConnection
 import com.idn.kmed.cervexa.utils.WifiMonitor
 import org.json.JSONObject
 import java.io.File
@@ -259,141 +261,26 @@ class MediaListFragment : Fragment() {
     // =========================================================================
 
     private fun handleStartClickMedia() {
-        val ctx = requireContext()
-
-        // 1. DIAGNOSA PERMISSION
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (ContextCompat.checkSelfPermission(
-                    ctx,
-                    Manifest.permission.NEARBY_WIFI_DEVICES
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Toast.makeText(
-                    ctx,
-                    "Mohon izinkan 'Nearby Devices' untuk deteksi kamera.",
-                    Toast.LENGTH_LONG
-                ).show()
-                WifiMonitor.handlePermissionResult(2201, intArrayOf(), ctx)
-                return
+        WifiCamConnection.ensureCameraReadyOrShowConnectFlow(
+            fragment = this,
+            scope = viewLifecycleOwner.lifecycleScope,
+            proceedImmediatelyAfterAutoConnect = true,
+            onReady = {
+                startActivity(Intent(requireContext(), RegistrationPatientActivity::class.java))
             }
-        } else {
-            if (ContextCompat.checkSelfPermission(
-                    ctx,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Toast.makeText(
-                    ctx,
-                    "Mohon izinkan Lokasi (Fine Location) untuk deteksi kamera.",
-                    Toast.LENGTH_LONG
-                ).show()
-                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 2201)
-                return
-            }
-        }
-
-        // 2. CEK STATUS WIFI via Monitor
-        val status = WifiMonitor.statusFlow.value
-        if (!status.isCamera) {
-            val ssid = status.ssid ?: "Null"
-
-            // Diagnosa Error SSID
-            if (ssid == "Null" || ssid.contains("unknown", ignoreCase = true)) {
-                val lm =
-                    ctx.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-                val isGpsOn = try {
-                    lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
-                } catch (e: Exception) {
-                    true
-                }
-
-                if (!isGpsOn) {
-                    Toast.makeText(
-                        ctx,
-                        "GPS Mati. Harap nyalakan GPS agar SSID terbaca.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                } else {
-                    Toast.makeText(
-                        ctx,
-                        "SSID tak terbaca. Pastikan izin lokasi 'PRECISE' (Akurat).",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    try {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                        val uri = Uri.fromParts("package", ctx.packageName, null)
-                        intent.data = uri
-                        startActivity(intent)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            } else {
-                Toast.makeText(
-                    ctx,
-                    "Terhubung ke: $ssid.\nSilakan pindah ke Wi-Fi Kamera.",
-                    Toast.LENGTH_LONG
-                ).show()
-                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-            }
-            return
-        }
-
-        // 3. STRICT NETWORK FINDING & BINDING
-        val camNet = findCameraWifiNetworkStrict() ?: run {
-            Toast.makeText(ctx, "Sedang menyiapkan koneksi... Coba lagi.", Toast.LENGTH_SHORT)
-                .show()
-            return
-        }
-
-        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-        // [CRITICAL] Bind process ke network kamera (No Internet bypass)
-        runCatching { cm.bindProcessToNetwork(camNet) }
-
-        // Start Next Activity
-        startActivity(Intent(ctx, RegistrationPatientActivity::class.java))
+        )
     }
 
-    private fun findCameraWifiNetworkStrict(): Network? {
-        val prefs = requireContext().getSharedPreferences(
-            getString(R.string.pref_application),
-            AppCompatActivity.MODE_PRIVATE
-        )
-        val exact = prefs.getString("camera_ssid_exact", null)
-        val prefix = prefs.getString("camera_ssid_prefix", "wifi_camera_MS2_")
-
-        val cm =
-            requireContext().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val all = cm.allNetworks
-
-        // Loop scan all networks (including those with no internet)
-        for (n in all) {
-            val caps = cm.getNetworkCapabilities(n) ?: continue
-            if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
-
-            var ssid: String? = null
-            if (Build.VERSION.SDK_INT >= 31) {
-                ssid = (caps.transportInfo as? WifiInfo)?.ssid?.removeSurrounding("\"")
-            }
-
-            // Fallback: If SSID is match
-            if (!exact.isNullOrBlank() && ssid == exact) return n
-            if (!prefix.isNullOrBlank() && ssid?.startsWith(prefix) == true) return n
-        }
-
-        // Fallback: If WifiMonitor says we are connected, but capabilities didn't give SSID (API limit),
-        // trust WifiMonitor and grab the first WIFI network found.
-        if (WifiMonitor.statusFlow.value.isCamera) {
-            for (n in all) {
-                val caps = cm.getNetworkCapabilities(n) ?: continue
-                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                    return n
-                }
-            }
-        }
-        return null
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        @Suppress("DEPRECATION")
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        WifiMonitor.handlePermissionResult(requestCode, grantResults, requireContext())
+        WifiMonitor.refreshNow()
     }
 
     // =========================================================================

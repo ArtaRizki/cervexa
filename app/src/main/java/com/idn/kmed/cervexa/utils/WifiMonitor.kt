@@ -87,11 +87,6 @@ object WifiMonitor {
         cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         wm = ctx.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
-        if (!hasWifiPermission(ctx)) {
-            requestWifiPermission(context)
-            return
-        }
-
         // Always publish current state immediately when starting/re-starting
         publishCurrent()
 
@@ -116,13 +111,15 @@ object WifiMonitor {
             runCatching { cm?.unregisterNetworkCallback(oldCb) }
             wifiEventCallback = null
         }
-        runCatching {
-            val req = android.net.NetworkRequest.Builder()
-                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                .build()
-            val transportCb = buildWifiCallback()
-            cm?.registerNetworkCallback(req, transportCb)
-            wifiEventCallback = transportCb
+        if (Build.VERSION.SDK_INT < 31) {
+            runCatching {
+                val req = android.net.NetworkRequest.Builder()
+                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                    .build()
+                val transportCb = buildWifiCallback()
+                cm?.registerNetworkCallback(req, transportCb)
+                wifiEventCallback = transportCb
+            }
         }
 
         if (Build.VERSION.SDK_INT >= 31) {
@@ -159,6 +156,8 @@ object WifiMonitor {
     }
 
     private fun stopInternal() {
+        runCatching { wifiEventCallback?.let { cm?.unregisterNetworkCallback(it) } }
+        wifiEventCallback = null
         if (!registered) return
         runCatching { connCallback?.let { cm?.unregisterNetworkCallback(it) } }
         connCallback = null
@@ -358,14 +357,25 @@ object WifiMonitor {
         )
         lastStatus = status
 
-        scope?.launch {
-            statusFlowInternal.value = status
-            simpleCallback?.invoke(ssid)
-            statusCallback?.invoke(status)
-        } ?: run {
-            statusFlowInternal.value = status
-            simpleCallback?.invoke(ssid)
-            statusCallback?.invoke(status)
+        val currentScope = scope
+        if (currentScope != null) {
+            currentScope.launch {
+                statusFlowInternal.value = status
+                simpleCallback?.invoke(ssid)
+                statusCallback?.invoke(status)
+            }
+        } else {
+            val notifyUi = {
+                statusFlowInternal.value = status
+                simpleCallback?.invoke(ssid)
+                statusCallback?.invoke(status)
+                Unit
+            }
+            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                notifyUi()
+            } else {
+                android.os.Handler(android.os.Looper.getMainLooper()).post { notifyUi() }
+            }
         }
     }
 

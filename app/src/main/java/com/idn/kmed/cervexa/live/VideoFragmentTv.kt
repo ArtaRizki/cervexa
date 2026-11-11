@@ -253,8 +253,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     }
 
     override fun onDestroyView() {
-        super.onDestroyView()
         clockJob?.cancel()
+        clockJob = null
         stopPhoneCamera()
         stopVlcStream()
         val cm = requireContext().applicationContext.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
@@ -265,10 +265,18 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             putFloat("image_saturation", saturation)
             apply()
         }
+        super.onDestroyView()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        requireActivity().onBackPressedDispatcher.addCallback(
+            viewLifecycleOwner,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    showSaveConfirmDialog()
+                }
+            })
         val infoText = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
         binding.tvOverlayInfo.text = infoText
         startOverlayClock()
@@ -401,14 +409,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }
         binding.btnBackLite?.setOnLongClickListener { showImageEnhancementDialog(); true }
 
-        requireActivity().onBackPressedDispatcher.addCallback(
-            viewLifecycleOwner,
-            object : OnBackPressedCallback(true) {
-                override fun handleOnBackPressed() {
-                    showSaveConfirmDialog()
-                }
-            })
-
         binding.topAppBar.setNavigationOnClickListener { showSaveConfirmDialog() }
         binding.btnBackLite?.setOnClickListener { showSaveConfirmDialog() }
 
@@ -444,7 +444,6 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         refreshThumbs()
         binding.tvOverlayInfo.text =
             if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
-        startOverlayClock()
 
         setupDebugPanel()
         return binding.root
@@ -1089,6 +1088,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
     private fun startOverlayClock() {
         clockJob?.cancel()
+        if (!isAdded || view == null) return
         val ctx = context ?: return
         val enabled = StorageUtils.isAppTimestampEnabled(ctx)
         showAppTimestamp = enabled

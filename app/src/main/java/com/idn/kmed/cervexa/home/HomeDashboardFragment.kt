@@ -75,6 +75,12 @@ class HomeDashboardFragment : Fragment() {
 //        btnConnect.isFocusable = true
 //        btnConnect.isFocusableInTouchMode = true
 
+        return v
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
         // Observe ViewModel untuk update UI otomatis
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -83,12 +89,6 @@ class HomeDashboardFragment : Fragment() {
                 }
             }
         }
-
-        return v
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
 
         // 1. Hubungkan WifiMonitor ke ViewModel
         WifiMonitor.setOnStatusChanged { status ->

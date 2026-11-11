@@ -52,6 +52,17 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // CEK ONBOARDING terlebih dahulu sebelum setup UI, permission, atau WifiMonitor
+        val prefs = getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
+        if (!prefs.getBoolean("on_boarding", false)) {
+            startActivity(Intent(this, OnboardingActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            })
+            finish()
+            return
+        }
+
         setContentView(R.layout.activity_home)
 
         // 1. REQUEST PERMISSIONS DI AWAL (CRITICAL)
@@ -95,15 +106,6 @@ class HomeActivity : AppCompatActivity() {
 //            setupToolbarForTv(toolbar)
 //        }
 
-        // 4. CEK ONBOARDING
-        val prefs = getSharedPreferences(getString(R.string.pref_application), MODE_PRIVATE)
-        if (!prefs.getBoolean("on_boarding", false)) {
-            startActivity(Intent(this, OnboardingActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            })
-            finish(); return
-        }
-
         // 5. SETUP BOTTOM NAVIGATION
         val bottom = findViewById<BottomNavigationView>(R.id.nav_view)
 
@@ -143,7 +145,9 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        WifiMonitor.stopMonitoring()
+        if (!isChangingConfigurations) {
+            WifiMonitor.stopMonitoring()
+        }
     }
 
     // ==========================================

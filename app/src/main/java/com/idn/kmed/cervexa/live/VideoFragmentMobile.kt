@@ -224,15 +224,19 @@ class VideoFragmentMobile : Fragment() {
     }
 
     override fun onDestroyView() {
-        super.onDestroyView()
         if (allMediaItems.isNotEmpty() && !isMetadataSaved) saveSessionMetadata()
 
         clockJob?.cancel()
+        clockJob = null
         liveFrameJob?.cancel()
+        liveFrameJob = null
+        liveResyncJob?.cancel()
+        liveResyncJob = null
 
         if (record.get()) stopVideoRecording()
         stopVlcStream()
         hudHandler.removeCallbacks(hudTick)
+        super.onDestroyView()
     }
 
     @Volatile
@@ -301,10 +305,25 @@ class VideoFragmentMobile : Fragment() {
 
         binding.tvMediaTgl?.text = formattedDate
         binding.tvOverlayInfo.text = overlayInfoText()
-        startOverlayClock()
         refreshThumbs()
 
         return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        requireActivity().onBackPressedDispatcher.addCallback(
+            viewLifecycleOwner,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (isLandscape()) {
+                        requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    } else {
+                        showExitConfirmDialog()
+                    }
+                }
+            })
+        startOverlayClock()
     }
 
     private fun setupGestureDetectors() {
@@ -361,20 +380,6 @@ class VideoFragmentMobile : Fragment() {
             requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
         binding.btnSimpanCase.setOnClickListener { showSaveConfirmDialog() }
-
-
-
-        requireActivity().onBackPressedDispatcher.addCallback(
-            viewLifecycleOwner,
-            object : OnBackPressedCallback(true) {
-                override fun handleOnBackPressed() {
-                    if (isLandscape()) {
-                        requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                    } else {
-                        showExitConfirmDialog()
-                    }
-                }
-            })
         binding.topAppBar.setNavigationOnClickListener { showExitConfirmDialog() }
     }
 

@@ -215,7 +215,7 @@ object WifiCamConnection {
             }
         }
 
-        val builder = MaterialAlertDialogBuilder(activity)
+        val builder = MaterialAlertDialogBuilder(activity, com.idn.kmed.cervexa.R.style.MyAlertDialogTheme)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton("Cari Kamera Otomatis") { _, _ -> onAutoSearch() }
@@ -226,7 +226,7 @@ object WifiCamConnection {
         } else {
             builder.setNeutralButton("Batal", null)
         }
-        builder.show()
+        runCatching { builder.show() }
     }
 
     /** Alur koneksi terpusat untuk HomeDashboard & MediaList: deteksi/probe kamera dahulu, lalu dialog opsi bila belum terhubung. */
@@ -290,8 +290,13 @@ object WifiCamConnection {
                 onOpenWifiSettings = { openWifiSettings(activity) },
                 onOpenPermissionSettings = if (!hasPerms) {
                     {
-                        @Suppress("DEPRECATION")
-                        fragment.requestPermissions(WifiMonitor.requiredWifiPermissionsArray(), 2201)
+                        if (!activity.isFinishing && !activity.isDestroyed) {
+                            androidx.core.app.ActivityCompat.requestPermissions(
+                                activity,
+                                WifiMonitor.requiredWifiPermissionsArray(),
+                                2201
+                            )
+                        }
                     }
                 } else {
                     null

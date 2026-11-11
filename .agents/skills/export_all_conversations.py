@@ -1,6 +1,7 @@
 import json
 import re
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 TRANSCRIPT_PATH = Path(r"C:\Users\it-arta\.gemini\antigravity\brain\d34d4348-c575-4c80-b16f-2f00055bda25\.system_generated\logs\transcript_full.jsonl")
@@ -81,36 +82,46 @@ base_text = re.sub(
     base_text,
     count=1
 )
+export_ts_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S WIB")
 base_text = re.sub(
     r"\*\*Waktu Export\*\*:.*",
-    "**Waktu Export**: 2026-11-10 16:55:00 WIB  ",
+    f"**Waktu Export**: {export_ts_str}  ",
     base_text,
     count=1
 )
 
 start_session_num = 177
 end_session_num = start_session_num + len(sessions) - 1
+milestone16_end = min(198, end_session_num)
 
 # Milestone 16 definition
-milestone_16 = f"""16. **Kalibrasi Kontur Warna Live Stream, Penyelarasan Watermark RS/NRM Ber-Outline Hitam, Perbaikan Crash, Stabilisasi Konsistensi AI, & Revert Bersih Polling Timestamp (Sesi 177 s.d. {end_session_num})**:
+milestone_16 = f"""16. **Kalibrasi Kontur Warna Live Stream, Penyelarasan Watermark RS/NRM Ber-Outline Hitam, Perbaikan Crash, Stabilisasi Konsistensi AI, & Revert Bersih Polling Timestamp (Sesi 177 s.d. {milestone16_end})**:
     - **Penghapusan Duplikasi Timestamp & Watermark RS/NRM Transparan**: Menyembunyikan `tvOverlayClock` aplikasi agar hanya menampilkan timestamp bawaan kamera MS2 di kanan bawah, serta membuat background identitas `RS/NRM` di kiri bawah transparan, sejajar mentok bawah, dan menggunakan huruf putih ber-outline hitam (`StrokedTextView.kt`) dengan ukuran proporsional (`TEXT_SCALE = 0.042f`).
     - **Penguncian Aspect Ratio 16:9 di Mode Landscape**: Mengunci `videoContainer` ke rasio `16:9` pada layout landscape (`fragment_video_mobile.xml` dan `fragment_video_tv.xml`) agar teks `RS/NRM` tidak keluar ke area pillarbox hitam.
     - **Perbaikan Crash `"Cervexa has stopped"` Saat Running**: Mengganti pemanggilan `setTextColor()` di dalam `StrokedTextView.onDraw()` dengan rendering langsung pada `layout.draw(canvas)`, mengamankan callback asinkron (`processSnapshot`, `postDelayed`, `vlcVout.detachViews()` di UI thread), serta menutup interpreter TFLite (`aiDetector?.close()`) pada `MediaPageFragment.onDestroyView()`.
     - **Konsistensi & Stabilisasi Hasil Analisis AI Terhadap Perubahan Kontur Warna (`AiDetector.kt` & `ViaSegmentationHelper.kt`)**: Menerapkan matriks inversi kalibrasi warna (`restoreRawCameraColorsIfNeeded`), memprioritaskan model `YOLOv8n-Seg` di atas heuristik piksel, membatasi area sampling di atas area watermark (`normY <= 0.82`), serta menambahkan *Structural Scene Fingerprint Cache* (12x12 Z-score normalized) sehingga banyak snapshot dari objek yang sama menghasilkan deteksi AI yang 100% konsisten.
     - **Revert Bersih Polling Timestamp & Kompilasi APK Final**: Membatalkan eksperimen polling bitmap TextureView (`93eee3d`) demi memastikan video stream tetap 0 latency, 0 noise, dan ultra-smooth; memverifikasi bahwa modul deteksi kontur AI tetap utuh 100%; mengompilasi APK debug bersih (`cervexa-debug.apk`); serta mendokumentasikan tata cara navigasi menu hardware Elikliv MS2 (tekan tombol MENU 2x) untuk cap waktu."""
 
-# Update or insert Milestone 16
+milestone_17 = f"""
+
+17. **Perbaikan Koneksi Wi-Fi/SSID Lapangan, Probe Hardware `192.168.1.1:554`, Stabilitas RTSP Indoor, & Toggle Timestamp Aplikasi (Sesi 199 s.d. {end_session_num})**:
+    - **Hapus Lock SSID Kantor & Kewajiban Clear Data (`ffe572b`)**: Menghapus penyimpanan `camera_ssid_exact` serta `addCameraWifiSuggestion`, membersihkan cache SSID/suggestion lama secara otomatis (`WifiMonitor` & `WifiCamConnection`), dan menstandarkan deteksi ke prefix default `wifi_camera_MS2_` (case-insensitive).
+    - **Deteksi Koneksi Manual ("lewat luar aplikasi") & Fix MIUI Redaction**: Menambahkan `NetworkRequest` khusus `TRANSPORT_WIFI` + `FLAG_INCLUDE_LOCATION_INFO` (API 31+), caching SSID per `networkHandle`, serta TCP RTSP probe ringan ke `192.168.1.1:554` (400 ms di `Dispatchers.IO`) pada jaringan Wi-Fi unvalidated.
+    - **Hapus Redirect Paksa ke App Info & Fix Permission**: Menyatukan alur koneksi di `WifiCamConnection.ensureCameraReadyOrShowConnectFlow()` dengan dialog pilihan (*Cari Kamera Otomatis*, *Pengaturan Wi-Fi*, *Izin Aplikasi*), menggabungkan request permission API 33+ di `HomeActivity`, dan menghapus `findCameraWifiNetworkStrict()` duplikat.
+    - **Stabilitas Stream RTSP Indoor**: Menambahkan opsi IjkPlayer `stimeout=5000000` dan `sync-av-start=0` serta `scheduleStreamRetry()` (1,5 detik) pada `VideoFragmentMobile` dan `VideoFragmentTv` (disertai `ensureCameraNetworkBound()` di TV).
+    - **Toggle Timestamp Aplikasi Default ON Tanpa Delay (`6c366ab`)**: Menambahkan switch **Tampilkan Timestamp Aplikasi** di `SettingsActivity`, memperbarui `tvOverlayClock` di 4 layout Mobile/TV menjadi `StrokedTextView` transparan seragam dengan `tvOverlayInfo` memakai coroutine timer 1 detik tanpa scan piksel, serta mencetak timestamp opsional via `StorageUtils.drawOverlayWatermarkRow()` di snapshot, video, dan import media.""" if end_session_num >= 199 else ""
+
+# Update or insert Milestone 16 & 17
 if "16. **Kalibrasi Kontur Warna Live Stream" in base_text:
-    # Replace existing milestone 16
     base_text = re.sub(
-        r"16\. \*\*Kalibrasi Kontur Warna Live Stream.*?(?=\n\n\d+\.|\n\n##|\Z)",
-        milestone_16,
+        r"16\. \*\*Kalibrasi Kontur Warna Live Stream.*?(?=\n\n##|\Z)",
+        milestone_16 + milestone_17,
         base_text,
         flags=re.S
     )
 else:
     target_m15 = "15. **Konsolidasi & Sinkronisasi Ekspor Percakapan Markdown Lengkap (Sesi 1 s.d. 176)**:\n    - Seluruh proses dialog teknis, implementasi kode fitur baru, perbaikan bug di lapangan, kompilasi APK, hingga konversi dokumen percakapan telah disinkronkan secara menyeluruh ke file Markdown `conversation_export.md` di direktori proyek dan folder Downloads."
-    base_text = base_text.replace(target_m15, target_m15 + "\n\n" + milestone_16, 1)
+    base_text = base_text.replace(target_m15, target_m15 + "\n\n" + milestone_16 + milestone_17, 1)
 
 # Rebuild TOC entries for 177..end_session_num
 toc_lines = []

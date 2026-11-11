@@ -235,13 +235,16 @@ class VideoFragmentMobile : Fragment() {
         hudHandler.removeCallbacks(hudTick)
     }
 
+    @Volatile
+    private var showAppTimestamp: Boolean = true
+
     override fun onResume() {
         super.onResume()
         toggleSystemUI()
         liveViewModel.loadParams(requireContext())
 
         if (ijkPlayer?.isPlaying != true) startVlcStream()
-        if (clockJob?.isActive != true) startOverlayClock()
+        startOverlayClock()
     }
 
     override fun onPause() {
@@ -697,13 +700,17 @@ class VideoFragmentMobile : Fragment() {
         tv.layoutParams = android.widget.FrameLayout.LayoutParams(finalW, finalH).also {
             it.gravity = android.view.Gravity.CENTER
         }
-        // Sejajarkan posisi & ukuran font tvOverlayInfo dengan frame video (mentok kiri-bawah video)
+        // Sejajarkan posisi & ukuran font tvOverlayInfo + tvOverlayClock dengan frame video (mentok kiri/kanan bawah video)
         val videoLeftOffset = ((cW - finalW) / 2f).coerceAtLeast(0f)
         val videoBottomOffset = ((cH - finalH) / 2f).coerceAtLeast(0f)
+        val liveFontPx = (finalH * TEXT_SCALE).coerceIn(TEXT_MIN_PX, 64f)
         binding.tvOverlayInfo.translationX = videoLeftOffset
         binding.tvOverlayInfo.translationY = -videoBottomOffset
-        val liveFontPx = (finalH * TEXT_SCALE).coerceIn(TEXT_MIN_PX, 64f)
+        binding.tvOverlayInfo.maxWidth = (finalW * 0.56f).toInt()
         binding.tvOverlayInfo.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
+        binding.tvOverlayClock.translationX = -videoLeftOffset
+        binding.tvOverlayClock.translationY = -videoBottomOffset
+        binding.tvOverlayClock.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
 
         lastFrameSize = Pair(finalW, finalH)
         baseScaleVlc = 1f
@@ -964,18 +971,18 @@ class VideoFragmentMobile : Fragment() {
             safeSrc.recycle()
         }
 
-        // >>> FIX UTAMA: font & posisi sejajar mentok bawah dengan timestamp bawaan kamera <<<
         ensureOverlayTextSize(bitmap.height)
 
         val info = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
-        val leftMargin = (bitmap.width * 0.008f).coerceAtLeast(6f)
-        val bottomMargin = (bitmap.height * 0.004f).coerceAtLeast(2f)
-        val maxTextW = (bitmap.width * 0.55f - leftMargin).coerceAtLeast(0f)
-        val infoDraw = ellipsizeToWidth(info, paintText, maxTextW)
-
-        val baselineY = bitmap.height - bottomMargin
-        canvas.drawText(infoDraw, leftMargin, baselineY, paintTextStroke)
-        canvas.drawText(infoDraw, leftMargin, baselineY, paintText)
+        StorageUtils.drawOverlayWatermarkRow(
+            canvas = canvas,
+            frameWidth = bitmap.width,
+            frameHeight = bitmap.height,
+            leftText = info,
+            paintFill = paintText,
+            paintStroke = paintTextStroke,
+            showRightTimestamp = showAppTimestamp
+        )
 
         // AI overlay is now handled by OverlayRenderer — no inline AI drawing here
 
@@ -1066,7 +1073,20 @@ class VideoFragmentMobile : Fragment() {
 
     private fun startOverlayClock() {
         clockJob?.cancel()
-        binding.tvOverlayClock.visibility = View.GONE
+        val ctx = context ?: return
+        val enabled = StorageUtils.isAppTimestampEnabled(ctx)
+        showAppTimestamp = enabled
+        if (!enabled) {
+            binding.tvOverlayClock.visibility = View.GONE
+            return
+        }
+        binding.tvOverlayClock.visibility = View.VISIBLE
+        clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
+            while (isActive) {
+                binding.tvOverlayClock.text = StorageUtils.formatOverlayTimestamp()
+                delay(1000L)
+            }
+        }
     }
 
     private fun stopStreamAndExit() {

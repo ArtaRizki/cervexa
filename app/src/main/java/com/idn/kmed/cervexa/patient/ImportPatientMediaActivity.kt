@@ -406,19 +406,17 @@ class ImportPatientMediaActivity : AppCompatActivity() {
             style = Paint.Style.FILL
         }
 
-        // Timestamp kanan bawah di-hide (menggunakan bawaan kamera).
-        // Identity kiri bawah (Nama RS / Rekam Medis) disejajarkan mentok bawah dengan font Serif putih stroke hitam.
         val info = if (nrm.isEmpty()) rs else "$rs/$nrm"
-        val leftMargin = (frameWidth * 0.008f).coerceAtLeast(6f)
-        val bottomMargin = (frameHeight * 0.004f).coerceAtLeast(2f)
-        val maxTextW = (frameWidth * 0.55f - leftMargin).coerceAtLeast(0f)
-        val infoDraw = if (paintText.measureText(info) > maxTextW) {
-            TextUtils.ellipsize(info, TextPaint(paintText), maxTextW, TextUtils.TruncateAt.END).toString()
-        } else info
-
-        val baselineY = frameHeight - bottomMargin
-        canvas.drawText(infoDraw, leftMargin, baselineY, paintTextStroke)
-        canvas.drawText(infoDraw, leftMargin, baselineY, paintText)
+        com.idn.kmed.cervexa.utils.StorageUtils.drawOverlayWatermarkRow(
+            canvas = canvas,
+            frameWidth = frameWidth,
+            frameHeight = frameHeight,
+            leftText = info,
+            paintFill = paintText,
+            paintStroke = paintTextStroke,
+            showRightTimestamp = com.idn.kmed.cervexa.utils.StorageUtils.isAppTimestampEnabled(this),
+            rightText = timestampStr
+        )
 
         return bitmap
     }

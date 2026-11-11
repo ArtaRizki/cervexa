@@ -18,11 +18,13 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.idn.kmed.cervexa.utils.PrintBridgeClient
+import com.idn.kmed.cervexa.utils.StorageUtils
 import kotlinx.coroutines.launch
 
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var swHw: MaterialSwitch
+    private lateinit var swAppTimestamp: MaterialSwitch
     private lateinit var tvRotVal: TextView
     private lateinit var rowRot: LinearLayout
     private var rot: Int = 0
@@ -68,6 +70,13 @@ class SettingsActivity : AppCompatActivity() {
 
         // Pilih rotasi (0/90/180/270)
         rowRot.setOnClickListener { showRotationPicker(rot) }
+
+        // Toggle Timestamp Aplikasi (Default ON)
+        swAppTimestamp = findViewById(R.id.switchAppTimestamp)
+        swAppTimestamp.isChecked = StorageUtils.isAppTimestampEnabled(this)
+        swAppTimestamp.setOnCheckedChangeListener { _, checked ->
+            StorageUtils.setAppTimestampEnabled(this, checked)
+        }
 
         // Setup Print Bridge UI
         setupPrintBridgeSection()
@@ -158,5 +167,6 @@ class SettingsActivity : AppCompatActivity() {
     companion object {
         const val KEY_USE_HW_DECODER = "use_hw_decoder"
         const val KEY_CAMERA_ROTATION_DEG = "camera_rotation_deg"
+        const val KEY_SHOW_APP_TIMESTAMP = StorageUtils.KEY_SHOW_APP_TIMESTAMP
     }
 }

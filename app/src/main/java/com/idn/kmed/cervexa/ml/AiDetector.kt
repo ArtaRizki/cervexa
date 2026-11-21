@@ -154,6 +154,13 @@ class AiDetector(
         val prefBlue = prefs.getFloat("blue", DEFAULT_BLUE)
         val hueOffset = prefs.getFloat("hue", DEFAULT_HUE)
 
+        // When color calibration is neutral, return raw camera bitmap untouched (matches pre-Nov-3 behavior)
+        if (prefBright == 0f && prefContrast == 1.0f && prefSat == 1.0f &&
+            prefRed == 1.0f && prefGreen == 1.0f && prefBlue == 1.0f && hueOffset == 0f
+        ) {
+            return src
+        }
+
         // Adaptive per-image parameters: combine saved calibration with actual image ROI stats
         // so even snapshots taken under different slider positions are normalized to the same canonical space
         val brightnessOffset = if (stats.minLuma >= 18) {
@@ -380,12 +387,12 @@ class AiDetector(
         const val ERROR_CODE_ALL_DETECTORS_FAILED = -2
 
         const val PREFS_COLOR_CALIBRATION = "cervexa_color_calibration"
-        const val DEFAULT_BRIGHTNESS = 35f
-        const val DEFAULT_CONTRAST = 1.15f
-        const val DEFAULT_SATURATION = 0.60f
-        const val DEFAULT_RED = 0.80f
-        const val DEFAULT_GREEN = 0.88f
-        const val DEFAULT_BLUE = 0.92f
+        const val DEFAULT_BRIGHTNESS = 0f
+        const val DEFAULT_CONTRAST = 1.00f
+        const val DEFAULT_SATURATION = 1.00f
+        const val DEFAULT_RED = 1.00f
+        const val DEFAULT_GREEN = 1.00f
+        const val DEFAULT_BLUE = 1.00f
         const val DEFAULT_HUE = 0f
 
         private const val SCENE_SIMILARITY_THRESHOLD = 0.945f

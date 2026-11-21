@@ -43,6 +43,10 @@ object WifiMonitor {
     private val probeInFlightHandles = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private var wifiEventCallback: ConnectivityManager.NetworkCallback? = null
 
+    /** Set true while live RTSP stream is running so passive TCP probes don't disturb camera port 554. */
+    @Volatile
+    var isLiveStreamActive: Boolean = false
+
     private var simpleCallback: ((String?) -> Unit)? = null
     private var statusCallback: ((WifiStatus) -> Unit)? = null
     private var appCtx: Context? = null
@@ -88,7 +92,7 @@ object WifiMonitor {
         wm = ctx.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
         // Always publish current state immediately when starting/re-starting
-        publishCurrent()
+        publishCurrent(forceEmit = true)
 
         if (registered) return
 
@@ -169,7 +173,7 @@ object WifiMonitor {
     }
 
     fun refreshNow() {
-        publishCurrent()
+        publishCurrent(forceEmit = true)
     }
 
     fun requiredWifiPermissionsArray(): Array<String> {
@@ -338,7 +342,7 @@ object WifiMonitor {
     }
 
     @SuppressLint("MissingPermission")
-    private fun publishCurrent() {
+    private fun publishCurrent(forceEmit: Boolean = false) {
         val ctx = appCtx ?: return
         val cmLocal = cm ?: (ctx.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)
             ?: return
@@ -355,6 +359,8 @@ object WifiMonitor {
             isCamera = inspection.cameraNetwork != null || inspection.matchedBySsidWithoutNet,
             isWifiConnected = inspection.hasAnyWifi
         )
+        // Skip duplicate main-thread emissions triggered by Wi-Fi RSSI fluctuations during live streaming
+        if (!forceEmit && status == lastStatus) return
         lastStatus = status
 
         val currentScope = scope
@@ -480,18 +486,16 @@ object WifiMonitor {
     }
 
     private fun scheduleProbeIfNeeded(cmLocal: ConnectivityManager, network: Network) {
+        if (isLiveStreamActive) return
         val handle = network.networkHandle
         if (!probeInFlightHandles.add(handle)) return
-        val hasExpectedSubnet = hasSubnet1921681(cmLocal, network)
         val ioScope = scope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
         ioScope.launch(Dispatchers.IO) {
             try {
                 val ok = probeCameraRtspSync(network)
+                verifiedCameraHandles[handle] = ok
                 if (ok) {
-                    verifiedCameraHandles[handle] = true
                     publishCurrent()
-                } else if (hasExpectedSubnet) {
-                    verifiedCameraHandles[handle] = false
                 }
             } finally {
                 probeInFlightHandles.remove(handle)

@@ -469,6 +469,7 @@ class VideoFragmentMobile : Fragment() {
     }
 
     private fun startVlcStream() {
+        if (ijkPlayer != null) return
         ensureCameraNetworkBound()
         val rtspUrl = liveViewModel.rtspRequest.value
         if (rtspUrl.isNullOrBlank()) {
@@ -476,6 +477,7 @@ class VideoFragmentMobile : Fragment() {
             return
         }
         val tv = textureView ?: return
+        com.idn.kmed.cervexa.utils.WifiMonitor.isLiveStreamActive = true
         binding.pbLoadingImage.visibility = View.VISIBLE
         binding.vShutterImage.visibility = View.VISIBLE
 
@@ -493,7 +495,6 @@ class VideoFragmentMobile : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "stimeout", "5000000")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L)
                 // Deteksi stream — 32KB cukup cepat tapi tidak menyebabkan jitter koneksi
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
@@ -512,7 +513,6 @@ class VideoFragmentMobile : Fragment() {
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
                 // Matikan audio sepenuhnya (tidak ada audio di mikroskop)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "an", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "sync-av-start", 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
 
                 // ── CODEC (decoder) ──
@@ -595,18 +595,34 @@ class VideoFragmentMobile : Fragment() {
         retryStreamJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(1500L)
             if (!isAdded || !isResumed || record.get()) return@launch
+            // Tunggu player lama benar-benar selesai stop & release sebelum membuka Surface/RTSP baru
+            val oldPlayer = detachPlayerForRelease()
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    oldPlayer?.stop()
+                    oldPlayer?.release()
+                }
+            }
+            delay(250L)
+            if (!isAdded || !isResumed || record.get()) return@launch
             context?.let { com.idn.kmed.cervexa.utils.WifiMonitor.verifyOrProbeCameraNetwork(it) }
-            releasePlayerOnly()
             startVlcStream()
         }
     }
 
-    private fun releasePlayerOnly() {
+    private fun detachPlayerForRelease(): IjkMediaPlayer? {
         liveResyncJob?.cancel()
         liveFrameJob?.cancel()
         val oldPlayer = ijkPlayer
         ijkPlayer = null
+        setKeepScreenOn(false)
+        baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
+        panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
+        return oldPlayer
+    }
 
+    private fun releasePlayerOnly() {
+        val oldPlayer = detachPlayerForRelease()
         // Hancurkan player lama di background thread agar UI tidak macet (ANR/Freeze)
         Thread {
             runCatching {
@@ -614,13 +630,10 @@ class VideoFragmentMobile : Fragment() {
                 oldPlayer?.release()
             }
         }.start()
-
-        setKeepScreenOn(false)
-        baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
-        panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
     }
 
     private fun stopVlcStream() {
+        com.idn.kmed.cervexa.utils.WifiMonitor.isLiveStreamActive = false
         retryStreamJob?.cancel()
         retryStreamJob = null
         releasePlayerOnly()
@@ -716,6 +729,12 @@ class VideoFragmentMobile : Fragment() {
         binding.tvOverlayClock.translationX = -videoLeftOffset
         binding.tvOverlayClock.translationY = -videoBottomOffset
         binding.tvOverlayClock.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
+        // Kunci lebar piksel tetap agar update jam per detik tidak memicu ConstraintLayout requestLayout()
+        val clockW = kotlin.math.ceil(binding.tvOverlayClock.paint.measureText("8888/88/88 88:88:88")).toInt() +
+            binding.tvOverlayClock.paddingStart + binding.tvOverlayClock.paddingEnd + 8
+        if (binding.tvOverlayClock.layoutParams.width != clockW) {
+            binding.tvOverlayClock.layoutParams = binding.tvOverlayClock.layoutParams.apply { width = clockW }
+        }
 
         lastFrameSize = Pair(finalW, finalH)
         baseScaleVlc = 1f
@@ -961,16 +980,19 @@ class VideoFragmentMobile : Fragment() {
             Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
         } else src
         
-        // Terapkan matriks kalibrasi warna yang sama dengan live preview (WYSIWYG)
-        // TextureView.getBitmap() hanya mengambil raw frame, sehingga ColorMatrix GPU harus digambar ke Canvas
+        // Terapkan matriks kalibrasi warna yang sama dengan live preview (WYSIWYG); lewati filter jika netral
         val bitmap = Bitmap.createBitmap(safeSrc.width, safeSrc.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val paintFilter = Paint().apply {
-            colorFilter = ColorMatrixColorFilter(buildCalibrationColorMatrix())
-            isAntiAlias = false
-            isDither = false
+        if (isNeutralCalibration()) {
+            canvas.drawBitmap(safeSrc, 0f, 0f, null)
+        } else {
+            val paintFilter = Paint().apply {
+                colorFilter = ColorMatrixColorFilter(buildCalibrationColorMatrix())
+                isAntiAlias = false
+                isDither = false
+            }
+            canvas.drawBitmap(safeSrc, 0f, 0f, paintFilter)
         }
-        canvas.drawBitmap(safeSrc, 0f, 0f, paintFilter)
 
         if (safeSrc !== src && !safeSrc.isRecycled) {
             safeSrc.recycle()
@@ -1334,13 +1356,24 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private var currentBrightness = 35f
-    private var currentContrast = 1.15f
-    private var currentSaturation = 0.60f
-    private var currentRed = 0.80f
-    private var currentGreen = 0.88f
-    private var currentBlue = 0.92f
+    private var currentBrightness = 0f
+    private var currentContrast = 1.00f
+    private var currentSaturation = 1.00f
+    private var currentRed = 1.00f
+    private var currentGreen = 1.00f
+    private var currentBlue = 1.00f
     private var currentHue = 0f
+
+    private fun isNeutralCalibration(
+        brightnessOffset: Float = currentBrightness,
+        contrast: Float = currentContrast,
+        saturation: Float = currentSaturation,
+        redBoost: Float = currentRed,
+        greenBoost: Float = currentGreen,
+        blueBoost: Float = currentBlue,
+        hueOffset: Float = currentHue
+    ): Boolean = brightnessOffset == 0f && contrast == 1.0f && saturation == 1.0f &&
+        redBoost == 1.0f && greenBoost == 1.0f && blueBoost == 1.0f && hueOffset == 0f
 
     private fun buildCalibrationColorMatrix(
         brightnessOffset: Float = currentBrightness,
@@ -1389,13 +1422,18 @@ class VideoFragmentMobile : Fragment() {
         blueBoost: Float = currentBlue,
         hueOffset: Float = currentHue
     ) {
-        val cm = buildCalibrationColorMatrix(
-            brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset
-        )
-        val paint = Paint().apply {
-            colorFilter = ColorMatrixColorFilter(cm)
+        if (isNeutralCalibration(brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset)) {
+            // Bypass GPU ColorMatrix shader saat netral agar nol beban shader & nol noise tambahan
+            tv.setLayerType(android.view.View.LAYER_TYPE_NONE, null)
+        } else {
+            val cm = buildCalibrationColorMatrix(
+                brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset
+            )
+            val paint = Paint().apply {
+                colorFilter = ColorMatrixColorFilter(cm)
+            }
+            tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
         }
-        tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
         context?.getSharedPreferences("cervexa_color_calibration", Context.MODE_PRIVATE)?.edit()?.apply {
             putFloat("brightness", brightnessOffset)
             putFloat("contrast", contrast)

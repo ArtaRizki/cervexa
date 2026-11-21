@@ -601,8 +601,9 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
     }
 
     private fun startVlcStream() {
-        if (usePhoneCamera) return
+        if (usePhoneCamera || mediaPlayer != null) return
         ensureCameraNetworkBound()
+        com.idn.kmed.cervexa.utils.WifiMonitor.isLiveStreamActive = true
         binding.pbLoadingImage.visibility = View.VISIBLE
         binding.vShutterImage.visibility = View.VISIBLE
 
@@ -693,8 +694,17 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         retryStreamJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(1500L)
             if (!isAdded || !isResumed || usePhoneCamera) return@launch
+            val (oldPlayer, oldVlc) = detachVlcForRelease()
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    oldPlayer?.stop()
+                    oldPlayer?.release()
+                    oldVlc?.release()
+                }
+            }
+            delay(250L)
+            if (!isAdded || !isResumed || usePhoneCamera) return@launch
             context?.let { com.idn.kmed.cervexa.utils.WifiMonitor.verifyOrProbeCameraNetwork(it) }
-            releaseVlcOnly()
             startVlcStream()
         }
     }
@@ -770,6 +780,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         binding.tvOverlayClock.translationX = -videoLeftOffset
         binding.tvOverlayClock.translationY = -videoBottomOffset
         binding.tvOverlayClock.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
+        val clockW = kotlin.math.ceil(binding.tvOverlayClock.paint.measureText("8888/88/88 88:88:88")).toInt() +
+            binding.tvOverlayClock.paddingStart + binding.tvOverlayClock.paddingEnd + 8
+        if (binding.tvOverlayClock.layoutParams.width != clockW) {
+            binding.tvOverlayClock.layoutParams = binding.tvOverlayClock.layoutParams.apply { this.width = clockW }
+        }
 
         baseScaleVlc = 1f
         baseTxVlc = (cW - finalW) / 2f; baseTyVlc = (cH - finalH) / 2f
@@ -780,7 +795,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         applyZoomAndPan()
     }
 
-    private fun releaseVlcOnly() {
+    private fun detachVlcForRelease(): Pair<MediaPlayer?, LibVLC?> {
         val player = mediaPlayer
         val vlc = libVlc
         mediaPlayer = null
@@ -788,6 +803,17 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
         player?.setEventListener(null)
         runCatching { player?.vlcVout?.detachViews() }
+
+        binding.tvStatusImage?.text = "Disconnected"
+        binding.vShutterImage.visibility = View.VISIBLE
+        setKeepScreenOn(false)
+        baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
+        panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
+        return Pair(player, vlc)
+    }
+
+    private fun releaseVlcOnly() {
+        val (player, vlc) = detachVlcForRelease()
         Thread {
             runCatching {
                 player?.stop()
@@ -795,15 +821,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 vlc?.release()
             }
         }.start()
-
-        binding.tvStatusImage?.text = "Disconnected"
-        binding.vShutterImage.visibility = View.VISIBLE
-        setKeepScreenOn(false)
-        baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
-        panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
     }
 
     private fun stopVlcStream() {
+        com.idn.kmed.cervexa.utils.WifiMonitor.isLiveStreamActive = false
         retryStreamJob?.cancel()
         retryStreamJob = null
         releaseVlcOnly()
@@ -962,15 +983,19 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             Bitmap.createBitmap(src, 0, cropTop, src.width, src.height - cropTop)
         } else src
 
-        // Terapkan matriks kalibrasi warna yang sama dengan live preview (WYSIWYG)
+        // Terapkan matriks kalibrasi warna yang sama dengan live preview (WYSIWYG); lewati filter jika netral
         val bitmap = Bitmap.createBitmap(safeSrc.width, safeSrc.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val paintFilter = Paint().apply {
-            colorFilter = ColorMatrixColorFilter(buildCalibrationColorMatrix())
-            isAntiAlias = false
-            isDither = false
+        if (isNeutralCalibration()) {
+            canvas.drawBitmap(safeSrc, 0f, 0f, null)
+        } else {
+            val paintFilter = Paint().apply {
+                colorFilter = ColorMatrixColorFilter(buildCalibrationColorMatrix())
+                isAntiAlias = false
+                isDither = false
+            }
+            canvas.drawBitmap(safeSrc, 0f, 0f, paintFilter)
         }
-        canvas.drawBitmap(safeSrc, 0f, 0f, paintFilter)
         if (safeSrc !== src && !safeSrc.isRecycled) {
             safeSrc.recycle()
         }
@@ -1308,13 +1333,24 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }
     }
 
-    private var currentBrightness = 35f
-    private var currentContrast = 1.15f
-    private var currentSaturation = 0.60f
-    private var currentRed = 0.80f
-    private var currentGreen = 0.88f
-    private var currentBlue = 0.92f
+    private var currentBrightness = 0f
+    private var currentContrast = 1.00f
+    private var currentSaturation = 1.00f
+    private var currentRed = 1.00f
+    private var currentGreen = 1.00f
+    private var currentBlue = 1.00f
     private var currentHue = 0f
+
+    private fun isNeutralCalibration(
+        brightnessOffset: Float = currentBrightness,
+        contrast: Float = currentContrast,
+        saturation: Float = currentSaturation,
+        redBoost: Float = currentRed,
+        greenBoost: Float = currentGreen,
+        blueBoost: Float = currentBlue,
+        hueOffset: Float = currentHue
+    ): Boolean = brightnessOffset == 0f && contrast == 1.0f && saturation == 1.0f &&
+        redBoost == 1.0f && greenBoost == 1.0f && blueBoost == 1.0f && hueOffset == 0f
 
     private fun buildCalibrationColorMatrix(
         brightnessOffset: Float = currentBrightness,
@@ -1362,13 +1398,18 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         blueBoost: Float = currentBlue,
         hueOffset: Float = currentHue
     ) {
-        val cm = buildCalibrationColorMatrix(
-            brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset
-        )
-        val paint = Paint().apply {
-            colorFilter = ColorMatrixColorFilter(cm)
+        if (isNeutralCalibration(brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset)) {
+            // Bypass GPU ColorMatrix shader saat netral agar nol beban shader & nol noise tambahan
+            tv.setLayerType(android.view.View.LAYER_TYPE_NONE, null)
+        } else {
+            val cm = buildCalibrationColorMatrix(
+                brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset
+            )
+            val paint = Paint().apply {
+                colorFilter = ColorMatrixColorFilter(cm)
+            }
+            tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
         }
-        tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
         context?.getSharedPreferences("cervexa_color_calibration", android.content.Context.MODE_PRIVATE)?.edit()?.apply {
             putFloat("brightness", brightnessOffset)
             putFloat("contrast", contrast)

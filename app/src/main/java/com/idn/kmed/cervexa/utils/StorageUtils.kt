@@ -18,8 +18,9 @@ object StorageUtils {
     const val KEY_SHOW_APP_TIMESTAMP = "show_app_timestamp"
 
     private val tzJakarta = TimeZone.getTimeZone("Asia/Jakarta")
-    private val overlayTimestampFmt = ThreadLocal.withInitial {
-        SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
+    private val overlayTimestampFmt = object : ThreadLocal<SimpleDateFormat>() {
+        override fun initialValue(): SimpleDateFormat =
+            SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
     }
 
     fun isAppTimestampEnabled(context: Context): Boolean {
@@ -56,16 +57,16 @@ object StorageUtils {
         rightText: String = if (showRightTimestamp) formatOverlayTimestamp() else ""
     ) {
         val sideMargin = (frameWidth * 0.008f).coerceAtLeast(6f)
-        val bottomMargin = (frameHeight * 0.004f).coerceAtLeast(2f)
+        val bottomMargin = (frameHeight * 0.012f).coerceAtLeast(8f)
         val baselineY = frameHeight - bottomMargin
 
         var maxLeftW = (frameWidth * 0.55f - sideMargin).coerceAtLeast(0f)
         if (showRightTimestamp && rightText.isNotBlank()) {
             val tsW = paintFill.measureText(rightText)
-            val tsX = (frameWidth - sideMargin - tsW).coerceAtLeast(frameWidth * 0.50f)
+            val tsX = (frameWidth - sideMargin - tsW).coerceAtLeast(sideMargin)
             canvas.drawText(rightText, tsX, baselineY, paintStroke)
             canvas.drawText(rightText, tsX, baselineY, paintFill)
-            maxLeftW = (tsX - sideMargin * 2f).coerceAtLeast(frameWidth * 0.30f)
+            maxLeftW = (tsX - sideMargin * 2f).coerceAtLeast(0f)
         }
 
         val infoDraw = if (paintFill.measureText(leftText) > maxLeftW && maxLeftW > 0f) {

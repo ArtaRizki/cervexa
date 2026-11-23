@@ -61,6 +61,7 @@ class MediaPageFragment : Fragment() {
 
     companion object {
         private const val TAG = "MediaPageFragment"
+        private const val AI_DETECTOR_ENABLED = false // Sementara dinonaktifkan
         private const val AI_TIMEOUT_MS = 30000L // 30 detik agar aman di perangkat Smart TV / TV Box
         private const val VIDEO_AI_INTERVAL_MS = 100L // ~10 FPS untuk real-time video AI overlay 500ms
 
@@ -99,6 +100,14 @@ class MediaPageFragment : Fragment() {
         val btnAnalisisAi = root.findViewById<LinearLayout>(R.id.btnAnalisisAi)
         val btnHapusOverlay = root.findViewById<LinearLayout>(R.id.btnHapusOverlay)
         val pbAiLoading = root.findViewById<ProgressBar>(R.id.pbAiLoading)
+        if (!AI_DETECTOR_ENABLED) {
+            btnAnalisisAi.visibility = View.GONE
+            btnHapusOverlay.visibility = View.GONE
+            pbAiLoading.visibility = View.GONE
+            ivAiOverlayVideo.visibility = View.GONE
+        } else {
+            btnAnalisisAi.visibility = View.VISIBLE
+        }
 
         // --- Cek Validitas File ---
         if (!file.exists() || file.length() == 0L) {
@@ -190,6 +199,7 @@ class MediaPageFragment : Fragment() {
     // =====================================================================
 
     private fun ensureAiDetector(): Boolean {
+        if (!AI_DETECTOR_ENABLED) return false
         if (aiDetector != null && overlayRenderer != null) return true
         val ctx = context ?: return false
         val prefs = ctx.getSharedPreferences("cervexa_ai_prefs", Context.MODE_PRIVATE)

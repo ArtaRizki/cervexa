@@ -221,6 +221,7 @@ class VideoFragmentMobile : Fragment() {
             snapshotsDir = StorageUtils.ensureChildDir(parent, "Snapshots")
             videosDir = StorageUtils.ensureChildDir(parent, "Video")
         }
+        showAppTimestamp = StorageUtils.isAppTimestampEnabled(requireContext())
     }
 
     override fun onDestroyView() {
@@ -731,7 +732,7 @@ class VideoFragmentMobile : Fragment() {
         binding.tvOverlayClock.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
         // Kunci lebar piksel tetap agar update jam per detik tidak memicu ConstraintLayout requestLayout()
         val clockW = kotlin.math.ceil(binding.tvOverlayClock.paint.measureText("8888/88/88 88:88:88")).toInt() +
-            binding.tvOverlayClock.paddingStart + binding.tvOverlayClock.paddingEnd + 8
+            binding.tvOverlayClock.paddingStart + binding.tvOverlayClock.paddingEnd + 20
         if (binding.tvOverlayClock.layoutParams.width != clockW) {
             binding.tvOverlayClock.layoutParams = binding.tvOverlayClock.layoutParams.apply { width = clockW }
         }
@@ -1100,6 +1101,7 @@ class VideoFragmentMobile : Fragment() {
 
     private fun startOverlayClock() {
         clockJob?.cancel()
+        if (!isAdded || view == null) return
         val ctx = context ?: return
         val enabled = StorageUtils.isAppTimestampEnabled(ctx)
         showAppTimestamp = enabled
@@ -1107,6 +1109,7 @@ class VideoFragmentMobile : Fragment() {
             binding.tvOverlayClock.visibility = View.GONE
             return
         }
+        binding.tvOverlayClock.text = StorageUtils.formatOverlayTimestamp()
         binding.tvOverlayClock.visibility = View.VISIBLE
         clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
             while (isActive) {

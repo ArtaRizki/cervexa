@@ -250,6 +250,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         brightness = prefs.getFloat("image_brightness", 0f)
         contrast = prefs.getFloat("image_contrast", 1.2f)
         saturation = prefs.getFloat("image_saturation", 0.70f)
+        showAppTimestamp = StorageUtils.isAppTimestampEnabled(requireContext())
     }
 
     override fun onDestroyView() {
@@ -287,6 +288,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         toggleSystemUI()
         binding.tvOverlayInfo.text =
             if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
+        if (clockJob?.isActive != true) startOverlayClock()
         binding.videoContainer.postDelayed({ reattachVlcViews() }, 300)
         view?.post {
             if (usePhoneCamera && phoneCameraView != null) {
@@ -540,7 +542,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             scaleType = PreviewView.ScaleType.FILL_CENTER
         }
         phoneCameraView = pv
-        binding.videoContainer.addView(pv)
+        binding.videoContainer.addView(pv, 0)
 
         currentScale = 1f; panTxPhone = 0f; panTyPhone = 0f
         focusX = binding.videoContainer.width / 2f; focusY = binding.videoContainer.height / 2f
@@ -781,7 +783,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         binding.tvOverlayClock.translationY = -videoBottomOffset
         binding.tvOverlayClock.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, liveFontPx)
         val clockW = kotlin.math.ceil(binding.tvOverlayClock.paint.measureText("8888/88/88 88:88:88")).toInt() +
-            binding.tvOverlayClock.paddingStart + binding.tvOverlayClock.paddingEnd + 8
+            binding.tvOverlayClock.paddingStart + binding.tvOverlayClock.paddingEnd + 20
         if (binding.tvOverlayClock.layoutParams.width != clockW) {
             binding.tvOverlayClock.layoutParams = binding.tvOverlayClock.layoutParams.apply { this.width = clockW }
         }
@@ -1121,6 +1123,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             binding.tvOverlayClock.visibility = View.GONE
             return
         }
+        binding.tvOverlayClock.text = StorageUtils.formatOverlayTimestamp()
         binding.tvOverlayClock.visibility = View.VISIBLE
         clockJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
             while (isActive) {

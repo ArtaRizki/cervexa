@@ -17,6 +17,7 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
+import com.idn.kmed.cervexa.utils.DeviceTypeDetector
 import com.idn.kmed.cervexa.utils.PrintBridgeClient
 import com.idn.kmed.cervexa.utils.StorageUtils
 import kotlinx.coroutines.launch
@@ -25,6 +26,8 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var swHw: MaterialSwitch
     private lateinit var swAppTimestamp: MaterialSwitch
+    private lateinit var rowStreamEngine: LinearLayout
+    private lateinit var tvStreamEngineVal: TextView
     private lateinit var tvRotVal: TextView
     private lateinit var rowRot: LinearLayout
     private var rot: Int = 0
@@ -54,8 +57,13 @@ class SettingsActivity : AppCompatActivity() {
         top.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
         swHw = findViewById(R.id.switchHwDecoder)
+        rowStreamEngine = findViewById(R.id.rowStreamEngine)
+        tvStreamEngineVal = findViewById(R.id.tvStreamEngineValue)
         tvRotVal = findViewById(R.id.tvRotationValue)
         rowRot = findViewById(R.id.rowRotation)
+
+        tvStreamEngineVal.text = DeviceTypeDetector.getStreamEngineSummary(this)
+        rowStreamEngine.setOnClickListener { showStreamEnginePicker() }
 
         // Load nilai awal Hardware & Rotasi
         val useHw = prefs.getBoolean(KEY_USE_HW_DECODER, true)
@@ -142,6 +150,34 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun showStreamEnginePicker() {
+        val options = arrayOf(
+            "Otomatis (Rekomendasi)",
+            "LibVLC (Smart TV & Stand TV)",
+            "IjkPlayer (Smartphone)"
+        )
+        val values = arrayOf(
+            DeviceTypeDetector.ENGINE_AUTO,
+            DeviceTypeDetector.ENGINE_LIBVLC,
+            DeviceTypeDetector.ENGINE_IJK
+        )
+        val current = prefs.getString(DeviceTypeDetector.KEY_STREAM_ENGINE, DeviceTypeDetector.ENGINE_AUTO)
+            ?: DeviceTypeDetector.ENGINE_AUTO
+        val checked = values.indexOf(current).coerceAtLeast(0)
+
+        val engineDialog = MaterialAlertDialogBuilder(this, R.style.MyAlertDialogTheme)
+            .setTitle("Pilih Engine Streaming Video")
+            .setSingleChoiceItems(options, checked) { dialog, which ->
+                prefs.edit().putString(DeviceTypeDetector.KEY_STREAM_ENGINE, values[which]).apply()
+                tvStreamEngineVal.text = DeviceTypeDetector.getStreamEngineSummary(this)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Batal", null)
+            .create()
+        engineDialog.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_custom)
+        engineDialog.show()
     }
 
     private fun showRotationPicker(current: Int) {

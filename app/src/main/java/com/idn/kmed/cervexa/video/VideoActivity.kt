@@ -17,8 +17,12 @@ class VideoActivity : AppCompatActivity() {
 
         DeviceTypeDetector.logDeviceInfo(this)
         val isTvDevice = DeviceTypeDetector.isTvDevice(this)
+        val useLibVlcEngine = DeviceTypeDetector.shouldUseLibVlcEngine(this)
 
-        Log.d(TAG, "Device Type: ${if (isTvDevice) "TV/STB" else "Smartphone/Tablet"}")
+        Log.d(
+            TAG,
+            "Device Type: ${if (isTvDevice) "TV/STB" else "Smartphone/Tablet"}, useLibVlcEngine=$useLibVlcEngine"
+        )
 
         // ── Ambil semua extra dari Intent ──────────────────────────────────
         val sessionDirPath = intent.getStringExtra("sessionDirPath")
@@ -42,12 +46,12 @@ class VideoActivity : AppCompatActivity() {
             putInt("patient_id", serverPatientId)   // ← BARU: ID dari server
         }
 
-        // ── Pilih fragment berdasarkan device ──────────────────────────────
-        val fragment: Fragment = if (isTvDevice) {
-            Log.i(TAG, "Loading VideoFragmentTv")
+        // ── Pilih fragment berdasarkan engine streaming (TV / Stand TV -> LibVLC, HP -> IjkPlayer) ──
+        val fragment: Fragment = if (useLibVlcEngine) {
+            Log.i(TAG, "Loading VideoFragmentTv (LibVLC Engine)")
             VideoFragmentTv().apply { arguments = bundle }
         } else {
-            Log.i(TAG, "Loading VideoFragmentMobile")
+            Log.i(TAG, "Loading VideoFragmentMobile (IjkPlayer Engine)")
             VideoFragmentMobile().apply { arguments = bundle }
         }
 

@@ -73,6 +73,7 @@ class VideoFragmentMobile : Fragment() {
 
     // ==== IjkMediaPlayer (menggantikan LibVLC) ====
     private var ijkPlayer: IjkMediaPlayer? = null
+    private var videoSurface: android.view.Surface? = null
     private var textureView: android.view.TextureView? = null
     private var ivVideoImageResolution = Pair(0, 0)
     private var baseScaleVlc = 1f
@@ -221,6 +222,7 @@ class VideoFragmentMobile : Fragment() {
             snapshotsDir = StorageUtils.ensureChildDir(parent, "Snapshots")
             videosDir = StorageUtils.ensureChildDir(parent, "Video")
         }
+        loadSavedColorCalibration(requireContext())
         showAppTimestamp = StorageUtils.isAppTimestampEnabled(requireContext())
     }
 
@@ -488,41 +490,41 @@ class VideoFragmentMobile : Fragment() {
             val finalUrl = if (user.isNotEmpty() && !rtspUrl.contains("//$user"))
                 rtspUrl.replace("rtsp://", "rtsp://$user:$pass@") else rtspUrl
 
-            // === KONFIGURASI ULTRA ZERO-LATENCY ===
+            // === KONFIGURASI LOW-LATENCY & ANTI-SMEARING (RTSP TCP + HW DECODER) ===
+            val useHw = prefs.getBoolean(KEY_USE_HW_DECODER, true)
             val player = IjkMediaPlayer().apply {
                 IjkMediaPlayer.native_setLogLevel(IjkMediaPlayer.IJK_LOG_WARN)
 
                 // ── FORMAT (FFmpeg demuxer) ──
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "flush_packets", 1L)
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "udp")
+                // Gunakan TCP (sama seperti LibVLC di Smart TV) agar nol packet loss / nol gambar pecah H.264
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp")
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max_delay", 0L)
-                // Deteksi stream — 32KB cukup cepat tapi tidak menyebabkan jitter koneksi
+                // Deteksi header stream (SPS/PPS) cepat & stabil — analyzeduration dalam mikrodetik (100000us = 100ms)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probesize", 32768L)
-                // 100ms = cukup untuk player siap tanpa bikin lag di awal
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100L)
-                // Jangan tunggu paket yang datang tidak urut — langsung render
-                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reorder_queue_size", 0L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "analyzeduration", 100000L)
 
                 // ── PLAYER (IjkPlayer internal) ──
-                // PENTING: max_cached_duration=0 di IJK = UNLIMITED! Harus > 0
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 1L) // 1ms = hampir nol
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 1024L)  // 1 KB saja
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)    // MATIKAN buffering
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)              // Jangan blok render meski buffer kosong
-                // Buang frame yang terlambat secara agresif
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 5L)
+                // PENTING: max_cached_duration=0 di IJK = UNLIMITED! 100ms = batas maks ~3 frame agar anti-drift
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_cached_duration", 100L)
+                // 512 KB cukup menampung Keyframe H.264 utuh (30-150 KB) tanpa memotong paket
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max_buffer_size", 524288L)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L)    // MATIKAN pre-buffering
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "infbuf", 1L)              // Jangan blok render
+                // Framedrop wajar agar anti-drift tanpa merusak referensi frame H.264
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1L)
                 // Matikan audio sepenuhnya (tidak ada audio di mikroskop)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "an", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1L)
 
                 // ── CODEC (decoder) ──
-                // SELALU gunakan HW decoder — jauh lebih cepat dari software
-                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", 1L)
+                // Default HW decoder aktif (mengikuti switch Pengaturan, default true)
+                setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec", if (useHw) 1L else 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-auto-rotate", 1L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "mediacodec-handle-resolution-change", 1L)
-                // Skip_loop_filter=16: hanya skip di frame non-referensi, lebih aman dari =48
-                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 16L)
+                // Jangan skip deblocking/reference frame agar gambar jernih dan bebas korup
+                setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 0L)
                 setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 0L) // AVDISCARD_DEFAULT
 
                 // HAPUS vfilter brightness — terlalu berat di CPU, menambah 0.3-1 detik delay
@@ -547,7 +549,10 @@ class VideoFragmentMobile : Fragment() {
                 }
                 return
             }
-            player.setSurface(android.view.Surface(st))
+            val surface = android.view.Surface(st)
+            videoSurface?.release()
+            videoSurface = surface
+            player.setSurface(surface)
             player.setOnInfoListener(ijkEventListener)
             player.setOnErrorListener { _, _, _ ->
                 activity?.runOnUiThread {
@@ -597,11 +602,13 @@ class VideoFragmentMobile : Fragment() {
             delay(1500L)
             if (!isAdded || !isResumed || record.get()) return@launch
             // Tunggu player lama benar-benar selesai stop & release sebelum membuka Surface/RTSP baru
-            val oldPlayer = detachPlayerForRelease()
+            val (oldPlayer, oldSurface) = detachPlayerForRelease()
             withContext(Dispatchers.IO) {
                 runCatching {
+                    oldPlayer?.setSurface(null)
                     oldPlayer?.stop()
                     oldPlayer?.release()
+                    oldSurface?.release()
                 }
             }
             delay(250L)
@@ -611,24 +618,28 @@ class VideoFragmentMobile : Fragment() {
         }
     }
 
-    private fun detachPlayerForRelease(): IjkMediaPlayer? {
+    private fun detachPlayerForRelease(): Pair<IjkMediaPlayer?, android.view.Surface?> {
         liveResyncJob?.cancel()
         liveFrameJob?.cancel()
         val oldPlayer = ijkPlayer
+        val oldSurface = videoSurface
         ijkPlayer = null
+        videoSurface = null
         setKeepScreenOn(false)
         baseScaleVlc = 1f; baseTxVlc = 0f; baseTyVlc = 0f
         panTxVlc = 0f; panTyVlc = 0f; currentScale = 1f
-        return oldPlayer
+        return Pair(oldPlayer, oldSurface)
     }
 
     private fun releasePlayerOnly() {
-        val oldPlayer = detachPlayerForRelease()
+        val (oldPlayer, oldSurface) = detachPlayerForRelease()
         // Hancurkan player lama di background thread agar UI tidak macet (ANR/Freeze)
         Thread {
             runCatching {
+                oldPlayer?.setSurface(null)
                 oldPlayer?.stop()
                 oldPlayer?.release()
+                oldSurface?.release()
             }
         }.start()
     }
@@ -1415,6 +1426,30 @@ class VideoFragmentMobile : Fragment() {
         return cm
     }
 
+    private var isUserColorCustomized = false
+
+    private fun loadSavedColorCalibration(ctx: Context) {
+        val calPrefs = ctx.getSharedPreferences("cervexa_color_calibration", Context.MODE_PRIVATE)
+        isUserColorCustomized = calPrefs.getBoolean("user_customized_v2", false)
+        if (isUserColorCustomized) {
+            currentBrightness = calPrefs.getFloat("brightness", 0f)
+            currentContrast = calPrefs.getFloat("contrast", 1.00f)
+            currentSaturation = calPrefs.getFloat("saturation", 1.00f)
+            currentRed = calPrefs.getFloat("red", 1.00f)
+            currentGreen = calPrefs.getFloat("green", 1.00f)
+            currentBlue = calPrefs.getFloat("blue", 1.00f)
+            currentHue = calPrefs.getFloat("hue", 0f)
+        } else {
+            currentBrightness = 0f
+            currentContrast = 1.00f
+            currentSaturation = 1.00f
+            currentRed = 1.00f
+            currentGreen = 1.00f
+            currentBlue = 1.00f
+            currentHue = 0f
+        }
+    }
+
     private fun applyHardwareBrightness(
         tv: android.view.TextureView, 
         brightnessOffset: Float = currentBrightness,
@@ -1425,7 +1460,8 @@ class VideoFragmentMobile : Fragment() {
         blueBoost: Float = currentBlue,
         hueOffset: Float = currentHue
     ) {
-        if (isNeutralCalibration(brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset)) {
+        val neutral = isNeutralCalibration(brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset)
+        if (neutral) {
             // Bypass GPU ColorMatrix shader saat netral agar nol beban shader & nol noise tambahan
             tv.setLayerType(android.view.View.LAYER_TYPE_NONE, null)
         } else {
@@ -1438,6 +1474,7 @@ class VideoFragmentMobile : Fragment() {
             tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
         }
         context?.getSharedPreferences("cervexa_color_calibration", Context.MODE_PRIVATE)?.edit()?.apply {
+            putBoolean("user_customized_v2", isUserColorCustomized && !neutral)
             putFloat("brightness", brightnessOffset)
             putFloat("contrast", contrast)
             putFloat("saturation", saturation)
@@ -1458,8 +1495,41 @@ class VideoFragmentMobile : Fragment() {
         
         val sbContrast = binding.root.findViewById<android.widget.SeekBar>(R.id.sbContrast)
         val tvContrastVal = binding.root.findViewById<android.widget.TextView>(R.id.tvContrastVal)
+        val sbBrightness = binding.root.findViewById<android.widget.SeekBar>(R.id.sbBrightness)
+        val tvBrightnessVal = binding.root.findViewById<android.widget.TextView>(R.id.tvBrightnessVal)
+        val sbSaturation = binding.root.findViewById<android.widget.SeekBar>(R.id.sbSaturation)
+        val tvSaturationVal = binding.root.findViewById<android.widget.TextView>(R.id.tvSaturationVal)
+        val sbRed = binding.root.findViewById<android.widget.SeekBar>(R.id.sbRed)
+        val tvRedVal = binding.root.findViewById<android.widget.TextView>(R.id.tvRedVal)
+        val sbGreen = binding.root.findViewById<android.widget.SeekBar>(R.id.sbGreen)
+        val tvGreenVal = binding.root.findViewById<android.widget.TextView>(R.id.tvGreenVal)
+        val sbBlue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbBlue)
+        val tvBlueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvBlueVal)
+        val sbHue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbHue)
+        val tvHueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvHueVal)
+
+        val syncSlidersFromState = {
+            sbBrightness?.progress = (currentBrightness + 100f).toInt().coerceIn(0, 200)
+            tvBrightnessVal?.text = currentBrightness.toInt().toString()
+            sbContrast?.progress = (currentContrast * 100f).toInt().coerceIn(0, 200)
+            tvContrastVal?.text = String.format("%.2f", currentContrast)
+            sbSaturation?.progress = (currentSaturation * 100f).toInt().coerceIn(0, 200)
+            tvSaturationVal?.text = String.format("%.2f", currentSaturation)
+            sbRed?.progress = (currentRed * 100f).toInt().coerceIn(0, 200)
+            tvRedVal?.text = String.format("%.2f", currentRed)
+            sbGreen?.progress = (currentGreen * 100f).toInt().coerceIn(0, 200)
+            tvGreenVal?.text = String.format("%.2f", currentGreen)
+            sbBlue?.progress = (currentBlue * 100f).toInt().coerceIn(0, 200)
+            tvBlueVal?.text = String.format("%.2f", currentBlue)
+            sbHue?.progress = (currentHue + 180f).toInt().coerceIn(0, 360)
+            tvHueVal?.text = currentHue.toInt().toString()
+        }
+        syncSlidersFromState()
+
         sbContrast?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentContrast = progress / 100f
                 tvContrastVal?.text = String.format("%.2f", currentContrast)
                 updateFilter()
@@ -1468,22 +1538,22 @@ class VideoFragmentMobile : Fragment() {
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbBrightness = binding.root.findViewById<android.widget.SeekBar>(R.id.sbBrightness)
-        val tvBrightnessVal = binding.root.findViewById<android.widget.TextView>(R.id.tvBrightnessVal)
         sbBrightness?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentBrightness = (progress - 100).toFloat()
-                tvBrightnessVal?.text = currentBrightness.toString()
+                tvBrightnessVal?.text = currentBrightness.toInt().toString()
                 updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbSaturation = binding.root.findViewById<android.widget.SeekBar>(R.id.sbSaturation)
-        val tvSaturationVal = binding.root.findViewById<android.widget.TextView>(R.id.tvSaturationVal)
         sbSaturation?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentSaturation = progress / 100f
                 tvSaturationVal?.text = String.format("%.2f", currentSaturation)
                 updateFilter()
@@ -1492,10 +1562,10 @@ class VideoFragmentMobile : Fragment() {
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbRed = binding.root.findViewById<android.widget.SeekBar>(R.id.sbRed)
-        val tvRedVal = binding.root.findViewById<android.widget.TextView>(R.id.tvRedVal)
         sbRed?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentRed = progress / 100f
                 tvRedVal?.text = String.format("%.2f", currentRed)
                 updateFilter()
@@ -1504,10 +1574,10 @@ class VideoFragmentMobile : Fragment() {
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbGreen = binding.root.findViewById<android.widget.SeekBar>(R.id.sbGreen)
-        val tvGreenVal = binding.root.findViewById<android.widget.TextView>(R.id.tvGreenVal)
         sbGreen?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentGreen = progress / 100f
                 tvGreenVal?.text = String.format("%.2f", currentGreen)
                 updateFilter()
@@ -1516,10 +1586,10 @@ class VideoFragmentMobile : Fragment() {
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbBlue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbBlue)
-        val tvBlueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvBlueVal)
         sbBlue?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentBlue = progress / 100f
                 tvBlueVal?.text = String.format("%.2f", currentBlue)
                 updateFilter()
@@ -1528,10 +1598,10 @@ class VideoFragmentMobile : Fragment() {
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbHue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbHue)
-        val tvHueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvHueVal)
         sbHue?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentHue = (progress - 180).toFloat()
                 tvHueVal?.text = currentHue.toInt().toString()
                 updateFilter()
@@ -1539,6 +1609,21 @@ class VideoFragmentMobile : Fragment() {
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
+
+        val btnResetCalibration = binding.root.findViewById<android.widget.Button>(R.id.btnResetCalibration)
+        btnResetCalibration?.setOnClickListener {
+            isUserColorCustomized = false
+            currentBrightness = 0f
+            currentContrast = 1.00f
+            currentSaturation = 1.00f
+            currentRed = 1.00f
+            currentGreen = 1.00f
+            currentBlue = 1.00f
+            currentHue = 0f
+            syncSlidersFromState()
+            updateFilter()
+            Toast.makeText(requireContext(), "Kalibrasi direset ke netral (zero-delay)", Toast.LENGTH_SHORT).show()
+        }
 
         val btnHideDebug = binding.root.findViewById<android.widget.Button>(R.id.btnHideDebug)
         val btnToggleDebug = binding.root.findViewById<android.view.View>(R.id.btnToggleDebug)

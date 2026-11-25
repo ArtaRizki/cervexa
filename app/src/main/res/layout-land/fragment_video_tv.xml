@@ -58,6 +58,13 @@
                     android:layout_marginBottom="24dp">
 
                     <Button 
+                        android:id="@+id/btnResetCalibration" 
+                        android:layout_width="wrap_content" 
+                        android:layout_height="wrap_content" 
+                        android:text="Reset Netral" 
+                        android:layout_marginEnd="8dp" />
+
+                    <Button 
                         android:id="@+id/btnExportConfig" 
                         android:layout_width="wrap_content" 
                         android:layout_height="wrap_content" 

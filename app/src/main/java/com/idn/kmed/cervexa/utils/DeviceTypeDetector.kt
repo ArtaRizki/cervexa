@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
 import android.util.Log
+import com.idn.kmed.cervexa.R
 
 /**
  * Utility class untuk mendeteksi tipe perangkat Android
@@ -16,6 +17,11 @@ import android.util.Log
 object DeviceTypeDetector {
 
     private const val TAG = "DeviceTypeDetector"
+
+    const val KEY_STREAM_ENGINE = "stream_engine_mode"
+    const val ENGINE_AUTO = "auto"
+    const val ENGINE_LIBVLC = "libvlc"
+    const val ENGINE_IJK = "ijk"
 
     enum class DeviceType {
         SMARTPHONE_TABLET,  // Perangkat mobile biasa
@@ -193,5 +199,82 @@ object DeviceTypeDetector {
      */
     fun isMobileDevice(context: Context): Boolean {
         return detectDeviceType(context) == DeviceType.SMARTPHONE_TABLET
+    }
+
+    /**
+     * Deteksi apakah perangkat merupakan Standing TV / Smart Screen / Tablet Layar Besar
+     * (misal Amdox MV4 27" Android 14 touchscreen) yang memiliki layanan PrintManager normal
+     * namun jauh lebih stabil menggunakan engine streaming LibVLC seperti Smart TV.
+     */
+    fun isStandingTabletOrLargeScreen(context: Context): Boolean {
+        if (isAndroidTv(context)) return false
+
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val model = Build.MODEL.lowercase()
+        val brand = Build.BRAND.lowercase()
+        val product = Build.PRODUCT.lowercase()
+
+        val standingKeywords = listOf(
+            "amdox",
+            "mv4",
+            "mv 4",
+            "prospera",
+            "smart screen",
+            "stanbyme",
+            "standbyme",
+            "kiosk"
+        )
+        val matchStandingModel = standingKeywords.any {
+            manufacturer.contains(it) || model.contains(it) || brand.contains(it) || product.contains(it)
+        }
+
+        val cfg = context.resources.configuration
+        val swDp = cfg.smallestScreenWidthDp
+        val screenSizeMask = cfg.screenLayout and Configuration.SCREENLAYOUT_SIZE_MASK
+        val isLargeLayout = swDp >= 600 ||
+            screenSizeMask == Configuration.SCREENLAYOUT_SIZE_LARGE ||
+            screenSizeMask == Configuration.SCREENLAYOUT_SIZE_XLARGE
+
+        // Perangkat Wi-Fi tanpa modul telepon seluler (seperti Standing Smart Screen / Wi-Fi Tablet)
+        val hasTelephony = context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+
+        val result = matchStandingModel || isLargeLayout || !hasTelephony
+        Log.d(
+            TAG,
+            "Standing/Tablet check: result=$result (matchModel=$matchStandingModel, swDp=$swDp, largeLayout=$isLargeLayout, hasTelephony=$hasTelephony)"
+        )
+        return result
+    }
+
+    /**
+     * Menentukan apakah live stream harus memakai engine LibVLC (VideoFragmentTv)
+     * berdasarkan pilihan di Pengaturan (atau deteksi otomatis jika mode = ENGINE_AUTO).
+     */
+    fun shouldUseLibVlcEngine(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(
+            context.getString(R.string.pref_application),
+            Context.MODE_PRIVATE
+        )
+        return when (prefs.getString(KEY_STREAM_ENGINE, ENGINE_AUTO)) {
+            ENGINE_LIBVLC -> true
+            ENGINE_IJK -> false
+            else -> isTvDevice(context) || isStandingTabletOrLargeScreen(context)
+        }
+    }
+
+    fun getStreamEngineSummary(context: Context): String {
+        val prefs = context.getSharedPreferences(
+            context.getString(R.string.pref_application),
+            Context.MODE_PRIVATE
+        )
+        return when (prefs.getString(KEY_STREAM_ENGINE, ENGINE_AUTO)) {
+            ENGINE_LIBVLC -> "LibVLC (Smart TV & Stand TV)"
+            ENGINE_IJK -> "IjkPlayer (Smartphone)"
+            else -> {
+                val autoLibVlc = isTvDevice(context) || isStandingTabletOrLargeScreen(context)
+                if (autoLibVlc) "Otomatis (Aktif: LibVLC — TV / Stand TV)"
+                else "Otomatis (Aktif: IjkPlayer — Smartphone)"
+            }
+        }
     }
 }

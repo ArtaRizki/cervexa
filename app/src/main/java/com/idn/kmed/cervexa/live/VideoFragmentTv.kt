@@ -250,6 +250,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         brightness = prefs.getFloat("image_brightness", 0f)
         contrast = prefs.getFloat("image_contrast", 1.2f)
         saturation = prefs.getFloat("image_saturation", 0.70f)
+        loadSavedColorCalibration(requireContext())
         showAppTimestamp = StorageUtils.isAppTimestampEnabled(requireContext())
     }
 
@@ -275,7 +276,11 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             viewLifecycleOwner,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    showSaveConfirmDialog()
+                    if (!DeviceTypeDetector.isTvDevice(requireContext()) && isLandscape()) {
+                        requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    } else {
+                        showSaveConfirmDialog()
+                    }
                 }
             })
         val infoText = if (patientNrm.isEmpty()) patientRs else "$patientRs/$patientNrm"
@@ -403,7 +408,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                 resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
             requireActivity().requestedOrientation =
                 if (isPortrait) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                else ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
         binding.btnSnapshot.setOnClickListener { takeSnapshot() }
         binding.btnRecordVideo.setOnClickListener {
@@ -412,7 +417,13 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         binding.btnBackLite?.setOnLongClickListener { showImageEnhancementDialog(); true }
 
         binding.topAppBar.setNavigationOnClickListener { showSaveConfirmDialog() }
-        binding.btnBackLite?.setOnClickListener { showSaveConfirmDialog() }
+        binding.btnBackLite?.setOnClickListener {
+            if (!DeviceTypeDetector.isTvDevice(requireContext()) && isLandscape()) {
+                requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            } else {
+                showSaveConfirmDialog()
+            }
+        }
 
         binding.rvThumbs.apply {
             layoutManager = androidx.recyclerview.widget.GridLayoutManager(requireContext(), 4)
@@ -854,11 +865,15 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         val out = File(dir, "vid_${StorageUtils.timestampWIB()}.mp4")
         videoOutputFile = out
 
+        val isPureTvStb = DeviceTypeDetector.isTvDevice(requireContext())
+        val recW = if (isPureTvStb) REC_WIDTH else (ivVideoImageResolution.first.takeIf { it > 0 } ?: 1280)
+        val recH = if (isPureTvStb) REC_HEIGHT else (ivVideoImageResolution.second.takeIf { it > 0 } ?: 720)
+
         runCatching {
             recorder = RealtimeBitmapEncoder(
                 context = requireContext(),
-                width = REC_WIDTH,
-                height = REC_HEIGHT,
+                width = recW,
+                height = recH,
                 outputFile = out,
                 frameRate = STB_FPS,
                 bitRate = STB_BITRATE
@@ -866,7 +881,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             recorder.start()
             record.set(true)
             recordStartElapsedMs = android.os.SystemClock.elapsedRealtime()
-            startFrameGrabber()
+            startFrameGrabber(recW, recH)
 
             binding.recordHud.visibility = View.VISIBLE
             hudHandler.post(hudTick)
@@ -881,7 +896,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         }
     }
 
-    private fun startFrameGrabber() {
+    private fun startFrameGrabber(grabWidth: Int = REC_WIDTH, grabHeight: Int = REC_HEIGHT) {
         recordingJob = viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Default) {
             val frameIntervalNs = 1_000_000_000L / STB_FPS
             var nextFrameNs = System.nanoTime()
@@ -899,8 +914,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
                             val tv = textureView ?: return@withContext null
                             if (poolBitmap == null || poolBitmap!!.isRecycled) {
                                 poolBitmap = Bitmap.createBitmap(
-                                    REC_WIDTH,
-                                    REC_HEIGHT,
+                                    grabWidth,
+                                    grabHeight,
                                     Bitmap.Config.ARGB_8888
                                 )
                             }
@@ -1391,6 +1406,30 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         return cm
     }
 
+    private var isUserColorCustomized = false
+
+    private fun loadSavedColorCalibration(ctx: android.content.Context) {
+        val calPrefs = ctx.getSharedPreferences("cervexa_color_calibration", android.content.Context.MODE_PRIVATE)
+        isUserColorCustomized = calPrefs.getBoolean("user_customized_v2", false)
+        if (isUserColorCustomized) {
+            currentBrightness = calPrefs.getFloat("brightness", 0f)
+            currentContrast = calPrefs.getFloat("contrast", 1.00f)
+            currentSaturation = calPrefs.getFloat("saturation", 1.00f)
+            currentRed = calPrefs.getFloat("red", 1.00f)
+            currentGreen = calPrefs.getFloat("green", 1.00f)
+            currentBlue = calPrefs.getFloat("blue", 1.00f)
+            currentHue = calPrefs.getFloat("hue", 0f)
+        } else {
+            currentBrightness = 0f
+            currentContrast = 1.00f
+            currentSaturation = 1.00f
+            currentRed = 1.00f
+            currentGreen = 1.00f
+            currentBlue = 1.00f
+            currentHue = 0f
+        }
+    }
+
     private fun applyHardwareBrightness(
         tv: android.view.TextureView,
         brightnessOffset: Float = currentBrightness,
@@ -1401,7 +1440,8 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
         blueBoost: Float = currentBlue,
         hueOffset: Float = currentHue
     ) {
-        if (isNeutralCalibration(brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset)) {
+        val neutral = isNeutralCalibration(brightnessOffset, contrast, saturation, redBoost, greenBoost, blueBoost, hueOffset)
+        if (neutral) {
             // Bypass GPU ColorMatrix shader saat netral agar nol beban shader & nol noise tambahan
             tv.setLayerType(android.view.View.LAYER_TYPE_NONE, null)
         } else {
@@ -1414,6 +1454,7 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
         }
         context?.getSharedPreferences("cervexa_color_calibration", android.content.Context.MODE_PRIVATE)?.edit()?.apply {
+            putBoolean("user_customized_v2", isUserColorCustomized && !neutral)
             putFloat("brightness", brightnessOffset)
             putFloat("contrast", contrast)
             putFloat("saturation", saturation)
@@ -1434,8 +1475,41 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
 
         val sbContrast = binding.root.findViewById<android.widget.SeekBar>(R.id.sbContrast)
         val tvContrastVal = binding.root.findViewById<android.widget.TextView>(R.id.tvContrastVal)
+        val sbBrightness = binding.root.findViewById<android.widget.SeekBar>(R.id.sbBrightness)
+        val tvBrightnessVal = binding.root.findViewById<android.widget.TextView>(R.id.tvBrightnessVal)
+        val sbSaturation = binding.root.findViewById<android.widget.SeekBar>(R.id.sbSaturation)
+        val tvSaturationVal = binding.root.findViewById<android.widget.TextView>(R.id.tvSaturationVal)
+        val sbRed = binding.root.findViewById<android.widget.SeekBar>(R.id.sbRed)
+        val tvRedVal = binding.root.findViewById<android.widget.TextView>(R.id.tvRedVal)
+        val sbGreen = binding.root.findViewById<android.widget.SeekBar>(R.id.sbGreen)
+        val tvGreenVal = binding.root.findViewById<android.widget.TextView>(R.id.tvGreenVal)
+        val sbBlue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbBlue)
+        val tvBlueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvBlueVal)
+        val sbHue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbHue)
+        val tvHueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvHueVal)
+
+        val syncSlidersFromState = {
+            sbBrightness?.progress = (currentBrightness + 100f).toInt().coerceIn(0, 200)
+            tvBrightnessVal?.text = currentBrightness.toInt().toString()
+            sbContrast?.progress = (currentContrast * 100f).toInt().coerceIn(0, 200)
+            tvContrastVal?.text = String.format("%.2f", currentContrast)
+            sbSaturation?.progress = (currentSaturation * 100f).toInt().coerceIn(0, 200)
+            tvSaturationVal?.text = String.format("%.2f", currentSaturation)
+            sbRed?.progress = (currentRed * 100f).toInt().coerceIn(0, 200)
+            tvRedVal?.text = String.format("%.2f", currentRed)
+            sbGreen?.progress = (currentGreen * 100f).toInt().coerceIn(0, 200)
+            tvGreenVal?.text = String.format("%.2f", currentGreen)
+            sbBlue?.progress = (currentBlue * 100f).toInt().coerceIn(0, 200)
+            tvBlueVal?.text = String.format("%.2f", currentBlue)
+            sbHue?.progress = (currentHue + 180f).toInt().coerceIn(0, 360)
+            tvHueVal?.text = currentHue.toInt().toString()
+        }
+        syncSlidersFromState()
+
         sbContrast?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentContrast = progress / 100f
                 tvContrastVal?.text = String.format("%.2f", currentContrast)
                 updateFilter()
@@ -1444,22 +1518,22 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbBrightness = binding.root.findViewById<android.widget.SeekBar>(R.id.sbBrightness)
-        val tvBrightnessVal = binding.root.findViewById<android.widget.TextView>(R.id.tvBrightnessVal)
         sbBrightness?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentBrightness = (progress - 100).toFloat()
-                tvBrightnessVal?.text = currentBrightness.toString()
+                tvBrightnessVal?.text = currentBrightness.toInt().toString()
                 updateFilter()
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbSaturation = binding.root.findViewById<android.widget.SeekBar>(R.id.sbSaturation)
-        val tvSaturationVal = binding.root.findViewById<android.widget.TextView>(R.id.tvSaturationVal)
         sbSaturation?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentSaturation = progress / 100f
                 tvSaturationVal?.text = String.format("%.2f", currentSaturation)
                 updateFilter()
@@ -1468,10 +1542,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbRed = binding.root.findViewById<android.widget.SeekBar>(R.id.sbRed)
-        val tvRedVal = binding.root.findViewById<android.widget.TextView>(R.id.tvRedVal)
         sbRed?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentRed = progress / 100f
                 tvRedVal?.text = String.format("%.2f", currentRed)
                 updateFilter()
@@ -1480,10 +1554,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbGreen = binding.root.findViewById<android.widget.SeekBar>(R.id.sbGreen)
-        val tvGreenVal = binding.root.findViewById<android.widget.TextView>(R.id.tvGreenVal)
         sbGreen?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentGreen = progress / 100f
                 tvGreenVal?.text = String.format("%.2f", currentGreen)
                 updateFilter()
@@ -1492,10 +1566,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbBlue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbBlue)
-        val tvBlueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvBlueVal)
         sbBlue?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentBlue = progress / 100f
                 tvBlueVal?.text = String.format("%.2f", currentBlue)
                 updateFilter()
@@ -1504,10 +1578,10 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
 
-        val sbHue = binding.root.findViewById<android.widget.SeekBar>(R.id.sbHue)
-        val tvHueVal = binding.root.findViewById<android.widget.TextView>(R.id.tvHueVal)
         sbHue?.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                isUserColorCustomized = true
                 currentHue = (progress - 180).toFloat()
                 tvHueVal?.text = currentHue.toInt().toString()
                 updateFilter()
@@ -1515,6 +1589,21 @@ class VideoFragmentTv : Fragment(), IVLCVout.Callback {
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
+
+        val btnResetCalibration = binding.root.findViewById<android.widget.Button>(R.id.btnResetCalibration)
+        btnResetCalibration?.setOnClickListener {
+            isUserColorCustomized = false
+            currentBrightness = 0f
+            currentContrast = 1.00f
+            currentSaturation = 1.00f
+            currentRed = 1.00f
+            currentGreen = 1.00f
+            currentBlue = 1.00f
+            currentHue = 0f
+            syncSlidersFromState()
+            updateFilter()
+            Toast.makeText(requireContext(), "Kalibrasi direset ke netral (zero-delay)", Toast.LENGTH_SHORT).show()
+        }
 
         val btnHideDebug = binding.root.findViewById<android.widget.Button>(R.id.btnHideDebug)
         val btnToggleDebug = binding.root.findViewById<android.view.View>(R.id.btnToggleDebug)
